@@ -1,15 +1,16 @@
 import json
 import re
 import unicodedata
+import os
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
+from dotenv import load_dotenv
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_db
 from app.models import (
     AIMessage,
@@ -23,6 +24,11 @@ from app.models import (
 )
 from app.routers.notifications import create_notification
 from app.routers.users import require_role
+
+load_dotenv()
+
+OLLAMA_URL = os.environ.get("OLLAMA_URL")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL")
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -214,13 +220,13 @@ def _get_history(user_id: int, db: Session, limit: int = 10) -> list[dict]:
 
 async def _call_ollama(messages: list[dict]) -> str:
     payload = {
-        "model": settings.ollama_model,
+        "model": OLLAMA_MODEL,
         "messages": messages,
         "stream": False,
     }
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(f"{settings.ollama_url}/api/chat", json=payload)
+            response = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
             response.raise_for_status()
             data = response.json()
             return data["message"]["content"]

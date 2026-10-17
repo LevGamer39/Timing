@@ -1,4 +1,5 @@
 import httpx
+import os
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -6,15 +7,18 @@ from jose import JWTError, jwt
 
 from app.database import get_db
 from app.models import User
-from app.config import settings
 from app.dependencies import get_current_user
 from app.routers.users import create_access_token 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 router = APIRouter(prefix="/api/auth/yandex", tags=["yandex_auth"])
 
-
-CLIENT_ID = settings.yandex_client_id
-CLIENT_SECRET = settings.yandex_client_secret
+SECRET_KEY = os.environ.get("SECRET_KEY")
+ALGORITHM = os.environ.get("ALGORITHM", "HS256")
+CLIENT_ID = os.environ.get("YANDEX_CLIENT_ID")
+CLIENT_SECRET = os.environ.get("YANDEX_CLIENT_SECRET")
 
 LOGIN_CALLBACK = "http://vkcollege.ru/api/auth/yandex/callback"
 LINK_CALLBACK = "http://vkcollege.ru/api/auth/yandex/confirm-link"
@@ -45,7 +49,7 @@ async def confirm_link(code: str, state: str | None = None, db: Session = Depend
         raise HTTPException(401, "Not authenticated")
 
     try:
-        payload = jwt.decode(state, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(state, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         raise HTTPException(401, "Not authenticated")

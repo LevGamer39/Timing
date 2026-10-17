@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from random import randint
+from dotenv import load_dotenv
 import secrets
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -11,8 +13,14 @@ from passlib.context import CryptContext
 
 from app.database import get_db
 from app.models import User, UserRole, InviteCode, EmailVerification, ParentStudent, ParentLinkToken, PasswordResetToken, EmailChangeToken
-from app.config import settings
 from app.dependencies import get_current_user
+
+load_dotenv()
+
+SECRET_KEY = os.environ.get("SECRET_KEY")
+ALGORITHM = os.environ.get("ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "10080")
+APP_URL = os.environ.get("APP_URL", "https://vkcollege.ru")
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -97,14 +105,14 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(user_id: int) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    return jwt.encode({"sub": str(user_id), "exp": expire}, settings.secret_key, algorithm=settings.algorithm)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode({"sub": str(user_id), "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     exc = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         raise exc
@@ -386,7 +394,7 @@ def request_email_change(
 
     from app.routers.notifications import send_email
 
-    confirm_link = f"{settings.app_url}/settings/change-email/confirm?token={token}"
+    confirm_link = f"{APP_URL}/settings/change-email/confirm?token={token}"
     send_email(
         new_email,
         "Подтверждение смены email — Vector",
@@ -519,7 +527,7 @@ def request_password_reset(body: PasswordResetRequest, db: Session = Depends(get
     db.add(PasswordResetToken(user_id=user.id, token=token, expires_at=expires))
     db.commit()
     from app.routers.notifications import send_password_reset_email
-    reset_link = f"{settings.app_url}/reset-password-new?token={token}"
+    reset_link = f"{APP_URL}/reset-password-new?token={token}"
     try:
         send_password_reset_email(user.email, reset_link)
     except Exception as e:

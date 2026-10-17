@@ -182,6 +182,7 @@ cython_debug/
 
 config.py
 *.db
+pg_data
 .vs
 TEST.ps1
 dashboard1.html
@@ -191,3 +192,7 @@ backend/data/app.db-shm
 backend/data/app.db-wal
 backend/data/app.db-wal
 backend/data/app.db-shm
+
+graphify-out
+.opencode
+

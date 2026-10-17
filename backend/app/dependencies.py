@@ -5,7 +5,13 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User
-from app.config import settings
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+SECRET_KEY = os.environ.get("SECRET_KEY")
+ALGORITHM = os.environ.get("ALGORITHM", "HS256")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/login")
 
@@ -16,7 +22,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: int = int(payload.get("sub"))
         if user_id is None:
             raise credentials_exception
