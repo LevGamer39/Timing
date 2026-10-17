@@ -1,5 +1,6 @@
 import smtplib
 import asyncio
+import os
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -12,12 +13,20 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.database import get_db, SessionLocal
 from app.models import Notification, NotificationChannel, Task, TaskStatus, User, UserRole
 from app.routers.users import get_current_user, require_role
-from app.config import settings
 from app.dependencies import get_current_user
+from dotenv import load_dotenv
+
+load_dotenv()
+
+APP_URL = os.environ.get("APP_URL", "https://vkcollege.ru")
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.yandex.ru")
+SMTP_PORT = os.environ.get("SMTP_PORT", "465")
+SMTP_USER = os.environ.get("SMTP_USER", "your@yandex.ru")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "your-smtp-password")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "noreply@vkcollege.ru")
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 scheduler = AsyncIOScheduler()
-
 
 class NotificationResponse(BaseModel):
     id: int
@@ -140,7 +149,7 @@ def _overdue_task_html(task_title: str, deadline_str: str) -> str:
         </div>
       </div>
       <div style="text-align:center;">
-        <a href="{settings.app_url}/student/tasks" style="display:inline-block;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:14px;font-weight:500;text-decoration:none;padding:12px 28px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);">
+        <a href="{APP_URL}/student/tasks" style="display:inline-block;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:14px;font-weight:500;text-decoration:none;padding:12px 28px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);">
           Открыть задачи
         </a>
       </div>
@@ -153,7 +162,7 @@ def _notification_html(title: str, body: str) -> str:
       <h1 style="margin:0 0 8px;color:#fff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">{title}</h1>
       <p style="margin:0 0 24px;color:rgba(255,255,255,0.6);font-size:15px;line-height:1.7;">{body}</p>
       <div style="text-align:center;">
-        <a href="{settings.app_url}/student/dashboard" style="display:inline-block;background:linear-gradient(135deg,#8B79FF,#6b5ce7);color:#fff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:10px;">
+        <a href="{APP_URL}/student/dashboard" style="display:inline-block;background:linear-gradient(135deg,#8B79FF,#6b5ce7);color:#fff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:10px;">
           Открыть дашборд
         </a>
       </div>
@@ -164,21 +173,21 @@ def _notification_html(title: str, body: str) -> str:
 # ─── ОТПРАВКА ────────────────────────────────────────────────────────────────
 
 def send_email(to: str, subject: str, body_html: str):
-    if not settings.smtp_host:
+    if not SMTP_HOST:
         raise RuntimeError("SMTP is not configured")
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = settings.email_from
+        msg["From"] = EMAIL_FROM
         msg["To"] = to
         msg.attach(MIMEText(body_html, "html", "utf-8"))
 
         # Настройка SMTP как в test_mail.py
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
             # TLS и Login только если они настроены (для 2525 обычно не нужны)
-            if settings.smtp_user and settings.smtp_password:
+            if SMTP_USER and SMTP_PASSWORD:
                 server.starttls()
-                server.login(settings.smtp_user, settings.smtp_password)
+                server.login(SMTP_USER, SMTP_PASSWORD)
             
             server.send_message(msg)
             print(f"✅ Письмо успешно отправлено на {to}")
