@@ -1,14 +1,17 @@
+"""CRUD задач ученика."""
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 
 from app.database import get_db
-from app.models import Task, User, UserRole, TaskStatus, TaskPriority, ParentStudent
-from app.routers.users import get_current_user, require_role
+from app.dependencies import require_role
+from app.models import ParentStudent, Task, TaskPriority, TaskStatus, User, UserRole
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+MAX_TITLE_LENGTH = 255
 
 
 class TaskCreate(BaseModel):
@@ -18,17 +21,47 @@ class TaskCreate(BaseModel):
     deadline: datetime | None = None
     priority: TaskPriority = TaskPriority.medium
 
+    @field_validator("title")
+    @classmethod
+    def _title_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Title must not be blank")
+        if len(value) > MAX_TITLE_LENGTH:
+            raise ValueError(f"Title must be <= {MAX_TITLE_LENGTH} characters")
+        return value
+
 
 class TaskUpdate(BaseModel):
     title: str | None = None
+    subject: str | None = None
     description: str | None = None
     deadline: datetime | None = None
     status: TaskStatus | None = None
     priority: TaskPriority | None = None
 
+    @field_validator("title")
+    @classmethod
+    def _title_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("Title must not be blank")
+        if len(value) > MAX_TITLE_LENGTH:
+            raise ValueError(f"Title must be <= {MAX_TITLE_LENGTH} characters")
+        return value
+
 
 class TaskResponse(BaseModel):
+    """Повторяет таблицу ``tasks``.
+
+    ``overdue`` проставляется планировщиком и недоступен клиентам, поэтому
+    в ``TaskUpdate`` его намеренно нет среди пользовательских переходов.
+    """
+
     id: int
+    student_id: int
     title: str
     subject: str | None
     description: str | None
@@ -47,10 +80,54 @@ class TaskResponse(BaseModel):
 
 
 def _own_task(task_id: int, user: User, db: Session) -> Task:
-    task = db.query(Task).filter(Task.id == task_id, Task.student_id == user.id).first()
+    task = (
+        db.query(Task)
+        .filter(Task.id == task_id, Task.student_id == user.id)
+        .first()
+    )
     if not task:
         raise HTTPException(404, "Task not found")
     return task
+
+
+def _assert_mutable(task: Task) -> None:
+    """Запрещает правку задания, выданного учителем.
+
+    Раньше ученик мог переименовать, перенести и переприоритизировать
+    задание учителя; редактируются только его собственные личные задачи.
+    """
+    if not task.is_personal:
+        raise HTTPException(
+            403, "Cannot modify an assignment created by a teacher"
+        )
+
+
+def _sync_completion(task: Task) -> None:
+    if task.status == TaskStatus.done:
+        if task.completed_at is None:
+            task.completed_at = datetime.now(timezone.utc)
+    else:
+        task.completed_at = None
+
+
+def _assert_parent_of(
+    parent_id: int, student_id: int, db: Session
+) -> None:
+    link = (
+        db.query(ParentStudent)
+        .filter(
+            ParentStudent.parent_id == parent_id,
+            ParentStudent.student_id == student_id,
+        )
+        .first()
+    )
+    if not link:
+        raise HTTPException(403, "Not your child")
+
+
+def _base_task_query(student_id: int):
+    """Только верхнеуровневые задачи: подзадачи ИИ исключены везде."""
+    return Task.student_id == student_id, Task.parent_task_id.is_(None)
 
 
 @router.post("", response_model=TaskResponse, status_code=201)
@@ -67,6 +144,7 @@ def create_personal_task(
         deadline=body.deadline,
         priority=body.priority,
         is_personal=True,
+        status=TaskStatus.pending,
     )
     db.add(task)
     db.commit()
@@ -81,12 +159,30 @@ def list_tasks(
     current_user: User = Depends(require_role(UserRole.student)),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Task).filter(Task.student_id == current_user.id, Task.parent_task_id == None)
+    owner, top_level = _base_task_query(current_user.id)
+    query = db.query(Task).filter(owner, top_level)
     if status:
         query = query.filter(Task.status == status)
     if subject:
         query = query.filter(Task.subject == subject)
     return query.order_by(Task.deadline.asc().nullslast()).all()
+
+
+@router.get("/child/{student_id}", response_model=list[TaskResponse])
+def get_child_tasks(
+    student_id: int,
+    current_user: User = Depends(require_role(UserRole.parent)),
+    db: Session = Depends(get_db),
+):
+    """Объявлен раньше ``/{task_id}``, чтобы выиграл литеральный путь."""
+    _assert_parent_of(current_user.id, student_id, db)
+    owner, top_level = _base_task_query(student_id)
+    return (
+        db.query(Task)
+        .filter(owner, top_level)
+        .order_by(Task.deadline.asc().nullslast())
+        .all()
+    )
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -105,7 +201,12 @@ def get_subtasks(
     db: Session = Depends(get_db),
 ):
     _own_task(task_id, current_user, db)
-    return db.query(Task).filter(Task.parent_task_id == task_id).all()
+    return (
+        db.query(Task)
+        .filter(Task.parent_task_id == task_id)
+        .order_by(Task.id.asc())
+        .all()
+    )
 
 
 @router.patch("/{task_id}", response_model=TaskResponse)
@@ -116,10 +217,17 @@ def update_task(
     db: Session = Depends(get_db),
 ):
     task = _own_task(task_id, current_user, db)
-    for field, value in body.model_dump(exclude_none=True).items():
+    _assert_mutable(task)
+
+    updates = body.model_dump(exclude_unset=True)
+    # Клиент не может сам проставить overdue — это делает планировщик.
+    updates.pop("status", None)
+    if body.status is not None and body.status != TaskStatus.overdue:
+        task.status = body.status
+    for field, value in updates.items():
         setattr(task, field, value)
-    if body.status == TaskStatus.done and not task.completed_at:
-        task.completed_at = datetime.now(timezone.utc)
+
+    _sync_completion(task)
     db.commit()
     db.refresh(task)
     return task
@@ -131,9 +239,19 @@ def complete_task(
     current_user: User = Depends(require_role(UserRole.student)),
     db: Session = Depends(get_db),
 ):
+    """Выполнение задачи закрывает и её подзадачи."""
     task = _own_task(task_id, current_user, db)
+    now = datetime.now(timezone.utc)
+
     task.status = TaskStatus.done
-    task.completed_at = datetime.now(timezone.utc)
+    task.completed_at = now
+
+    subtasks = db.query(Task).filter(Task.parent_task_id == task.id).all()
+    for subtask in subtasks:
+        subtask.status = TaskStatus.done
+        if subtask.completed_at is None:
+            subtask.completed_at = now
+
     db.commit()
     db.refresh(task)
     return task
@@ -148,20 +266,6 @@ def delete_task(
     task = _own_task(task_id, current_user, db)
     if not task.is_personal:
         raise HTTPException(400, "Cannot delete teacher-assigned tasks")
+    # Подзадачи удалятся каскадом через связь (см. models.Task.subtasks).
     db.delete(task)
     db.commit()
-
-
-@router.get("/child/{student_id}", response_model=list[TaskResponse])
-def get_child_tasks(
-    student_id: int,
-    current_user: User = Depends(require_role(UserRole.parent)),
-    db: Session = Depends(get_db),
-):
-    link = db.query(ParentStudent).filter(
-        ParentStudent.parent_id == current_user.id,
-        ParentStudent.student_id == student_id,
-    ).first()
-    if not link:
-        raise HTTPException(403, "Not your child")
-    return db.query(Task).filter(Task.student_id == student_id, Task.parent_task_id == None).order_by(Task.deadline.asc().nullslast()).all()

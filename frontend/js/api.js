@@ -1,4 +1,7 @@
-const API = 'http://localhost:8000';
+// Запросы идут на тот же домен, что и сама страница: всё проксирует nginx.
+// Жёсткий порт ломал бы прод за обратным прокси, а на https ещё и блокировался
+// браузером как смешанное содержимое.
+const API = window.location.origin;
 
 function getToken() { return localStorage.getItem('token'); }
 function getUser()  { return JSON.parse(localStorage.getItem('user') || 'null'); }
@@ -6,18 +9,22 @@ function setAuth(token, user) {
   localStorage.setItem('token', token);
   localStorage.setItem('user', JSON.stringify(user));
 }
+// Страница логина отдаётся по /login, а не /login.html: имя файла во
+// frontend/ - login.html, а маршрут в main.py именно такой.
+const LOGIN_URL = '/login';
+
 function logout() {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
-  window.location.href = '/login.html';
+  window.location.href = LOGIN_URL;
 }
 
 function requireAuth(allowedRoles) {
   const token = getToken();
   const user = getUser();
-  if (!token || !user) { window.location.href = '/login.html'; return false; }
+  if (!token || !user) { window.location.href = LOGIN_URL; return false; }
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    window.location.href = '/login.html';
+    window.location.href = LOGIN_URL;
     return false;
   }
   return user;

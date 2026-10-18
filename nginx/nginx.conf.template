@@ -15,10 +15,10 @@ http {
 
     client_max_body_size 10M;
 
-    # HTTP → HTTPS
+    # HTTP -> HTTPS
     server {
         listen 80;
-        server_name vkcollege.ru www.vkcollege.ru;
+        server_name ${APP_DOMAIN};
 
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
@@ -32,10 +32,10 @@ http {
     # HTTPS
     server {
         listen 443 ssl;
-        server_name vkcollege.ru www.vkcollege.ru;
+        server_name ${APP_DOMAIN};
 
-        ssl_certificate     /etc/letsencrypt/live/vkcollege.ru/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/vkcollege.ru/privkey.pem;
+        ssl_certificate     ${SSL_CERT};
+        ssl_certificate_key ${SSL_KEY};
         ssl_protocols       TLSv1.2 TLSv1.3;
         ssl_ciphers         HIGH:!aNULL:!MD5;
         ssl_session_cache   shared:SSL:10m;

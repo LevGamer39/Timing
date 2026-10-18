@@ -1,20 +1,24 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from app import config
 from app.database import create_tables
 from app.routers import users, admin, classes, assignments, tasks, grades, schedule, ai, notifications, yandex_auth
-from app.routers.notifications import start_scheduler
+from app.routers.notifications import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_tables()
     start_scheduler()
-    yield
+    try:
+        yield
+    finally:
+        stop_scheduler()
 
 
 app = FastAPI(title="Vector API", lifespan=lifespan)
@@ -25,24 +29,27 @@ frontend_path = os.path.abspath(os.path.join(current_dir, "../../frontend"))
 if os.path.exists(frontend_path):
     app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
-origins = [
+# Явный белый список: "*" вместе с allow_credentials=True браузеры не
+# принимают, а прежний список литералов собирался, но никуда не передавался.
+# Продовый адрес берётся из APP_URL в .env, поэтому смена домена не требует
+# правки кода; локальные адреса нужны для разработки без домена.
+CORS_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:8000",
     "http://localhost:8080",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:8000",
-    "http://127.0.0.1:8080",
-    "http://vkcollege.ru",
-    "https://vkcollege.ru",
-    "null",
+    "http://127.0.0.1:8080",s
 ]
+if config.APP_URL:
+    CORS_ORIGINS.append(config.APP_URL.rstrip("/"))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(users.router)
@@ -57,10 +64,21 @@ app.include_router(notifications.router)
 app.include_router(yandex_auth.router)
 
 def serve(relative_path: str) -> FileResponse:
-    return FileResponse(os.path.join(frontend_path, relative_path))
+    """Отдаёт страницу из frontend/.
+
+    Отсутствующие файлы дают 404. Раньше FileResponse возвращался без
+    проверки, поэтому любой маршрут, указывающий на несуществующий файл
+    (student/profile.html, parent/*.html), давал 500.
+    """
+    target = os.path.join(frontend_path, relative_path)
+    if not os.path.isfile(target):
+        raise HTTPException(
+            status_code=404, detail=f"Page not found: {relative_path}"
+        )
+    return FileResponse(target)
 
 
-# Public pages
+# Публичные страницы
 @app.get("/")
 async def index():
     return serve("index.html")
@@ -86,7 +104,7 @@ async def reset_password_new_page():
     return serve("reset-password-new.html")
 
 
-# Student pages
+# Страницы ученика
 @app.get("/dashboard")
 @app.get("/student/dashboard")
 async def student_dashboard():
@@ -113,7 +131,7 @@ async def student_profile():
     return serve("student/profile.html")
 
 
-# Teacher pages
+# Страницы учителя
 @app.get("/teacher/dashboard")
 async def teacher_dashboard():
     return serve("teacher/dashboard.html")
@@ -143,7 +161,7 @@ async def teacher_settings():
     return serve("teacher/settings.html")
 
 
-# Admin pages
+# Страницы админа
 @app.get("/admin")
 @app.get("/admin/dashboard")
 async def admin_dashboard():
@@ -154,7 +172,7 @@ async def admin_settings():
     return serve("admin/settings.html")
 
 
-# Parent pages
+# Страницы родителя
 @app.get("/parent/dashboard")
 async def parent_dashboard():
     return serve("parent/dashboard.html")
@@ -172,7 +190,7 @@ async def parent_profile():
     return serve("parent/profile.html")
 
 
-# Common
+# Общие страницы
 @app.get("/settings")
 async def settings_page():
     return serve("settings.html")

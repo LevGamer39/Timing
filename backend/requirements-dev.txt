@@ -1,0 +1,7 @@
+# Test-only dependencies.
+# Windows users must also read the note in requirements.txt: the uvicorn
+# [standard] extras are skipped there via environment markers.
+-r requirements.txt
+
+pytest==8.3.4
+pytest-cov==6.0.0

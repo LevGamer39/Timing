@@ -1,27 +1,46 @@
+"""Оценки: ручная выставка, массовая выставка и сводки ученика."""
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Assignment, Class, ClassMembership, Grade, ParentStudent, User, UserRole
-from app.routers.users import require_role
+from app.dependencies import require_role
+from app.models import (
+    Assignment,
+    Class,
+    ClassMembership,
+    Grade,
+    ParentStudent,
+    User,
+    UserRole,
+)
 
 router = APIRouter(prefix="/api/grades", tags=["grades"])
+
+MIN_GRADE = 1.0
+MAX_GRADE = 5.0
+MAX_SUBJECT_LENGTH = 100
+
+
+# ---------------------------------------------------------------------------
+# Схемы
+# ---------------------------------------------------------------------------
 
 
 class GradeCreate(BaseModel):
     student_id: int
     subject: str
-    value: float = Field(..., ge=1, le=5)
+    value: float = Field(..., ge=MIN_GRADE, le=MAX_GRADE)
     assignment_id: int | None = None
     comment: str | None = None
 
 
 class BulkGradeItem(BaseModel):
     student_id: int
-    value: float = Field(..., ge=1, le=5)
+    value: float = Field(..., ge=MIN_GRADE, le=MAX_GRADE)
     comment: str | None = None
 
 
@@ -59,6 +78,32 @@ class GradeSummary(BaseModel):
     weak_subjects: list[SubjectAverage]
 
 
+# ---------------------------------------------------------------------------
+# Хелперы
+# ---------------------------------------------------------------------------
+
+
+def _teacher_class_ids(teacher_id: int, db: Session) -> list[int]:
+    return [
+        row[0]
+        for row in db.query(Class.id)
+        .filter(Class.teacher_id == teacher_id)
+        .all()
+    ]
+
+
+def _is_class_member(class_id: int, student_id: int, db: Session) -> bool:
+    return (
+        db.query(ClassMembership)
+        .filter(
+            ClassMembership.class_id == class_id,
+            ClassMembership.student_id == student_id,
+        )
+        .first()
+        is not None
+    )
+
+
 def _assert_teacher_can_grade(
     current_user: User,
     db: Session,
@@ -66,30 +111,98 @@ def _assert_teacher_can_grade(
     assignment_id: int | None,
 ) -> None:
     if assignment_id:
-        assignment = db.query(Assignment).filter(
-            Assignment.id == assignment_id,
-            Assignment.teacher_id == current_user.id,
-        ).first()
+        assignment = (
+            db.query(Assignment)
+            .filter(
+                Assignment.id == assignment_id,
+                Assignment.teacher_id == current_user.id,
+            )
+            .first()
+        )
         if not assignment:
             raise HTTPException(404, "Assignment not found")
-        membership = db.query(ClassMembership).filter(
-            ClassMembership.class_id == assignment.class_id,
-            ClassMembership.student_id == student_id,
-        ).first()
-        if not membership:
+        if not _is_class_member(assignment.class_id, student_id, db):
             raise HTTPException(400, "Student is not assigned to this class")
         return
 
-    teacher_class_ids = [
-        class_.id
-        for class_ in db.query(Class).filter(Class.teacher_id == current_user.id).all()
-    ]
-    membership = db.query(ClassMembership).filter(
-        ClassMembership.student_id == student_id,
-        ClassMembership.class_id.in_(teacher_class_ids),
-    ).first()
+    class_ids = _teacher_class_ids(current_user.id, db)
+    if not class_ids:
+        raise HTTPException(403, "Student does not belong to your classes")
+
+    membership = (
+        db.query(ClassMembership)
+        .filter(
+            ClassMembership.student_id == student_id,
+            ClassMembership.class_id.in_(class_ids),
+        )
+        .first()
+    )
     if not membership:
         raise HTTPException(403, "Student does not belong to your classes")
+
+
+def _upsert_grade(
+    db: Session,
+    *,
+    student_id: int,
+    subject: str,
+    value: float,
+    assignment_id: int | None,
+    comment: str | None,
+    graded_by_id: int,
+) -> Grade:
+    """Создаёт или обновляет оценку одного ученика.
+
+    В схеме нет уникального ограничения на (student_id, assignment_id),
+    поэтому остаётся схема «сначала поиск, потом запись». Стоит завести
+    миграцию.
+    """
+    grade = None
+    if assignment_id is not None:
+        grade = (
+            db.query(Grade)
+            .filter(
+                Grade.student_id == student_id,
+                Grade.assignment_id == assignment_id,
+            )
+            .first()
+        )
+
+    if grade:
+        grade.subject = subject
+        grade.value = value
+        grade.comment = comment
+        grade.graded_by_id = graded_by_id
+    else:
+        grade = Grade(
+            student_id=student_id,
+            subject=subject,
+            value=value,
+            assignment_id=assignment_id,
+            comment=comment,
+            graded_by_id=graded_by_id,
+        )
+        db.add(grade)
+    return grade
+
+
+def _averages_by_subject(grades: list[Grade]) -> list[SubjectAverage]:
+    buckets: dict[str, list[float]] = {}
+    for grade in grades:
+        buckets.setdefault(grade.subject, []).append(grade.value)
+    return [
+        SubjectAverage(
+            subject=subject,
+            average=round(sum(values) / len(values), 2),
+            count=len(values),
+        )
+        for subject, values in buckets.items()
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Роуты
+# ---------------------------------------------------------------------------
 
 
 @router.post("", response_model=GradeResponse, status_code=201)
@@ -98,33 +211,18 @@ def add_grade(
     current_user: User = Depends(require_role(UserRole.teacher)),
     db: Session = Depends(get_db),
 ):
-    _assert_teacher_can_grade(current_user, db, body.student_id, body.assignment_id)
-
-    existing = None
-    if body.assignment_id:
-        existing = db.query(Grade).filter(
-            Grade.student_id == body.student_id,
-            Grade.assignment_id == body.assignment_id,
-        ).first()
-
-    if existing:
-        existing.subject = body.subject
-        existing.value = body.value
-        existing.comment = body.comment
-        existing.graded_by_id = current_user.id
-        db.commit()
-        db.refresh(existing)
-        return existing
-
-    grade = Grade(
+    _assert_teacher_can_grade(
+        current_user, db, body.student_id, body.assignment_id
+    )
+    grade = _upsert_grade(
+        db,
         student_id=body.student_id,
-        subject=body.subject,
+        subject=body.subject.strip()[:MAX_SUBJECT_LENGTH],
         value=body.value,
         assignment_id=body.assignment_id,
         comment=body.comment,
         graded_by_id=current_user.id,
     )
-    db.add(grade)
     db.commit()
     db.refresh(grade)
     return grade
@@ -136,55 +234,48 @@ def add_bulk_grades(
     current_user: User = Depends(require_role(UserRole.teacher)),
     db: Session = Depends(get_db),
 ):
-    assignment = db.query(Assignment).filter(
-        Assignment.id == body.assignment_id,
-        Assignment.teacher_id == current_user.id,
-    ).first()
+    """Записывает оценки всего класса за одно задание одним коммитом."""
+    assignment = (
+        db.query(Assignment)
+        .filter(
+            Assignment.id == body.assignment_id,
+            Assignment.teacher_id == current_user.id,
+        )
+        .first()
+    )
     if not assignment:
         raise HTTPException(404, "Assignment not found")
 
-    response: list[GradeResponse] = []
+    seen: set[int] = set()
+    touched: list[Grade] = []
     for item in body.items:
-        _assert_teacher_can_grade(current_user, db, item.student_id, body.assignment_id)
-        grade = db.query(Grade).filter(
-            Grade.student_id == item.student_id,
-            Grade.assignment_id == body.assignment_id,
-        ).first()
-        if grade:
-            grade.value = item.value
-            grade.comment = item.comment
-            grade.subject = body.subject
-            grade.graded_by_id = current_user.id
-        else:
-            grade = Grade(
+        if item.student_id in seen:
+            raise HTTPException(
+                400, f"Duplicate student_id in payload: {item.student_id}"
+            )
+        seen.add(item.student_id)
+
+        _assert_teacher_can_grade(
+            current_user, db, item.student_id, body.assignment_id
+        )
+        touched.append(
+            _upsert_grade(
+                db,
                 student_id=item.student_id,
-                subject=body.subject,
+                subject=body.subject.strip()[:MAX_SUBJECT_LENGTH],
                 value=item.value,
                 assignment_id=body.assignment_id,
                 comment=item.comment,
                 graded_by_id=current_user.id,
             )
-            db.add(grade)
+        )
 
     db.commit()
-    grades = db.query(Grade).filter(Grade.assignment_id == body.assignment_id).all()
-    response.extend(grades)
-    return response
-
-
-@router.get("/assignment/{assignment_id}", response_model=list[GradeResponse])
-def list_assignment_grades(
-    assignment_id: int,
-    current_user: User = Depends(require_role(UserRole.teacher)),
-    db: Session = Depends(get_db),
-):
-    assignment = db.query(Assignment).filter(
-        Assignment.id == assignment_id,
-        Assignment.teacher_id == current_user.id,
-    ).first()
-    if not assignment:
-        raise HTTPException(404, "Assignment not found")
-    return db.query(Grade).filter(Grade.assignment_id == assignment_id).order_by(Grade.graded_at.desc()).all()
+    for grade in touched:
+        db.refresh(grade)
+    # Только строки, записанные этим вызовом: раньше эндпоинт возвращал
+    # все оценки задания, включая выставленные предыдущими запросами.
+    return touched
 
 
 @router.get("/my", response_model=list[GradeResponse])
@@ -204,13 +295,19 @@ def my_averages(
     current_user: User = Depends(require_role(UserRole.student)),
     db: Session = Depends(get_db),
 ):
-    grades = db.query(Grade).filter(Grade.student_id == current_user.id).all()
-    by_subject: dict[str, list[float]] = {}
-    for grade in grades:
-        by_subject.setdefault(grade.subject, []).append(grade.value)
+    rows = (
+        db.query(Grade.subject, func.avg(Grade.value), func.count(Grade.id))
+        .filter(Grade.student_id == current_user.id)
+        .group_by(Grade.subject)
+        .all()
+    )
     return [
-        SubjectAverage(subject=subject, average=round(sum(values) / len(values), 2), count=len(values))
-        for subject, values in by_subject.items()
+        SubjectAverage(
+            subject=subject,
+            average=round(float(average), 2),
+            count=int(count),
+        )
+        for subject, average, count in rows
     ]
 
 
@@ -220,36 +317,49 @@ def my_grade_summary(
     db: Session = Depends(get_db),
 ):
     grades = db.query(Grade).filter(Grade.student_id == current_user.id).all()
-    by_subject: dict[str, list[float]] = {}
-    for grade in grades:
-        by_subject.setdefault(grade.subject, []).append(grade.value)
-
-    subject_averages = [
-        SubjectAverage(subject=subject, average=round(sum(values) / len(values), 2), count=len(values))
-        for subject, values in by_subject.items()
-    ]
+    subject_averages = _averages_by_subject(grades)
     subject_averages.sort(key=lambda item: (-item.average, item.subject.lower()))
 
-    overall_average = round(sum(grade.value for grade in grades) / len(grades), 2) if grades else None
+    overall_average = (
+        round(sum(grade.value for grade in grades) / len(grades), 2)
+        if grades
+        else None
+    )
 
     class_rank = None
     class_size = None
-    membership = db.query(ClassMembership).filter(ClassMembership.student_id == current_user.id).first()
+
+    membership = (
+        db.query(ClassMembership)
+        .filter(ClassMembership.student_id == current_user.id)
+        .order_by(ClassMembership.joined_at.desc())
+        .first()
+    )
     if membership:
-        memberships = db.query(ClassMembership).filter(ClassMembership.class_id == membership.class_id).all()
-        student_ids = [item.student_id for item in memberships]
-        class_size = len(student_ids)
+        peer_ids = [
+            row[0]
+            for row in db.query(ClassMembership.student_id)
+            .filter(ClassMembership.class_id == membership.class_id)
+            .all()
+        ]
+        class_size = len(peer_ids)
 
-        student_scores: list[tuple[int, float]] = []
-        for student_id in student_ids:
-            student_grades = db.query(Grade).filter(Grade.student_id == student_id).all()
-            if not student_grades:
-                continue
-            average = sum(item.value for item in student_grades) / len(student_grades)
-            student_scores.append((student_id, average))
-
-        student_scores.sort(key=lambda item: item[1], reverse=True)
-        for index, (student_id, _) in enumerate(student_scores, start=1):
+        # Один сгруппированный запрос вместо запроса на каждого одноклассника.
+        averages = (
+            db.query(Grade.student_id, func.avg(Grade.value))
+            .filter(Grade.student_id.in_(peer_ids))
+            .group_by(Grade.student_id)
+            .all()
+        )
+        scored = [
+            (student_id, float(average))
+            for student_id, average in averages
+            if average is not None
+        ]
+        # Место считается по единой шкале для всех; при равенстве
+        # лучшее место достаётся тому, кто раньше по id.
+        scored.sort(key=lambda item: (-item[1], item[0]))
+        for index, (student_id, _) in enumerate(scored, start=1):
             if student_id == current_user.id:
                 class_rank = index
                 break
@@ -259,7 +369,33 @@ def my_grade_summary(
         class_rank=class_rank,
         class_size=class_size,
         best_subjects=subject_averages[:4],
-        weak_subjects=sorted(subject_averages, key=lambda item: (item.average, item.subject.lower()))[:3],
+        weak_subjects=sorted(
+            subject_averages, key=lambda item: (item.average, item.subject.lower())
+        )[:3],
+    )
+
+
+@router.get("/assignment/{assignment_id}", response_model=list[GradeResponse])
+def list_assignment_grades(
+    assignment_id: int,
+    current_user: User = Depends(require_role(UserRole.teacher)),
+    db: Session = Depends(get_db),
+):
+    assignment = (
+        db.query(Assignment)
+        .filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == current_user.id,
+        )
+        .first()
+    )
+    if not assignment:
+        raise HTTPException(404, "Assignment not found")
+    return (
+        db.query(Grade)
+        .filter(Grade.assignment_id == assignment_id)
+        .order_by(Grade.graded_at.desc())
+        .all()
     )
 
 
@@ -269,13 +405,22 @@ def child_grades(
     current_user: User = Depends(require_role(UserRole.parent)),
     db: Session = Depends(get_db),
 ):
-    link = db.query(ParentStudent).filter(
-        ParentStudent.parent_id == current_user.id,
-        ParentStudent.student_id == student_id,
-    ).first()
+    link = (
+        db.query(ParentStudent)
+        .filter(
+            ParentStudent.parent_id == current_user.id,
+            ParentStudent.student_id == student_id,
+        )
+        .first()
+    )
     if not link:
         raise HTTPException(403, "Not your child")
-    return db.query(Grade).filter(Grade.student_id == student_id).order_by(Grade.graded_at.desc()).all()
+    return (
+        db.query(Grade)
+        .filter(Grade.student_id == student_id)
+        .order_by(Grade.graded_at.desc())
+        .all()
+    )
 
 
 @router.delete("/{grade_id}", status_code=204)
@@ -284,10 +429,12 @@ def delete_grade(
     current_user: User = Depends(require_role(UserRole.teacher)),
     db: Session = Depends(get_db),
 ):
-    grade = db.query(Grade).filter(
-        Grade.id == grade_id,
-        Grade.graded_by_id == current_user.id,
-    ).first()
+    """Удалить оценку может только тот учитель, который её выставил."""
+    grade = (
+        db.query(Grade)
+        .filter(Grade.id == grade_id, Grade.graded_by_id == current_user.id)
+        .first()
+    )
     if not grade:
         raise HTTPException(404, "Grade not found")
     db.delete(grade)

@@ -1,6 +1,6 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, Boolean, DateTime, ForeignKey,
-    Enum as SAEnum, Float
+    CheckConstraint, Column, DateTime, Enum as SAEnum, Float, ForeignKey,
+    Integer, String, Text, UniqueConstraint, Boolean,
 )
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
@@ -61,12 +61,32 @@ class User(Base):
     notify_digest_time = Column(String(5), default="08:00")  # "HH:MM"
 
     classes_taught = relationship("Class", back_populates="teacher")
-    class_memberships = relationship("ClassMembership", back_populates="student")
-    tasks = relationship("Task", back_populates="student", foreign_keys="Task.student_id")
-    grades = relationship("Grade", back_populates="student", foreign_keys="[Grade.student_id]")
-    ai_messages = relationship("AIMessage", back_populates="user")
-    notifications = relationship("Notification", back_populates="user")
-    schedule_entries = relationship("Schedule", back_populates="student")
+    class_memberships = relationship(
+        "ClassMembership",
+        back_populates="student",
+        cascade="all, delete-orphan",
+    )
+    tasks = relationship(
+        "Task",
+        back_populates="student",
+        foreign_keys="Task.student_id",
+        cascade="all, delete-orphan",
+    )
+    grades = relationship(
+        "Grade",
+        back_populates="student",
+        foreign_keys="Grade.student_id",
+        cascade="all, delete-orphan",
+    )
+    ai_messages = relationship(
+        "AIMessage", back_populates="user", cascade="all, delete-orphan"
+    )
+    notifications = relationship(
+        "Notification", back_populates="user", cascade="all, delete-orphan"
+    )
+    schedule_entries = relationship(
+        "Schedule", back_populates="student", cascade="all, delete-orphan"
+    )
 
 
 class InviteCode(Base):
@@ -103,12 +123,23 @@ class Class(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     teacher = relationship("User", back_populates="classes_taught")
-    memberships = relationship("ClassMembership", back_populates="class_")
-    assignments = relationship("Assignment", back_populates="class_")
+    memberships = relationship(
+        "ClassMembership", back_populates="class_", cascade="all, delete-orphan"
+    )
+    assignments = relationship(
+        "Assignment", back_populates="class_", cascade="all, delete-orphan"
+    )
 
 
 class ClassMembership(Base):
     __tablename__ = "class_memberships"
+    __table_args__ = (
+        # Ученик состоит ровно в одном классе: в User.grade лежит одно
+        # значение, и все запросы считают, что строка на ученика одна.
+        # create_all() создаёт только отсутствующие таблицы, поэтому на базе,
+        # созданной до этого ограничения, его не будет.
+        UniqueConstraint("student_id", name="uq_class_memberships_student"),
+    )
 
     id = Column(Integer, primary_key=True)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -143,7 +174,12 @@ class Assignment(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     class_ = relationship("Class", back_populates="assignments")
-    tasks = relationship("Task", back_populates="assignment")
+    tasks = relationship(
+        "Task", back_populates="assignment", cascade="all, delete-orphan"
+    )
+    grades = relationship(
+        "Grade", back_populates="assignment", cascade="all, delete-orphan"
+    )
 
 
 class Task(Base):
@@ -174,12 +210,24 @@ class Task(Base):
 
     student = relationship("User", back_populates="tasks", foreign_keys=[student_id])
     assignment = relationship("Assignment", back_populates="tasks")
-    subtasks = relationship("Task", back_populates="parent_task")
+    subtasks = relationship(
+        "Task",
+        back_populates="parent_task",
+        cascade="all, delete-orphan",
+    )
     parent_task = relationship("Task", back_populates="subtasks", remote_side="[Task.id]")
 
 
 class Grade(Base):
     __tablename__ = "grades"
+    __table_args__ = (
+        # Одна оценка на ученика на задание. Строки с пустым assignment_id
+        # под ограничение не попадают, поэтому отдельные оценки допустимы.
+        UniqueConstraint(
+            "student_id", "assignment_id", name="uq_grades_student_assignment"
+        ),
+        CheckConstraint("value >= 1 AND value <= 5", name="ck_grades_value_range"),
+    )
 
     id = Column(Integer, primary_key=True)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -191,6 +239,7 @@ class Grade(Base):
     graded_at = Column(DateTime(timezone=True), server_default=func.now())
 
     student = relationship("User", back_populates="grades", foreign_keys=[student_id])
+    assignment = relationship("Assignment", back_populates="grades")
 
 
 class Schedule(Base):

@@ -1,0 +1,306 @@
+"""Аутентификационные сценарии и общие зависимости.
+
+Идут через TestClient против настоящего PostgreSQL, поэтому проверяется полный
+жизненный цикл запроса — включая lifespan, который вызывает ``create_tables()``,
+и отправку письма с OTP.
+"""
+import pytest
+
+from app.dependencies import get_current_user, require_role
+from app.models import UserRole
+from app.routers.users import (
+    ProfileUpdateRequest,
+    RegisterRequest,
+    create_access_token,
+    hash_password,
+    verify_password,
+)
+
+
+# ---------------------------------------------------------------------------
+# Пароль и токены
+# ---------------------------------------------------------------------------
+
+
+def test_password_round_trip():
+    hashed = hash_password("supersecret123")
+    assert hashed != "supersecret123"
+    assert verify_password("supersecret123", hashed)
+    assert not verify_password("wrong", hashed)
+
+
+def test_access_token_round_trip():
+    """Регрессия: TTL раньше был строкой, поэтому каждый вход падал с 500."""
+    from jose import jwt
+
+    token = create_access_token(42)
+    payload = jwt.decode(token, "test-secret-key", algorithms=["HS256"])
+    assert payload["sub"] == "42"
+    assert "exp" in payload
+
+
+def test_token_expiry_is_numeric():
+    """Нечисловой TTL снова сломал бы timedelta()."""
+    from app import config
+
+    assert isinstance(config.ACCESS_TOKEN_EXPIRE_MINUTES, int)
+
+
+def test_require_role_allows_matching_role():
+    dependency = require_role(UserRole.teacher)
+    teacher = type("U", (), {"role": UserRole.teacher})()
+    assert dependency(teacher) is teacher
+
+
+def test_require_role_rejects_other_role():
+    from fastapi import HTTPException
+
+    dependency = require_role(UserRole.teacher)
+    student = type("U", (), {"role": UserRole.student})()
+    with pytest.raises(HTTPException) as exc:
+        dependency(student)
+    assert exc.value.status_code == 403
+
+
+def test_single_get_current_user_implementation():
+    """Зависимость раньше существовала в двух экземплярах, и копии разошлись."""
+    from app import dependencies
+    from app.routers import users as users_router
+
+    assert users_router.get_current_user is dependencies.get_current_user
+    assert users_router.require_role is dependencies.require_role
+
+
+# ---------------------------------------------------------------------------
+# Валидация схем
+# ---------------------------------------------------------------------------
+
+
+def test_grade_is_not_self_service():
+    """Ученик раньше мог переписать собственный класс через PATCH /me."""
+    assert "grade" not in ProfileUpdateRequest.model_fields
+
+
+@pytest.mark.parametrize("bad", ["abc", "25:00", "9", "", "9:5"])
+def test_digest_time_must_be_hhmm(bad):
+    with pytest.raises(ValueError):
+        ProfileUpdateRequest(notify_digest_time=bad)
+
+
+def test_digest_time_accepts_hhmm():
+    assert ProfileUpdateRequest(
+        notify_digest_time="23:59"
+    ).notify_digest_time == "23:59"
+
+
+def test_registration_rejects_short_password():
+    with pytest.raises(ValueError):
+        RegisterRequest(
+            email="a@b.ru", password="short",
+            first_name="A", last_name="B", role=UserRole.student,
+        )
+
+
+def test_registration_rejects_blank_name():
+    with pytest.raises(ValueError):
+        RegisterRequest(
+            email="a@b.ru", password="longenough",
+            first_name="   ", last_name="B", role=UserRole.student,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Полный HTTP-сценарий
+# ---------------------------------------------------------------------------
+
+
+def _register(client, email, password="supersecret123", role="student",
+              invite=None):
+    payload = {
+        "email": email,
+        "password": password,
+        "first_name": "Test",
+        "last_name": "User",
+        "role": role,
+    }
+    if invite:
+        payload["invite_code"] = invite
+    return client.post("/api/users/register", json=payload)
+
+
+def test_registration_verification_and_login(client):
+    """Сквозной сценарий: регистрация -> подтверждение -> вход -> профиль."""
+    response = _register(client, "flow@example.com")
+    assert response.status_code == 201
+    assert client.sent_emails, "verification email was not attempted"
+
+    # OTP лежит в теле письма; достаём его так же, как это делает интерфейс.
+    body = client.sent_emails[0][2]
+    code = _extract_code(body)
+
+    verify = client.post("/api/users/verify-email", json={"code": code})
+    assert verify.status_code == 200
+
+    login = client.post(
+        "/api/users/login",
+        data={"username": "flow@example.com", "password": "supersecret123"},
+    )
+    assert login.status_code == 200, login.text
+    payload = login.json()
+    assert payload["role"] == "student"
+    assert payload["access_token"]
+
+    token = payload["access_token"]
+    me = client.get(
+        "/api/users/me", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert me.status_code == 200
+    assert me.json()["email"] == "flow@example.com"
+
+
+def test_login_rejects_wrong_password(client):
+    _register(client, "wrong@example.com")
+    code = _extract_code(client.sent_emails[0][2])
+    client.post("/api/users/verify-email", json={"code": code})
+
+    login = client.post(
+        "/api/users/login",
+        data={"username": "wrong@example.com", "password": "nope"},
+    )
+    assert login.status_code == 401
+
+
+def test_login_blocked_before_verification(client):
+    _register(client, "unverified@example.com")
+    login = client.post(
+        "/api/users/login",
+        data={"username": "unverified@example.com", "password": "supersecret123"},
+    )
+    assert login.status_code == 403
+
+
+def test_protected_route_requires_token(client):
+    assert client.get("/api/users/me").status_code == 401
+
+
+def test_protected_route_rejects_garbage_token(client):
+    response = client.get(
+        "/api/users/me", headers={"Authorization": "Bearer not-a-jwt"}
+    )
+    assert response.status_code == 401
+
+
+def test_deactivated_user_loses_access(client):
+    """``get_current_user`` должен отвергать неактивные учётные записи."""
+    _register(client, "deact@example.com")
+    code = _extract_code(client.sent_emails[0][2])
+    client.post("/api/users/verify-email", json={"code": code})
+
+    login = client.post(
+        "/api/users/login",
+        data={"username": "deact@example.com", "password": "supersecret123"},
+    )
+    token = login.json()["access_token"]
+
+    from app.database import SessionLocal
+    from app.models import User
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == "deact@example.com").one()
+        user.is_active = False
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        "/api/users/me", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 403
+
+
+def test_teacher_registration_requires_invite(client):
+    response = _register(client, "t@example.com", role="teacher")
+    assert response.status_code == 400
+
+
+def test_teacher_registration_with_valid_invite(client, real_db):
+    """Инвайт должен существовать, чтобы его увидела собственная сессия клиента."""
+    from app.models import InviteCode, User, UserRole
+
+    admin = (
+        real_db.query(User)
+        .filter(User.role == UserRole.admin)
+        .order_by(User.id.asc())
+        .first()
+    )
+    assert admin is not None, "lifespan should have bootstrapped an admin"
+    real_db.add(
+        InviteCode(code="TEACHERCODE1234", created_by_id=admin.id)
+    )
+    real_db.commit()
+
+    response = _register(
+        client, "teacherflow@example.com", role="teacher",
+        invite="TEACHERCODE1234",
+    )
+    assert response.status_code == 201, response.text
+
+
+def test_invite_is_consumed_on_verification(client, real_db):
+    """Инвайт учителя не должен быть переиспользуемым."""
+    from app.models import EmailVerification, InviteCode, User, UserRole
+
+    admin = (
+        real_db.query(User)
+        .filter(User.role == UserRole.admin)
+        .order_by(User.id.asc())
+        .first()
+    )
+    real_db.add(InviteCode(code="ONESHOTCODE1234", created_by_id=admin.id))
+    real_db.commit()
+
+    assert _register(
+        client, "oneshot@example.com", role="teacher",
+        invite="ONESHOTCODE1234",
+    ).status_code == 201
+
+    code = _extract_code(client.sent_emails[0][2])
+    assert client.post(
+        "/api/users/verify-email", json={"code": code}
+    ).status_code == 200
+
+    invite = real_db.query(InviteCode).filter(
+        InviteCode.code == "ONESHOTCODE1234"
+    ).one()
+    assert invite.is_used is True
+
+    # Второй учитель уже не может использовать тот же код.
+    assert _register(
+        client, "second@example.com", role="teacher",
+        invite="ONESHOTCODE1234",
+    ).status_code == 400
+
+
+def test_missing_page_returns_404_not_500(client):
+    """Файлов parent/*.html и student/profile.html не существует."""
+    for path in ("/parent/dashboard", "/student/profile"):
+        response = client.get(path)
+        assert response.status_code == 404, path
+
+
+def test_existing_page_is_served(client):
+    assert client.get("/login").status_code == 200
+
+
+def test_health_endpoint(client):
+    assert client.get("/health").json() == {"status": "ok"}
+
+
+def _extract_code(html_body: str) -> str:
+    """Достаёт 6-значный OTP из тела письма с подтверждением."""
+    import re
+
+    match = re.search(r"letter-spacing:12px[^>]*>(\d{6})<", html_body)
+    assert match, "verification code not found in email body"
+    return match.group(1)

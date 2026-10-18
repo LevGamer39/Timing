@@ -1,31 +1,42 @@
-import secrets
-from datetime import datetime
+"""Классы учителя и дашборд учителя."""
+from datetime import datetime, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Assignment, Class, ClassMembership, Grade, Task, TaskStatus, User, UserRole
-from app.routers.users import get_current_user, require_role
+from app.dependencies import require_role
+from app.models import (
+    Assignment,
+    Class,
+    ClassMembership,
+    Grade,
+    Task,
+    TaskStatus,
+    User,
+    UserRole,
+)
 
 router = APIRouter(prefix="/api/classes", tags=["classes"])
 
 
-class ClassCreate(BaseModel):
-    name: str
+# ---------------------------------------------------------------------------
+# Схемы
+# ---------------------------------------------------------------------------
 
 
 class ClassResponse(BaseModel):
+    """``student_count`` вычисляется, это не колонка в таблице ``classes``."""
+
     id: int
     name: str
-    subject: str | None = None
+    subject: str | None
     invite_code: str
     student_count: int
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class StudentResponse(BaseModel):
@@ -33,6 +44,10 @@ class StudentResponse(BaseModel):
     name: str
     email: str
     grade: str | None
+
+
+class ClassOption(BaseModel):
+    name: str
 
 
 class StudentProgressRow(BaseModel):
@@ -95,7 +110,7 @@ class DashboardPagination(BaseModel):
 class TeacherDashboardResponse(BaseModel):
     class_id: int
     class_name: str
-    class_subject: str | None = None
+    class_subject: str | None
     subjects: list[str]
     selected_subject: str | None
     assignments: list[AssignmentOption]
@@ -105,11 +120,17 @@ class TeacherDashboardResponse(BaseModel):
     pagination: DashboardPagination
 
 
+# ---------------------------------------------------------------------------
+# Вспомогательные функции
+# ---------------------------------------------------------------------------
+
+
 def _class_for_teacher(class_id: int, teacher_id: int, db: Session) -> Class:
-    class_ = db.query(Class).filter(
-        Class.id == class_id,
-        Class.teacher_id == teacher_id,
-    ).first()
+    class_ = (
+        db.query(Class)
+        .filter(Class.id == class_id, Class.teacher_id == teacher_id)
+        .first()
+    )
     if not class_:
         raise HTTPException(404, "Class not found")
     return class_
@@ -119,7 +140,10 @@ def _student_label(student: User) -> str:
     return f"{student.last_name} {student.first_name}".strip()
 
 
-def _score_from_grade(grade_value: float | None, status: TaskStatus | None) -> float | None:
+def _score_from_grade(
+    grade_value: float | None, status: TaskStatus | None
+) -> float | None:
+    """Приводит к шкале 0-100; оценки ограничены диапазоном 1-5."""
     if grade_value is not None:
         return round((grade_value / 5) * 100, 1)
     if status == TaskStatus.done:
@@ -127,20 +151,79 @@ def _score_from_grade(grade_value: float | None, status: TaskStatus | None) -> f
     return None
 
 
-def _assignment_options(class_id: int, subject: str | None, db: Session) -> list[Assignment]:
-    query = db.query(Assignment).filter(Assignment.class_id == class_id)
-    if subject:
-        query = query.filter(Assignment.subject == subject)
-    return query.order_by(Assignment.deadline.desc(), Assignment.created_at.desc()).all()
+def _member_ids(class_id: int, db: Session) -> list[int]:
+    return [
+        row[0]
+        for row in db.query(ClassMembership.student_id)
+        .filter(ClassMembership.class_id == class_id)
+        .all()
+    ]
 
 
-@router.post("", response_model=ClassResponse, status_code=201)
-def create_class(
-    body: ClassCreate,
-    current_user: User = Depends(require_role(UserRole.teacher)),
-    db: Session = Depends(get_db),
-):
-    raise HTTPException(403, "Only admin can create classes")
+def _students_by_id(student_ids: list[int], db: Session) -> dict[int, User]:
+    """Забирает учеников одним запросом, а не через ленивую загрузку."""
+    if not student_ids:
+        return {}
+    return {
+        user.id: user
+        for user in db.query(User).filter(User.id.in_(student_ids)).all()
+    }
+
+
+def _assignment_counts(
+    assignment_ids: list[int], db: Session
+) -> dict[int, tuple[int, int]]:
+    """``{assignment_id: (сдано, всего)}``; только задачи верхнего уровня."""
+    if not assignment_ids:
+        return {}
+    rows = (
+        db.query(
+            Task.assignment_id,
+            func.count(Task.id),
+            func.sum(case((Task.status == TaskStatus.done, 1), else_=0)),
+        )
+        .filter(
+            Task.assignment_id.in_(assignment_ids),
+            Task.parent_task_id.is_(None),
+        )
+        .group_by(Task.assignment_id)
+        .all()
+    )
+    return {
+        assignment_id: (int(done or 0), int(total or 0))
+        for assignment_id, total, done in rows
+    }
+
+
+def _to_class_response(
+    class_: Class, student_count: int
+) -> ClassResponse:
+    return ClassResponse(
+        id=class_.id,
+        name=class_.name,
+        subject=class_.subject,
+        invite_code=class_.invite_code,
+        student_count=student_count,
+        created_at=class_.created_at,
+    )
+
+
+def _class_counts(class_ids: list[int], db: Session) -> dict[int, int]:
+    """``{class_id: число участников}`` для всего списка одним запросом."""
+    if not class_ids:
+        return {}
+    rows = (
+        db.query(ClassMembership.class_id, func.count(ClassMembership.id))
+        .filter(ClassMembership.class_id.in_(class_ids))
+        .group_by(ClassMembership.class_id)
+        .all()
+    )
+    return {class_id: int(count) for class_id, count in rows}
+
+
+# ---------------------------------------------------------------------------
+# Роутеры
+# ---------------------------------------------------------------------------
 
 
 @router.get("", response_model=list[ClassResponse])
@@ -148,19 +231,33 @@ def list_classes(
     current_user: User = Depends(require_role(UserRole.teacher)),
     db: Session = Depends(get_db),
 ):
-    classes = db.query(Class).filter(Class.teacher_id == current_user.id).order_by(Class.name.asc()).all()
-    for class_ in classes:
-        class_.student_count = db.query(ClassMembership).filter(ClassMembership.class_id == class_.id).count()
-    return classes
+    classes = (
+        db.query(Class)
+        .filter(Class.teacher_id == current_user.id)
+        .order_by(Class.name.asc())
+        .all()
+    )
+    counts = _class_counts([class_.id for class_ in classes], db)
+    return [
+        _to_class_response(class_, counts.get(class_.id, 0)) for class_ in classes
+    ]
 
 
-@router.get("/available")
+@router.get("/available", response_model=list[ClassOption])
 def list_available_class_names(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(UserRole.teacher, UserRole.admin)),
     db: Session = Depends(get_db),
 ):
-    names = sorted({item.name for item in db.query(Class).all() if item.name})
-    return [{"name": name} for name in names]
+    """Различные названия классов, доступные вызывающему.
+
+    Ограничены его собственными классами (для админа - всеми). Раньше любой
+    авторизованный пользователь получал все названия классов из базы.
+    """
+    query = db.query(Class.name)
+    if current_user.role != UserRole.admin:
+        query = query.filter(Class.teacher_id == current_user.id)
+    names = sorted({row[0] for row in query.all() if row[0]})
+    return [ClassOption(name=name) for name in names]
 
 
 @router.get("/dashboard", response_model=TeacherDashboardResponse)
@@ -168,75 +265,109 @@ def teacher_dashboard_data(
     class_id: int,
     assignment_id: int | None = None,
     subject: str | None = None,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 10,
     current_user: User = Depends(require_role(UserRole.teacher)),
     db: Session = Depends(get_db),
 ):
+    """Доска прогресса по классу.
+
+    Список учеников возвращается всегда, даже если заданий ещё нет, - тогда
+    ``status=None``. Раньше весь цикл был внутри ``if selected_assignment``,
+    и только что созданный класс рендерился пустой таблицей.
+    """
     class_ = _class_for_teacher(class_id, current_user.id, db)
 
-    memberships = db.query(ClassMembership).filter(ClassMembership.class_id == class_id).all()
-    students = [membership.student for membership in memberships]
+    student_ids = _member_ids(class_id, db)
+    students_by_id = _students_by_id(student_ids, db)
 
-    all_assignments = db.query(Assignment).filter(Assignment.class_id == class_id).order_by(
-        Assignment.deadline.desc(),
-        Assignment.created_at.desc(),
-    ).all()
-    subjects = sorted({assignment.subject for assignment in all_assignments if assignment.subject})
+    all_assignments = (
+        db.query(Assignment)
+        .filter(Assignment.class_id == class_id)
+        .order_by(Assignment.deadline.desc(), Assignment.created_at.desc())
+        .all()
+    )
+    subjects = sorted(
+        {assignment.subject for assignment in all_assignments if assignment.subject}
+    )
 
-    filtered_assignments = [assignment for assignment in all_assignments if not subject or assignment.subject == subject]
+    filtered_assignments = [
+        assignment
+        for assignment in all_assignments
+        if not subject or assignment.subject == subject
+    ]
     selected_assignment = None
     if assignment_id:
-        selected_assignment = next((assignment for assignment in filtered_assignments if assignment.id == assignment_id), None)
+        selected_assignment = next(
+            (
+                assignment
+                for assignment in filtered_assignments
+                if assignment.id == assignment_id
+            ),
+            None,
+        )
     if not selected_assignment and filtered_assignments:
         selected_assignment = filtered_assignments[0]
 
     student_rows: list[StudentProgressRow] = []
     completed = started = not_started = 0
 
+    task_by_student: dict[int, Task] = {}
+    grade_by_student: dict[int, Grade] = {}
     if selected_assignment:
-        tasks = db.query(Task).filter(Task.assignment_id == selected_assignment.id).all()
+        tasks = (
+            db.query(Task)
+            .filter(
+                Task.assignment_id == selected_assignment.id,
+                Task.parent_task_id.is_(None),
+            )
+            .all()
+        )
         task_by_student = {task.student_id: task for task in tasks}
-        grades = db.query(Grade).filter(Grade.assignment_id == selected_assignment.id).all()
+        grades = (
+            db.query(Grade)
+            .filter(Grade.assignment_id == selected_assignment.id)
+            .all()
+        )
         grade_by_student = {grade.student_id: grade for grade in grades}
 
-        for student in students:
-            task = task_by_student.get(student.id)
-            grade = grade_by_student.get(student.id)
-            status = task.status if task else None
-            if status == TaskStatus.done:
-                completed += 1
-            elif status in {TaskStatus.in_progress, TaskStatus.overdue}:
-                started += 1
-            else:
-                not_started += 1
+    for student_id in student_ids:
+        student = students_by_id.get(student_id)
+        task = task_by_student.get(student_id)
+        grade = grade_by_student.get(student_id)
+        status = task.status if task else None
 
-            grade_value = grade.value if grade else None
-            student_rows.append(
-                StudentProgressRow(
-                    student_id=student.id,
-                    name=_student_label(student),
-                    email=student.email,
-                    status=status,
-                    score=_score_from_grade(grade_value, status),
-                    grade=grade_value,
-                )
+        if status == TaskStatus.done:
+            completed += 1
+        elif status in {TaskStatus.in_progress, TaskStatus.overdue}:
+            started += 1
+        else:
+            not_started += 1
+
+        grade_value = grade.value if grade else None
+        student_rows.append(
+            StudentProgressRow(
+                student_id=student_id,
+                name=_student_label(student) if student else "Удалённый ученик",
+                email=student.email if student else "",
+                status=status,
+                score=_score_from_grade(grade_value, status),
+                grade=grade_value,
             )
-    else:
-        completed = started = not_started = 0
+        )
 
     student_rows.sort(key=lambda item: item.name.lower())
     total_items = len(student_rows)
     total_pages = max(1, (total_items + page_size - 1) // page_size)
     start = (page - 1) * page_size
-    paged_rows = student_rows[start:start + page_size]
 
     return TeacherDashboardResponse(
         class_id=class_.id,
         class_name=class_.name,
         class_subject=class_.subject,
         subjects=subjects,
-        selected_subject=subject or (selected_assignment.subject if selected_assignment else None),
+        selected_subject=subject
+        or (selected_assignment.subject if selected_assignment else None),
         assignments=[
             AssignmentOption(
                 id=assignment.id,
@@ -246,8 +377,10 @@ def teacher_dashboard_data(
             )
             for assignment in filtered_assignments
         ],
-        selected_assignment_id=selected_assignment.id if selected_assignment else None,
-        students=paged_rows,
+        selected_assignment_id=selected_assignment.id
+        if selected_assignment
+        else None,
+        students=student_rows[start : start + page_size],
         statistics=DashboardStatistics(
             completed=completed,
             started=started,
@@ -270,66 +403,101 @@ def get_class(
 ):
     class_ = _class_for_teacher(class_id, current_user.id, db)
 
-    memberships = db.query(ClassMembership).filter(ClassMembership.class_id == class_id).all()
+    student_ids = _member_ids(class_id, db)
+    students_by_id = _students_by_id(student_ids, db)
     students = [
         StudentResponse(
-            id=membership.student.id,
-            name=_student_label(membership.student),
-            email=membership.student.email,
-            grade=membership.student.grade,
+            id=student_id,
+            name=_student_label(students_by_id[student_id]),
+            email=students_by_id[student_id].email,
+            grade=students_by_id[student_id].grade,
         )
-        for membership in memberships
+        for student_id in student_ids
+        if student_id in students_by_id
     ]
 
-    assignments = db.query(Assignment).filter(Assignment.class_id == class_id).order_by(Assignment.deadline.desc()).all()
-    assignment_items: list[ClassAssignmentMatrix] = []
-    for assignment in assignments:
-        tasks = db.query(Task).filter(Task.assignment_id == assignment.id).all()
-        total_count = len(tasks)
-        submitted_count = sum(1 for task in tasks if task.status == TaskStatus.done)
-        assignment_items.append(
-            ClassAssignmentMatrix(
-                assignment_id=assignment.id,
-                title=assignment.title,
-                subject=assignment.subject,
-                deadline=assignment.deadline,
-                submitted_count=submitted_count,
-                total_count=total_count,
-            )
+    assignments = (
+        db.query(Assignment)
+        .filter(Assignment.class_id == class_id)
+        .order_by(Assignment.deadline.desc())
+        .all()
+    )
+    counts = _assignment_counts([a.id for a in assignments], db)
+    matrix = [
+        ClassAssignmentMatrix(
+            assignment_id=assignment.id,
+            title=assignment.title,
+            subject=assignment.subject,
+            deadline=assignment.deadline,
+            submitted_count=counts.get(assignment.id, (0, 0))[0],
+            total_count=counts.get(assignment.id, (0, 0))[1],
         )
+        for assignment in assignments
+    ]
 
     return ClassDetail(
         id=class_.id,
         name=class_.name,
+        subject=class_.subject,
         invite_code=class_.invite_code,
         student_count=len(students),
         created_at=class_.created_at,
         students=students,
-        assignments=assignment_items,
+        assignments=matrix,
     )
 
 
-@router.get("/{class_id}/overview")
+@router.get("/{class_id}/overview", response_model=ClassDetail)
 def get_class_overview(
     class_id: int,
     current_user: User = Depends(require_role(UserRole.teacher)),
     db: Session = Depends(get_db),
 ):
+    """Матрица «ученик x задание».
+
+    Отдаёт те же типизированные данные, что и ``get_class``, вместо
+    невалидируемого dict, собранного вручную.
+    """
     class_ = _class_for_teacher(class_id, current_user.id, db)
 
-    memberships = db.query(ClassMembership).filter(ClassMembership.class_id == class_id).all()
-    students = [membership.student for membership in memberships]
-    assignments = db.query(Assignment).filter(Assignment.class_id == class_id).order_by(Assignment.deadline.desc()).all()
+    student_ids = _member_ids(class_id, db)
+    students_by_id = _students_by_id(student_ids, db)
 
-    tasks = db.query(Task).join(Assignment, Task.assignment_id == Assignment.id).filter(Assignment.class_id == class_id).all()
-    grades = db.query(Grade).join(Assignment, Grade.assignment_id == Assignment.id).filter(Assignment.class_id == class_id).all()
+    assignments = (
+        db.query(Assignment)
+        .filter(Assignment.class_id == class_id)
+        .order_by(Assignment.deadline.desc())
+        .all()
+    )
+    assignment_ids = [assignment.id for assignment in assignments]
 
-    task_lookup = {(task.student_id, task.assignment_id): task for task in tasks if task.assignment_id}
-    grade_lookup = {(grade.student_id, grade.assignment_id): grade for grade in grades if grade.assignment_id}
+    task_lookup: dict[tuple[int, int], Task] = {}
+    if assignment_ids:
+        for task in (
+            db.query(Task)
+            .filter(
+                Task.assignment_id.in_(assignment_ids),
+                Task.parent_task_id.is_(None),
+            )
+            .all()
+        ):
+            task_lookup[(task.student_id, task.assignment_id)] = task
 
-    student_items: list[ClassStudentDetail] = []
-    for student in sorted(students, key=_student_label):
-        student_items.append(
+    grade_lookup: dict[tuple[int, int], Grade] = {}
+    if assignment_ids:
+        for grade in (
+            db.query(Grade)
+            .filter(Grade.assignment_id.in_(assignment_ids))
+            .all()
+        ):
+            grade_lookup[(grade.student_id, grade.assignment_id)] = grade
+
+    student_details: list[ClassStudentDetail] = []
+    for student_id in student_ids:
+        student = students_by_id.get(student_id)
+        if not student:
+            continue
+        student_details.append(
             ClassStudentDetail(
                 id=student.id,
                 name=_student_label(student),
@@ -338,31 +506,53 @@ def get_class_overview(
                 assignments=[
                     StudentAssignmentCell(
                         assignment_id=assignment.id,
-                        status=task_lookup.get((student.id, assignment.id)).status if task_lookup.get((student.id, assignment.id)) else None,
-                        grade=grade_lookup.get((student.id, assignment.id)).value if grade_lookup.get((student.id, assignment.id)) else None,
+                        status=(
+                            task_lookup[(student.id, assignment.id)].status
+                            if (student.id, assignment.id) in task_lookup
+                            else None
+                        ),
+                        grade=(
+                            grade_lookup[(student.id, assignment.id)].value
+                            if (student.id, assignment.id) in grade_lookup
+                            else None
+                        ),
                     )
                     for assignment in assignments
                 ],
             )
         )
 
-    return {
-        "id": class_.id,
-        "name": class_.name,
-        "invite_code": class_.invite_code,
-        "student_count": len(students),
-        "created_at": class_.created_at,
-        "students": [item.model_dump() for item in student_items],
-        "assignments": [
-            {
-                "id": assignment.id,
-                "title": assignment.title,
-                "subject": assignment.subject,
-                "deadline": assignment.deadline,
-            }
+    student_details.sort(key=lambda item: item.name.lower())
+    counts = _assignment_counts(assignment_ids, db)
+
+    return ClassDetail(
+        id=class_.id,
+        name=class_.name,
+        subject=class_.subject,
+        invite_code=class_.invite_code,
+        student_count=len(student_details),
+        created_at=class_.created_at,
+        students=[
+            StudentResponse(
+                id=item.id,
+                name=item.name,
+                email=item.email,
+                grade=item.grade,
+            )
+            for item in student_details
+        ],
+        assignments=[
+            ClassAssignmentMatrix(
+                assignment_id=assignment.id,
+                title=assignment.title,
+                subject=assignment.subject,
+                deadline=assignment.deadline,
+                submitted_count=counts.get(assignment.id, (0, 0))[0],
+                total_count=counts.get(assignment.id, (0, 0))[1],
+            )
             for assignment in assignments
         ],
-    }
+    )
 
 
 @router.delete("/{class_id}/students/{student_id}", status_code=204)
@@ -373,10 +563,14 @@ def remove_student(
     db: Session = Depends(get_db),
 ):
     _class_for_teacher(class_id, current_user.id, db)
-    membership = db.query(ClassMembership).filter(
-        ClassMembership.class_id == class_id,
-        ClassMembership.student_id == student_id,
-    ).first()
+    membership = (
+        db.query(ClassMembership)
+        .filter(
+            ClassMembership.class_id == class_id,
+            ClassMembership.student_id == student_id,
+        )
+        .first()
+    )
     if not membership:
         raise HTTPException(404, "Student not in this class")
     db.delete(membership)
@@ -389,19 +583,49 @@ def join_class(
     current_user: User = Depends(require_role(UserRole.student)),
     db: Session = Depends(get_db),
 ):
-    class_ = db.query(Class).filter(Class.invite_code == invite_code).first()
+    """Вступление в класс по инвайт-коду.
+
+    Ученик принадлежит ровно одному классу (``User.grade`` хранит одно
+    значение, и все запросы исходят из одной membership), поэтому вступление
+    в другой класс переносит существующую membership. Прежнее название класса
+    возвращается в ответе, а не теряется молча - раньше ``grade`` обновлялся
+    на новый класс, а membership оставалась в старом.
+    """
+    class_ = (
+        db.query(Class)
+        .filter(Class.invite_code == invite_code.strip().upper())
+        .first()
+    )
     if not class_:
         raise HTTPException(404, "Invalid invite code")
 
-    membership = db.query(ClassMembership).filter(
-        ClassMembership.student_id == current_user.id,
-    ).first()
+    membership = (
+        db.query(ClassMembership)
+        .filter(ClassMembership.student_id == current_user.id)
+        .first()
+    )
     if membership and membership.class_id == class_.id:
         raise HTTPException(400, "Already in this class")
+
+    previous_name = None
     if membership:
+        previous = (
+            db.query(Class)
+            .filter(Class.id == membership.class_id)
+            .first()
+        )
+        previous_name = previous.name if previous else None
         membership.class_id = class_.id
+        membership.joined_at = datetime.now(timezone.utc)
     else:
-        db.add(ClassMembership(student_id=current_user.id, class_id=class_.id))
+        db.add(
+            ClassMembership(student_id=current_user.id, class_id=class_.id)
+        )
+
     current_user.grade = class_.name
     db.commit()
-    return {"message": f"Joined class {class_.name}"}
+
+    message = f"Joined class {class_.name}"
+    if previous_name:
+        message += f" (left {previous_name})"
+    return {"message": message, "previous_class": previous_name}

@@ -1,5 +1,8 @@
 # AGENTS.md - Coding Guidelines & Best Practices
 
+> Документ синхронизирован с кодом. Если правило ниже противоречит реальности —
+> правь код, а не документ, и обнови этот файл.
+
 ## Project Structure
 
 ```
@@ -7,318 +10,430 @@ VectorVK/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py
-│   │   ├── main.py                 # FastAPI application entry point
-│   │   ├── database.py             # DB engine, sessions, table creation
-│   │   ├── models.py               # SQLAlchemy ORM models
-│   │   ├── dependencies.py          # FastAPI dependency injection
-│   └── routers/                    # API route handlers
-│       ├── __init__.py
-│       ├── users.py                # User CRUD & auth
-│       ├── admin.py                # Admin dashboard & settings
-│       ├── classes.py              # Class management (teachers)
-│       ├── assignments.py          # Assignment CRUD
-│       ├── tasks.py                # Task management (students)
-│       ├── grades.py               # Grades tracking
-│       ├── schedule.py             # Schedule/weekly plan
-│       ├── ai.py                   # AI chatbot integration
-│       ├── notifications.py        # Notification system
-│       └── yandex_auth.py          # Yandex login integration
-├── frontend/                       # Static HTML/JS served at /static
-│   ├── js/
-│   │   ├── api.js                 # API client utilities
-│   │   ├── auth-guard.js          # Auth redirect logic
-│   │   ├── login.js               # Login handler
-│   │   ├── register.js             # Registration handler
-│   │   ├── verify.js               # Email verification handler
-│   │   └── mobile-nav.js          # Mobile navigation
-│   ├── admin/                     # Admin dashboard pages
-│   ├── student/                   # Student portal pages
-│   ├── teacher/                   # Teacher portal pages
-│   ├── parent/                    # Parent portal pages
-│   └── *.html                     # Auth & settings pages
-├── docker-compose.yml             # Docker services configuration
-├── requirements.txt               # Python dependencies
-└── .env.example                    # Environment variables template
+│   │   ├── config.py            # ЕДИНЫЙ источник конфигурации (парсинг .env)
+│   │   ├── main.py              # Точка входа: API-роутеры + раздача страниц
+│   │   ├── database.py          # Engine (PostgreSQL), сессии, create_tables
+│   │   ├── models.py            # SQLAlchemy ORM, 13 моделей + ограничения
+│   │   ├── dependencies.py      # get_current_user, require_role
+│   │   ├── ai_text.py           # Чистая логика ИИ: парсинг, матчинг задач
+│   │   └── routers/
+│   │       ├── users.py            # Регистрация, auth, профиль, сброс пароля
+│   │       ├── admin.py            # Пользователи, классы, инвайт-коды
+│   │       ├── classes.py          # Классы учителя, дашборд, вступление
+│   │       ├── assignments.py      # Задания учителя, прогресс
+│   │       ├── tasks.py            # Задачи ученика, подзадачи
+│   │       ├── grades.py           # Оценки, массовая выставка, сводки
+│   │       ├── schedule.py         # Расписание
+│   │       ├── ai.py               # Оркестрация Ollama (логика — в ai_text.py)
+│   │       ├── notifications.py    # SMTP, APScheduler
+│   │       └── yandex_auth.py      # OAuth Яндекса
+│   ├── tests/                   # pytest, требует PostgreSQL
+│   ├── Dockerfile
+│   ├── pytest.ini
+│   ├── requirements.txt
+│   ├── requirements-dev.txt
+│   └── data/                    # остатки SQLite, см. «Известные проблемы»
+│
+├── frontend/
+│   ├── *.html                   # Лендинг, login, register, verify,
+│   │                            #   reset-password*, change-*, settings, 404
+│   ├── css/                     # base, index, login, register, verify, reset-password
+│   ├── js/                      # api.js, auth-guard.js, login.js, register.js,
+│   │                            #   verify.js, mobile-nav.js
+│   ├── student/                 # dashboard, tasks, calendar, progress, ai
+│   │   ├── css/  js/            #   + settings.js
+│   ├── teacher/                 # dashboard, classes, class, assignments,
+│   │                            #   assignment-new, profile, settings, common
+│   ├── admin/                   # dashboard, settings  (+ js/dashboard.js)
+│   ├── parent/                  # ⚠ папки нет — см. «Известные проблемы»
+│   └── favicon/
+│
+├── nginx/
+│   ├── nginx.conf.template      # Шаблон: домен подставляется через envsubst
+│   ├── docker-entrypoint.sh     # Подстановка APP_DOMAIN + самоподписанный cert
+│   └── Dockerfile               # nginx:alpine + openssl
+├── docker-compose.yml           # backend, ollama, nginx, certbot, db
+├── .env.example
+└── AGENTS.md
 ```
+
+**Конфигурация — только в `app/config.py`.** Значения парсятся и валидируются
+один раз: `_int` для чисел, `_bool` для флагов. Модули делают
+`from app import config` и **не читают `os.environ` напрямую**.
+
+> Это не косметика. `ACCESS_TOKEN_EXPIRE_MINUTES` раньше читался строкой и
+> попадал в `timedelta()`, из-за чего `POST /api/users/login` всегда
+> возвращал 500. Покрыто тестом `test_users.py::test_token_expiry_is_numeric`.
+
+**Платформа:** `requirements.txt` помечает `uvloop`, `httptools`,
+`watchfiles`, `websockets` как `sys_platform != "win32"` — они не собираются на
+Windows. Локальная разработка на Windows работает.
+
+**Каталога `frontend/parent/` нет.** Роль `parent` полностью реализована в API
+(`/api/grades/child/{id}`, `/api/tasks/child/{id}`, `/api/schedule/child/{id}`,
+`/api/users/me/children`), но маршруты в `main.py` ссылаются на несуществующие
+`parent/*.html` (теперь отдают 404, а не 500).
+
+
 
 ---
 
-## Backend Coding Guidelines
+## Backend Guidelines
 
-### 1. General Principles
+### 1. Общие принципы
 
-- **Async/Await Pattern**: All async endpoints must use `async def` with proper await usage
-- **Dependency Injection**: Use FastAPI's dependency injection via `get_db()` from `database.py`
-- **Type Hints**: Include type hints for all function parameters and return values
-- **Error Handling**: Always handle exceptions gracefully with meaningful error messages
-- **Validation**: Validate all inputs at the model/routing level, not just in endpoints
+- **Async/Await**: эндпоинты объявлены `async def`, но работают с БД
+  **синхронно** через `Depends(get_db)`. Не добавляй `await` к сессии SQLAlchemy
+  и не переходи на `AsyncSession` без отдельной задачи по миграции.
+- **Dependency Injection**: `db: Session = Depends(get_db)`.
+- **Роли**: `Depends(require_role(UserRole.teacher))` — единственный способ
+  ограничения доступа. Порядок: сначала `require_role`, потом `db`.
+- **Пароли**: `hash_password()` из `users.py`. Не импортируй passlib напрямую.
+- **Токены**: `create_access_token(user_id)` — единая точка выдачи JWT.
 
-### 2. Database Models (models.py)
+### 2. Модели (models.py)
 
 ```python
-# DO: Use SQLAlchemy declarative base with __tablename__
-class MyModel(Base):
-    __tablename__ = "my_table"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    # Add fields with appropriate types and constraints
-    
-    # Relationships with back_populates for bidirectional access
-    related_model = relationship("OtherModel", back_populates="relation")
-
-# DO: Use str, Enum for status/priority enums to avoid typos
+# DO: str-enum для статусов — значения коллег по enum совпадают
 class TaskStatus(str, enum.Enum):
     pending = "pending"
     in_progress = "in_progress"
     done = "done"
     overdue = "overdue"
 
-# DO: Always include timestamps (created_at, updated_at) with server_default=func.now()
-# DON'T: Use datetime objects directly as column types
+# DO: внешние ключи с явными индексами
+email = Column(String(255), unique=True, nullable=False, index=True)
+
+# DO: DateTime(timezone=True) везде, значения — UTC
+created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# DO: самоссылающаяся связь для подзадач
+parent_task = relationship("Task", back_populates="subtasks", remote_side="[Task.id]")
 ```
 
-### 3. Routers (routers/*.py)
+Тонкости, которые легко сломать:
+
+- `User.tasks` и `User.grades` требуют `foreign_keys=`, потому что у `User`
+  несколько путей к `Task`/`Grade`. Не добавляй связь, не указав `foreign_keys`.
+- `Task.subtasks` / `Task.parent_task` — рекурсивная связь через `parent_task_id`.
+- `Class.class_` и `Assignment.class_` используют подчёркивание, потому что
+  `class` — зарезервированное слово Python.
+- Время в БД — UTC. Локальное время вычисляется только на отображающем слое
+  (фронт). Не пиши `datetime.now()` без `timezone.utc`.
+- `Schedule.weekday`: 0 = понедельник, 6 = воскресенье.
+- `Schedule.start_time` / `Task.ai_suggested_time` — строки `"HH:MM"`, не `TIME`.
+
+### 3. Роутеры (routers/*.py)
 
 ```python
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from app.database import get_db
+router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
-router = APIRouter(prefix="/api", tags=["..."])
-
-@router.get("/endpoint")
-async def endpoint(item: Item, db: Session = Depends(get_db)):
-    """
-    Endpoint documentation.
-    
-    Args:
-        item: Input validation
-    
-    Returns:
-        Response data
-    """
-    try:
-        # Business logic here
-        return {"data": result}
-    
-    except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    
-    except DatabaseError as e:
-        raise HTTPException(status_code=500, detail="Database error")
+@router.post("/{task_id}/complete", response_model=TaskResponse)
+def complete_task(task_id: int, db: Session = Depends(get_db),
+                 current_user: User = Depends(require_role(UserRole.student))):
+    ...
+    return task
 ```
 
-### 4. User Authentication & Authorization
+- Все префиксы — `/api/...`. Страницы отдаются из `main.py`, не из роутеров.
+- Эндпоинты **синхронные** (`def`), даже если в `main.py` страницы — `async def`.
+- Схемы Pydantic объявляются в том же файле роутера над эндпоинтами.
+- Ошибки — `raise HTTPException(status_code=..., detail="текст на английском")`.
+  Фронт показывает `detail` пользователю как есть.
+- Родительские эндпоинты именуются `/child/{student_id}` и живут рядом со
+  «своими» (`/my`), а не в отдельном роутере.
 
-- **JWT Tokens**: Store in localStorage with `localStorage.setItem('token', token)`
-- **User Data**: Also store user object for quick access: `localStorage.setItem('user', JSON.stringify(user))`
-- **Auth Guard**: Use `requireAuth(allowed_roles)` helper from `api.js`
-- **Password Hashing**: Use bcrypt or similar secure hashing (see `routers/users.py`)
+### 4. Схема БД и миграции
 
-### 5. API Response Format
+- `create_all()` создаёт **только отсутствующие таблицы**. Он не добавляет
+  колонки и не меняет типы.
+- **Миграций в проекте нет.** `create_all()` создаёт только отсутствующие
+  таблицы, поэтому добавление колонки или ограничения требует ручного
+  `ALTER TABLE` — предупреди об этом явно. Ограничения, объявленные в
+  моделях, попадают в схему только при её создании.
+- `create_tables()` объявлена в `database.py` дважды; используется вторая
+  (с `_ensure_admin_user()`). Не добавляй третью — сначала почини дубликат.
 
-```python
-# Standard response format
-{
-    "data": {...},
-    "message": "Optional success message"
-}
+### 5. Конфигурация
 
-# Error format
-{
-    "detail": "Error message"
-}
-```
+`APP_DOMAIN` в `.env` — единственное место, где задан домен. Он попадает в
+nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend через
+`APP_URL` (из него собирается CORS). Правя домен в конфигах вручную, создаёшь
+расхождение с `.env`.
+
+Что важно знать при правках:
+
+- `nginx/nginx.conf.template` — шаблон, а не рабочий конфиг. Правь шаблон.
+- `envsubst '${APP_DOMAIN} ${SSL_CERT} ${SSL_KEY}'` — список переменных
+  обязателен. Пустой список означает «подставить всё», и nginx теряет `$host`.
+- Перед `envsubst` переменные нужно `export`: `envsubst` читает окружение,
+  а не shell-переменные. Без экспорта подстановка пуста и nginx падает с
+  `invalid number of arguments in "ssl_certificate"`.
+- Самоподписанный сертификат — осознанный костыль на первый запуск: без него
+  контейнер не поднимается вообще. Не выноси его в основной конфиг.
+- В `.env` значения пишутся как `КЛЮЧ=значение` без пробелов вокруг `=` и без
+  BOM: compose не примет ни то, ни другое.
+
+### 6. Значения по умолчанию
+
+- Секреты — только из `.env`. Никаких значений по умолчанию для
+  `SECRET_KEY`, `DB_PASS`, `ADMIN_PASSWORD`.
+- `DB_HOST` в Docker переопределяется на `vector_db` в `docker-compose.yml`.
+  Не хардкодь имя хоста в коде.
+- `docker-compose.yml` требует `DB_PASS` (`:?db password must be set`) —
+  падает без него намеренно.
 
 ---
 
-## Frontend Coding Guidelines
+## Frontend Guidelines
 
-### 1. JavaScript Patterns (js/*.js)
+### 1. Загрузка ресурсов
+
+- Все страницы отдаёт FastAPI. Стили и скрипты — по абсолютному пути
+  `/static/...`: `<script src="/static/student/js/tasks.js">`.
+- nginx проксирует **весь** трафик на backend, включая `/static`. Отдельного
+  `location /static` в `nginx.conf.template` нет — не добавляй.
+- Стилизуй через существующие классы в `frontend/*/css/*.css` и
+  `css/base.css`. Дизайн-система: тёмная «аврора» (фиолетовые градиенты
+  `#654DFD` → `#2400FF`), акцент `#F1642F`, шрифты Inter (внутренние) и
+  Nunito (публичные).
+- UI-текст — на русском, язык интерфейса `ru-RU`.
+
+### 2. api.js — единственная точка доступа к API
 
 ```javascript
-// DO: Centralize API configuration in api.js
-const API = window.location.origin;
+// DO: все страницы используют хелперы api.js
+const me = await get('/api/users/me');
+const task = await post('/api/tasks', { title: '...' });
 
-// DO: Use consistent async patterns with try/catch
-async function fetchData(path, options = {}) {
-    const token = getToken();
-    const headers = { 'Content-Type': 'application/json', ...options.headers };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    
-    const res = await fetch(API + path, { ...options, headers });
-    if (res.status === 401) { logout(); return; }
-    
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = { detail: text }; }
-    if (!res.ok) throw new Error(data.detail || 'Ошибка запроса');
-    return data;
-}
-
-// DO: Use URLSearchParams for form submissions
-async function submitForm(path, formData) {
-    const token = getToken();
-    const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    
-    const res = await fetch(API + path, {
-        method: 'POST',
-        headers,
-        body: new URLSearchParams(formData).toString()
-    });
-    return res.json();
-}
-
-// DO: Use helper functions for data formatting
-function formatDate(iso) {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleDateString('ru-RU', {
-        day: '2-digit', month: '2-digit', year: 'numeric'
-    });
-}
-
-// DON'T: Inline repetitive fetch logic
+// DON'T: писать fetch() напрямую в страницах/скриптах порталов
 ```
 
-### 2. HTML Structure
+Функции: `getToken`, `getUser`, `setAuth`, `logout`, `requireAuth(roles)`,
+`get`, `post`, `patch`, `del`, `postForm`.
 
-- **Semantic HTML5** with proper heading hierarchy
-- **Accessibility**: Use ARIA labels where needed, proper alt text for images
-- **Form Validation**: Client-side validation before submission
-- **Responsive Design**: Mobile-first CSS with flexbox/grid layouts
+`request()` сам обрабатывает 401 (вызывает `logout`), парсит ответ и бросает
+`Error` с `detail` из тела.
 
-### 3. LocalStorage Management
+API-база — `window.location.origin`, а не жёсткий порт: страница и запросы
+идут на один домен, всё проксирует nginx. Возврат в логин — на `/login`
+(имя файла во `frontend/` — `login.html`, но маршрут именно такой).
+
+### 3. LocalStorage
 
 ```javascript
-// Storage keys are fixed:
-// - 'token': JWT authentication token
-// - 'user': JSON stringified user object { role, name, ... }
-
-function getToken() { return localStorage.getItem('token'); }
-function getUser() { return JSON.parse(localStorage.getItem('user') || 'null'); }
-
-function setAuth(token, user) {
-  localStorage.setItem('token', token);
-  localStorage.setItem('user', JSON.stringify(user));
-}
-
-// Clear both on logout
-function logout() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-  window.location.href = '/login.html';
-}
+// Ровно два ключа, фиксированы во всём проекте:
+localStorage.getItem('token')   // JWT
+localStorage.getItem('user')    // JSON: { id, role, first_name, ... }
 ```
 
----
+`role` из `user` используется для клиентских редиректов и показа ролевых
+блоков. Он не заменяет серверную проверку — `require_role` обязателен на бэке.
 
-## Best Practices
+### 4. Роли и страницы
 
-### Backend
+| Раздел | Пути | Роль |
+|---|---|---|
+| Публичные | `/`, `/login`, `/register`, `/verify`, `/reset-password*` | — |
+| Ученик | `/dashboard`, `/student/tasks`, `/calendar`, `/progress`, `/ai` | student |
+| Учитель | `/teacher/*` | teacher |
+| Админ | `/admin/*` | admin |
+| Общие | `/settings`, `/settings/change-email`, `/settings/change-password` | любая |
 
-1. **Database Migrations**: Use `database.py`'s `create_tables()` for schema updates
-2. **Admin User**: Auto-create admin user on startup via `_ensure_admin_user()`
-3. **CORS Configuration**: Configure in `main.py` with appropriate origins
-4. **Static Files**: Mount frontend at `/static` using `StaticFiles`
+- Новую страницу **обязательно** зарегистрируй роутом в `main.py` через
+  `serve("путь/к/file.html")` — иначе она недоступна.
+- `requireAuth` вызывай **до** рендера данных, иначе возможен flash
+  неавторизованного контента.
+- На каждой странице подключай `/static/js/mobile-nav.js`.
 
-### PostgreSQL & psycopg3 Guidelines
+### 5. Скрипты страниц
 
-1. **Connection Pooling**: Use SQLAlchemy's connection pooling via `create_engine()` - configure `pool_size`, `max_overflow`, and `pool_pre_ping=True` for production to prevent stale connections
-2. **Parameterized Queries**: Always use parameterized queries (SQLAlchemy handles this automatically) to prevent SQL injection
-3. **Transaction Management**: Wrap multi-statement operations in explicit transactions; commit ASAP
-4. **Connection Timeout**: Set `connect_args={"timeout": 10}` in production to prevent hanging on failed connections
-5. **Bulk Operations**: Use `executemany()` or SQLAlchemy's bulk insert patterns for large datasets (e.g., mass notifications, grades)
-6. **Index Strategy**: Add indexes on frequently queried columns (`email`, `created_at`, foreign keys); PostgreSQL optimizes better than SQLite with proper indexing
-7. **JSONB Usage**: Store complex nested data (like AI message metadata or notification payloads) in JSONB columns for flexible querying
-8. **Connection Health**: Use `pool_pre_ping=True` to validate connections before use; monitor connection pool size to avoid exhaustion
-9. **Timezone Handling**: Always use `DateTime(timezone=True)` with UTC internally; convert to local time only at display layer
-10. **Query Optimization**: Use `.options(selectinload())` for relationships to prevent N+1 queries; leverage PostgreSQL's advanced query features (CTEs, window functions)
-
-### Frontend
-
-1. **Error Handling**: All API calls must handle 401 (auth) and generic errors
-2. **User Experience**: Show user-friendly error messages, never raw exceptions
-3. **Loading States**: Disable buttons during async operations
-4. **Localization**: Use Russian language for all UI text (`ru-RU` locale)
-
-### Security
-
-1. **Passwords**: Always hash with bcrypt before storing
-2. **Email Verification**: Require email verification before account activation
-3. **Token Expiry**: Implement token refresh logic
-4. **Input Sanitization**: Escape all user inputs to prevent XSS
+- Скрипт портала (`student/js/*.js`, `teacher/js/*.js`) подключается в конце
+  `<body>` и стартует из `init()` или `DOMContentLoaded`.
+- Экранируй всё, что пришло от пользователя: `escapeHtml()` есть в
+  `tasks.js`, `progress.js`, `settings.js`, `ai.js` — переиспользуй паттерн,
+  не вставляйinnerHTML сырыми данными.
+- Даты форматируй через `new Date(iso).toLocaleDateString('ru-RU', ...)`;
+  на бэке всегда UTC.
 
 ---
+
+## Известные проблемы
+
+Не исправлены. Не докладывай о них как о новых, но и не считай их нормой.
+
+| # | Проблема | Файл |
+|---|---|---|
+| 1 | `const API = 'http://localhost:8000'` ломал вход из браузера | ✅ `window.location.origin` |
+| 2 | Редирект на несуществующий `/login.html` | ✅ `/login` |
+| 3 | Каталога `frontend/parent/` нет — 4 маршрута отдают 404 | `frontend/parent/` |
+| 4 | `student/profile.html` отсутствует — 404 | `frontend/student/` |
+| 5 | `DB_PATH=data/app.db` — мёртвая переменная, остатки SQLite удалены | ✅ `.env.example` |
+| 6 | `frontend/student/js/auth-guard.js` — неиспользуемая копия | `frontend/student/js/auth-guard.js` |
+| 7 | Chart.js и Google Fonts с CDN, Chart.js без версии | `frontend/student/dashboard.html` |
+| 8 | Логика топбара (уведомления/streak/аватар) продублирована в HTML | `frontend/**/*.html` |
+| 9 | `admin/settings.html` подключает `student/js/settings.js` | `frontend/admin/settings.html` |
+| 10 | `pydantic-settings` и `PyYAML` установлены, но не используются | `backend/requirements.txt` |
+| 11 | Фреймворка миграций нет: `create_all()` не меняет созданные таблицы | `backend/app/database.py` |
+| 12 | Планировщик рассчитан на один процесс uvicorn | `backend/app/routers/notifications.py` |
+| 13 | Свой SMTP невозможен: домен на `no-ip.com`, нет контроля над TXT- и PTR-записями | `docker-compose.yml`, DNS |
+
+Про 12: `docker-compose` запускает один `uvicorn`, поэтому джобы не
+дублируются. При нескольких воркерах каждый поднимет свой APScheduler —
+сначала поставь `ENABLE_SCHEDULER=false` лишним, либо вынеси джобы в
+отдельный процесс.
 
 ## Testing Guidelines
 
-- **Backend**: Use pytest with FastAPI test client (`test_client(app)`)
-- **Frontend**: Manual testing with browser DevTools for HTML/JS
-- **Integration**: Test Docker containers together via docker-compose
+Тесты — **pytest против настоящего PostgreSQL**. SQLite намеренно не
+поддерживается: под ним не проверяются нативные enum-типы, реальное
+поведение FK и типы агрегатов, поэтому тесты могли бы проходить здесь и
+падать в проде.
+
+### Запуск
+
+```powershell
+# 1. Поднять БД из композа
+docker compose up -d db
+
+# 2. Создать отдельную базу под тесты (схему тесты пересоздают сами)
+docker exec vector_db psql -U vector -d vectordb `
+    -c "CREATE DATABASE vectordb_test;"
+
+# 3. Зависимости
+pip install -r requirements-dev.txt
+
+# 4. Прогон
+$env:TEST_DATABASE_URL="postgresql://vector:<pw>@localhost:5432/vectordb_test"
+pytest
+```
+
+Без `TEST_DATABASE_URL` conftest **падает сразу** — тихо подменять БД нельзя.
+
+### Что есть
+
+| Файл | Что покрывает |
+|---|---|
+| `tests/conftest.py` | Фикстуры: `engine` (session), `db` (откат транзакции), `client` (TestClient), `real_db` (реальные коммиты), фабрики |
+| `test_ai_text.py` | Чистые хелперы ИИ, матчинг задач |
+| `test_tasks.py` | Владение, запрет правки заданий учителя, каскады |
+| `test_assignments.py` | Раскладка по ученикам, вычисляемые поля, каскадное удаление |
+| `test_grades.py` | Авторизация, массовая выставка, сводки |
+| `test_schedule.py` | Валидация `HH:MM`, границы `weekday` |
+| `test_classes_admin.py` | Классы, дашборд учителя, админ-панель |
+| `test_users.py` | HTTP-флоу регистрация→подтверждение→вход, auth-зависимости |
+| `test_db_constraints.py` | Ограничения БД реально отвергают плохие данные |
+
+### Правила
+
+- Тестируй функции роутов напрямую (`router.some_fn(body, current_user, db)`) —
+  так не нужен HTTP-слой. `TestClient` нужен там, где важен жизненный цикл
+  (lifespan, отправка писем, 404-страницы).
+- Фикстура `db` откатывает транзакцию. Если тесту нужен `client` (он работает
+  в своей сессии) — создавай данные через `real_db`, иначе запрос их не увидит.
+- Email в схемах должен быть на нормальном домене: `email-validator`
+  отклоняет зарезервированные TLD вроде `.local`.
+- Домен `@test.local` годится для сырых строк, но не для `EmailStr`.
 
 ---
 
 ## Development Workflow
 
-1. **Clone & Setup**: `git clone`, copy `env.example` to `.env`, install deps
-2. **Backend**: `uvicorn app.main:app --reload`
-3. **Frontend**: Start static server or serve from backend directly
-4. **Docker**: `docker-compose up --build` for containerized development
+```bash
+# Локально
+cd backend
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Ollama для ИИ
+ollama serve && ollama pull qwen2.5:7b
+
+# Docker
+docker compose up -d --build
+docker exec vector_ollama ollama pull qwen2.5:7b
+```
+
+Для навигации по связям используй граф знаний: `graphify query "<вопрос>"`
+(см. `graphify-out/`).
 
 ---
 
 ## Style Guide
 
-### Python (Backend)
-- PEP 8 formatting
-- 79 character line limit
-- Type hints for all functions and parameters
-- Docstrings for public functions/classes
-- Import sorting with `isort`
+### Python
 
-### JavaScript (Frontend)
-- ES6+ syntax with arrow functions
-- Functional programming patterns where appropriate
-- Consistent naming conventions (`camelCase` for variables/functions)
-- No external libraries beyond vanilla JS
+- PEP 8, линия 79 символов
+- Type hints на всех параметрах и возвращаемых значениях
+- Docstrings на публичных функциях и классах
+- Сортировка импортов через isort
+
+### JavaScript
+
+- ES6+, стрелочные функции, `camelCase`
+- Только vanilla JS — **кроме** Chart.js и Google Fonts, которые приходят с CDN
+- Никаких сборщиков, бандлеров и npm-зависимостей
 
 ---
 
-## File Naming Conventions
+## File Naming
 
-- Backend: `snake_case` for Python files (`main.py`, `database.py`)
-- Frontend: `kebab-case` for folders (`student/`, `teacher/`), `*.js` and `*.html`
-- Routers: Organized by domain (users, admin, classes, etc.)
+- Backend: `snake_case` (`main.py`, `database.py`)
+- Frontend: страницы `kebab-case.html`, скрипты и стили — `camelCase.js` /
+  `kebab-case.css` (в проекте смешано: `api.js`, `auth-guard.js`,
+  `mobile-nav.js`, но `reset-password.css`)
+- Роутеры — по домену: `users`, `admin`, `classes`, `assignments`, `tasks`,
+  `grades`, `schedule`, `ai`, `notifications`, `yandex_auth`
 
 ---
 
 ## Environment Variables (.env.example)
 
-```
-ADMIN_EMAIL=admin@vkcollege.ru
-ADMIN_PASSWORD=secure_password_here
+```env
+# PostgreSQL. DATABASE_URL перекрывает все четыре значения ниже.
+# DATABASE_URL=postgresql://user:pw@localhost:5432/vectordb
+DB_USER=user
+DB_PASS=your-database-password
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=vectordb
+
+ADMIN_EMAIL=admin@vector.local
+ADMIN_PASSWORD=changeme
 ADMIN_FIRST_NAME=Admin
-ADMIN_LAST_NAME=User
+ADMIN_LAST_NAME=Vector
 
-DATABASE_PATH=/home/user/.vector/vk.db
+SECRET_KEY=your-secret-key-here
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=10080
 
-# CORS origins as needed for your deployment
+SMTP_HOST=smtp.yandex.ru
+SMTP_PORT=587
+SMTP_USER=your@yandex.ru
+SMTP_PASSWORD=your-app-password
+EMAIL_FROM=your@yandex.ru
+
+OLLAMA_URL=http://ollama:11434
+OLLAMA_MODEL=qwen2.5:7b
+
+APP_URL=https://vector.myftp.org
+DEBUG=false
+
+# Выключает фоновые джобы (тесты, одноразовые команды)
+ENABLE_SCHEDULER=true
+
+YANDEX_CLIENT_ID=your-yandex-client-id
+YANDEX_CLIENT_SECRET=your-yandex-client-secret
+YANDEX_LOGIN_CALLBACK=https://vector.myftp.org/api/auth/yandex/callback
+YANDEX_LINK_CALLBACK=https://vector.myftp.org/api/auth/yandex/confirm-link
 ```
+
+Переменной `DB_PATH` больше нет: код её никогда не читал, это остаток от SQLite.
+
+Порты SMTP: `465` включает неявный TLS и включает `SMTP_SSL`; для `587`
+используется `SMTP` + `STARTTLS`. Это решается автоматически по `SMTP_PORT`.
 
 ---
 
-**Last Updated**: 2026-10-17
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+**Last Updated**: 2026-10-18 (рефакторинг роутеров: `app/config.py`,
+`app/ai_text.py`, ограничения БД, pytest против PostgreSQL)

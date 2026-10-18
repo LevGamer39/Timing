@@ -8,9 +8,9 @@
 
     let myChart = null;
 
-    // ─── UTILS ───────────────────────────────────────────────────────────────
+    // ─── УТИЛИТЫ ───────────────────────────────────────────────────────────────
 
-    // Strip markdown formatting: **bold**, *italic*, ## headers, bullet dashes
+    // Убираем markdown-разметку: **жирный**, *курсив*, ## заголовки, маркеры
     function stripMarkdown(text) {
         return text
             .replace(/#{1,6}\s*/g, '')          // headers
@@ -46,7 +46,7 @@
             .replace(/'/g, '&#39;');
     }
 
-    // ─── INIT ─────────────────────────────────────────────────────────────────
+    // ─── ЗАПУСК ─────────────────────────────────────────────────────────────────
 
     async function init() {
         try {
@@ -61,7 +61,7 @@
             if (user.role !== 'student') { window.location.replace(ROLE_ROUTES[user.role] || '/login'); return; }
             const tasks = await taskRes.json();
 
-            // Avatar initials
+            // Инициалы для аватара
             const initials = (user.first_name?.[0] || '') + (user.last_name?.[0] || '');
             const avatarEl = document.querySelector('.avatar');
             if (avatarEl) {
@@ -71,7 +71,7 @@
             }
             set('userName', `${user.first_name} ${user.last_name}!`);
 
-            // Local date comparison — avoids UTC vs local mismatch
+            // Сравнение по локальной дате — иначе UTC и локальное время разойдутся
             const todayStr = toLocalDateStr(new Date());
 
             const todayTasks = tasks.filter(t => t.deadline && toLocalDateStr(new Date(t.deadline)) === todayStr);
@@ -92,7 +92,7 @@
         }
     }
 
-    // ─── PROGRESS RING ───────────────────────────────────────────────────────
+    // ─── КОЛЬЦО ПРОГРЕССА ───────────────────────────────────────────────────────
 
     function updateProgressUI(p, d, t) {
         const ring = document.getElementById('progressRing');
@@ -106,7 +106,7 @@
             const offset = circ - (p / 100) * circ;
             ring.style.strokeDashoffset = offset;
 
-            // Color based on percentage
+            // Цвет по проценту
             function getColor(percent) {
                 if (percent <= 25) return '#DB0505';       // red
                 if (percent <= 50) return '#E2A804';       // orange
@@ -119,7 +119,7 @@
             ring.style.filter = `drop-shadow(0 0 8px ${color})`;
         }
 
-        // Position progress dot with responsive sizing
+        // Позиция точки прогресса с учётом размера
         if (dot && wrap) {
             function positionDot() {
                 const size = wrap.offsetWidth;
@@ -145,7 +145,7 @@
             }
 
             positionDot();
-            // Reposition on window resize
+            // Пересчёт при изменении размера окна
             if (!window._progressResizeListener) {
                 window._progressResizeListener = true;
                 window.addEventListener('resize', positionDot);
@@ -162,7 +162,7 @@
         set('dynamicSublabel', `${d} из ${t} выполнено`);
     }
 
-    // ─── TASKS LIST ──────────────────────────────────────────────────────────
+    // ─── СПИСОК ЗАДАЧ ──────────────────────────────────────────────────────────
 
     function renderTasks(activeTasks) {
         const container = document.getElementById('taskList');
@@ -208,13 +208,13 @@
         } catch (e) { console.error(e); }
     }
 
-    // ─── UTILS ───────────────────────────────────────────────────────────────
+    // ─── УТИЛИТЫ ───────────────────────────────────────────────────────────────
 
     function toLocalDateStr(d) {
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
 
-    // ─── CHART (task completion % per day of current week) ───────────────────
+    // ─── ГРАФИК (процент закрытых задач по дням недели) ───────────────────
 
     function updateChart(tasks) {
         const canvas = document.getElementById('perfCanvas');
@@ -230,7 +230,7 @@
         const DAY_LABELS = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
         const todayIdx = (dow === 0) ? 6 : dow - 1; // 0=Mon…6=Sun
 
-        // For each day count tasks whose deadline falls on that day
+        // Для каждого дня считаем задачи, чей дедлайн попадает на него
         const rawValues = DAY_LABELS.map((_, i) => {
             const day = new Date(monday);
             day.setDate(monday.getDate() + i);
@@ -241,10 +241,10 @@
             return Math.round((dDone / dayTasks.length) * 100);
         });
 
-        // For Chart.js we need numbers; use 0 where null but style differently
+        // Chart.js нужны числа; вместо null подставляем 0, но стилизуем иначе
         const renderValues = rawValues.map(v => v === null ? 0 : v);
 
-        // Style: highlight today's point in purple, future/empty = dim
+        // Стиль: сегодняшняя точка фиолетовая, будущие и пустые приглушены
         const pointRadii = renderValues.map((_, i) => i === todayIdx ? 7 : (rawValues[i] !== null ? 4 : 2));
         const pointColors = renderValues.map((_, i) => i === todayIdx ? '#8B79FF' : (rawValues[i] !== null ? '#ffffff' : 'rgba(255,255,255,0.2)'));
 
@@ -303,7 +303,7 @@
         });
     }
 
-    // ─── AI SUMMARY ──────────────────────────────────────────────────────────
+    // ─── ИИ-СВОДКА ──────────────────────────────────────────────────────────
 
     // Основная функция для работы с ИИ
     async function updateAISummary(tasks, name) {
@@ -349,7 +349,7 @@
         }
     }
 
-    // ─── NOTIFICATIONS ───────────────────────────────────────────────────────
+    // ─── УВЕДОМЛЕНИЯ ───────────────────────────────────────────────────────
 
     async function loadNotifications() {
         try {
@@ -383,7 +383,7 @@
 
         list.innerHTML = notifications.map(n => {
             const timeStr = formatNotifTime(n.created_at);
-            // Truncate title to 32 chars
+            // Обрезаем заголовок до 32 символов
             const title = n.title.length > 32 ? n.title.slice(0, 32) + '…' : n.title;
             const unreadDot = !n.is_read ? '<span class="notif-unread-dot"></span>' : '';
             return `
@@ -402,7 +402,7 @@
             el.classList.remove('notif-item--unread');
             const dot = el.querySelector('.notif-unread-dot');
             if (dot) dot.remove();
-            // Refresh badge count
+            // Обновляем счётчик бейджа
             loadNotifications();
         } catch (_) { }
     }
@@ -416,12 +416,12 @@
         if (!isOpen) loadNotifications();
     }
 
-    // ─── BOOT ─────────────────────────────────────────────────────────────────
+    // ─── ИНИЦИАЛИЗАЦИЯ ─────────────────────────────────────────────────────────────────
 
     document.addEventListener('DOMContentLoaded', () => {
         init();
 
-        // Close notifications modal on outside click
+        // Закрываем окно уведомлений по клику вне него
         document.addEventListener('click', e => {
             const modal = document.getElementById('notifModal');
             const wrap = document.querySelector('.notif-wrap');

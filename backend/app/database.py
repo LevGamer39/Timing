@@ -1,62 +1,83 @@
-import os
-from dotenv import load_dotenv
+"""Движок БД, фабрика сессий и первичное наполнение."""
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app import config
 from app.models import Base, User, UserRole
 
-load_dotenv()
+def _engine_kwargs() -> dict:
+    """Параметры движка: PostgreSQL получает пул и таймауты.
 
-DB_USER = os.environ.get("DB_USER", "user")
-DB_PASS = os.environ.get("DB_PASS")
-DB_HOST = os.environ.get("DB_HOST", "localhost")
-DB_PORT = os.environ.get("DB_PORT", "5432")
-DB_NAME = os.environ.get("DB_NAME", "vectordb")
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    Остальные диалекты (тесты) остаются без них.
+    """
+    url = config.build_database_url()
+    if url.startswith("sqlite"):
+        return {}
+    return {"pool_pre_ping": True, "connect_args": {"connect_timeout": 10}}
 
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@vector.local")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
-ADMIN_FIRST_NAME = os.environ.get("ADMIN_FIRST_NAME", "Admin")
-ADMIN_LAST_NAME = os.environ.get("ADMIN_LAST_NAME", "Vector")
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(config.build_database_url(), **_engine_kwargs())
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def create_tables():
-    Base.metadata.create_all(bind=engine)
+def get_db():
+    """Зависимость FastAPI: сессия в рамках одного запроса.
+
+    Откатывает транзакцию при ошибке явно: иначе роутер, упавший уже
+    после ``db.add()``, оставит незафиксированные изменения, которые
+    следующий flush в той же сессии может молча закоммитить.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 def _ensure_admin_user() -> None:
-    from app.routers.users import hash_password
+    """Гарантирует, что есть ровно одна рабочая учётная запись админа.
 
+    Раньше админ создавался с ``is_active=False`` / ``is_verified=False``,
+    а ветка «починки» присваивала ``False`` вместо ``True``, поэтому только
+    что развёрнутый админ не мог войти в систему.
+    """
     db = SessionLocal()
     try:
-        admin = db.query(User).filter(User.role == UserRole.admin).first()
+        admin = (
+            db.query(User)
+            .filter(User.role == UserRole.admin)
+            .order_by(User.id.asc())
+            .first()
+        )
         if admin:
             changed = False
+            # Выключенный админ не должен остаться заперт вне панели.
             if not admin.is_active:
-                admin.is_active = False
-                changed = False
+                admin.is_active = True
+                changed = True
             if not admin.is_verified:
-                admin.is_verified = False
-                changed = False
+                admin.is_verified = True
+                changed = True
             if changed:
                 db.commit()
+                db.refresh(admin)
             return
 
         db.add(
             User(
-                email=ADMIN_EMAIL,
-                password_hash=hash_password(ADMIN_PASSWORD),
-                first_name=ADMIN_FIRST_NAME,
-                last_name=ADMIN_LAST_NAME,
+                email=config.ADMIN_EMAIL,
+                password_hash=_bootstrap_password_hash(),
+                first_name=config.ADMIN_FIRST_NAME,
+                last_name=config.ADMIN_LAST_NAME,
                 role=UserRole.admin,
-                is_active=False,
-                is_verified=False,
-                notify_email=False,
-                notify_browser=False,
+                is_active=True,
+                is_verified=True,
+                notify_email=True,
+                notify_browser=True,
                 notify_telegram=False,
                 notify_digest_time="08:00",
             )
@@ -66,14 +87,26 @@ def _ensure_admin_user() -> None:
         db.close()
 
 
-def create_tables():
+def _bootstrap_password_hash() -> str:
+    """Хеш пароля админа, создаваемого при развёртывании.
+
+    Импорт ленивый: `app.routers.users` импортирует `app.database`,
+    поэтому импорт на уровне модуля дал бы циклическую зависимость.
+    """
+    from app.routers.users import hash_password
+
+    if not config.ADMIN_PASSWORD:
+        raise RuntimeError(
+            "ADMIN_PASSWORD is not set - cannot bootstrap the admin account"
+        )
+    return hash_password(config.ADMIN_PASSWORD)
+
+
+def create_tables() -> None:
+    """Создаёт отсутствующие таблицы и гарантирует наличие админа.
+
+    ``create_all`` не меняет существующие таблицы и колонки: правки схемы
+    по-прежнему требуют ручного DDL — миграций в проекте нет.
+    """
     Base.metadata.create_all(bind=engine)
     _ensure_admin_user()
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
