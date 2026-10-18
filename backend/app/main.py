@@ -39,7 +39,7 @@ CORS_ORIGINS = [
     "http://localhost:8080",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:8000",
-    "http://127.0.0.1:8080",s
+    "http://127.0.0.1:8080",
 ]
 if config.APP_URL:
     CORS_ORIGINS.append(config.APP_URL.rstrip("/"))
