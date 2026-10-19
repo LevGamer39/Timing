@@ -180,7 +180,6 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-config.py
 *.db
 pg_data
 .vs
