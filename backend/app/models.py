@@ -54,6 +54,7 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     yandex_id = Column(String(100), unique=True, nullable=True, index=True)
+    max_user_id = Column(String(100), unique=True, nullable=True, index=True)  # ID пользователя в MAX
     # Настройки уведомлений
     notify_email = Column(Boolean, default=True)
     notify_browser = Column(Boolean, default=True)
@@ -292,7 +293,8 @@ class PasswordResetToken(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    token = Column(String(64), unique=True, nullable=False, index=True)
+    token = Column(String(64), unique=True, nullable=False, index=True)  # обратная совместимость
+    token_hash = Column(String(128), unique=True, nullable=True, index=True)  # хеш токена (безопасное хранение)
     is_used = Column(Boolean, default=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -304,7 +306,8 @@ class EmailChangeToken(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     new_email = Column(String(255), nullable=False)
-    token = Column(String(64), unique=True, nullable=False, index=True)
+    token = Column(String(64), unique=True, nullable=False, index=True)  # обратная совместимость
+    token_hash = Column(String(128), unique=True, nullable=True, index=True)  # хеш токена (безопасное хранение)
     is_used = Column(Boolean, default=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -320,3 +323,17 @@ class AIMessage(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="ai_messages")
+
+
+class TokenBlacklist(Base):
+    """Список отозванных JWT (logout, смена пароля, скомпрометированный токен)."""
+
+    __tablename__ = "token_blacklist"
+
+    id = Column(Integer, primary_key=True)
+    jti = Column(String(64), unique=True, nullable=False, index=True)  # ID токена
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")

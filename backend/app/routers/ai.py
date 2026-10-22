@@ -38,7 +38,6 @@ from app.models import (
     UserRole,
 )
 from app.routers.notifications import create_notification
-from app.routers.users import require_role as _require_role  # noqa: F401
 
 OLLAMA_URL = config.OLLAMA_URL
 OLLAMA_MODEL = config.OLLAMA_MODEL

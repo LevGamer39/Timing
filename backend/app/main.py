@@ -2,7 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import config
@@ -217,6 +217,12 @@ def health():
 
 @app.exception_handler(404)
 async def page_not_found(request: Request, exc: Exception):
+    # API всегда отвечает JSON: бот и SPA не умеют разбирать HTML-страницу
+    # ошибки, а глобальный 404-хендлер раньше подменял detail на HTML.
+    if request.url.path.startswith("/api/"):
+        detail = getattr(exc, "detail", "Not found")
+        return JSONResponse(status_code=404, content={"detail": detail})
+
     path_404 = os.path.join(frontend_path, "404.html")
     if os.path.exists(path_404):
         return FileResponse(path_404, status_code=404)

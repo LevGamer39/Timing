@@ -1,12 +1,16 @@
 """Регистрация, аутентификация, профиль и привязка аккаунтов."""
+import hashlib
+import hmac
+import logging
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from random import randint
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from jose import jwt
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
@@ -21,18 +25,72 @@ from app.models import (
     ParentLinkToken,
     ParentStudent,
     PasswordResetToken,
+    TokenBlacklist,
     User,
     UserRole,
 )
 
+logger = logging.getLogger("vector.users")
+
 router = APIRouter(prefix="/api/users", tags=["users"])
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/login")
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# ---------------------------------------------------------------------------
+# Простой rate limiter (in-memory, для одного процесса uvicorn)
+# ---------------------------------------------------------------------------
+import time as _time
+
+_RATE_LIMIT_WINDOW = 60  # секунд
+_RATE_LIMIT_MAX_ATTEMPTS = 10
+_rate_limit_store: dict[str, list[float]] = {}
+
+
+def _is_rate_limited(key: str) -> bool:
+    now = _time.time()
+    window_start = now - _RATE_LIMIT_WINDOW
+    attempts = _rate_limit_store.get(key, [])
+    # Удаляем старые записи
+    _rate_limit_store[key] = [t for t in attempts if t > window_start]
+    return len(_rate_limit_store[key]) >= _RATE_LIMIT_MAX_ATTEMPTS
+
+
+def _record_attempt(key: str) -> None:
+    now = _time.time()
+    _rate_limit_store.setdefault(key, []).append(now)
+
 
 MIN_PASSWORD_LENGTH = 8
 EMAIL_VERIFICATION_TTL = timedelta(minutes=15)
 RESET_TOKEN_TTL = timedelta(hours=1)
 PARENT_LINK_TTL = timedelta(hours=24)
+
+
+def _hash_token(token: str) -> str:
+    """Хеширует однократный токен для безопасного хранения в БД."""
+    import hashlib
+
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _find_token_by_hash(
+    db: Session, model: Any, token: str, user_id: int | None = None
+) -> Any | None:
+    """Ищет токен по хешу (с fallback на открытый токен для обратной совместимости)."""
+    token_hash = _hash_token(token)
+    query = db.query(model).filter(model.token_hash == token_hash)
+    if user_id is not None:
+        query = query.filter(model.user_id == user_id)
+    record = query.filter(model.is_used.is_(False)).first()
+    if record:
+        return record
+    # Fallback: поиск по открытому токену (для баз, созданных до внедрения хеширования)
+    query = db.query(model).filter(model.token == token)
+    if user_id is not None:
+        query = query.filter(model.user_id == user_id)
+    return query.filter(model.is_used.is_(False)).first()
 
 _HHMM_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
@@ -188,19 +246,39 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(user_id: int) -> str:
-    """Выпускает JWT.
+def create_access_token(user_id: int, role: UserRole | None = None) -> str:
+    """Выпускает JWT сclaims: sub, exp, jti, role.
 
     ``ACCESS_TOKEN_EXPIRE_MINUTES`` раньше читался через ``os.environ.get``
     и уходил в ``timedelta`` строкой, поэтому любой вход падал с
     ``TypeError`` (HTTP 500). Теперь значение парсится в int в
     ``app.config``.
     """
+    import uuid
+
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES
     )
-    payload = {"sub": str(user_id), "exp": expire}
+    payload = {
+        "sub": str(user_id),
+        "exp": expire,
+        "jti": str(uuid.uuid4()),
+    }
+    if role is not None:
+        payload["role"] = role.value
     return jwt.encode(payload, config.SECRET_KEY, algorithm=config.ALGORITHM)
+
+
+def revoke_token(jti: str, user_id: int, expires_at: datetime, db: Session) -> None:
+    """Добавляет JWT в черный список (отзыв токена)."""
+    db.add(
+        TokenBlacklist(
+            jti=jti,
+            user_id=user_id,
+            expires_at=expires_at,
+        )
+    )
+    db.commit()
 
 
 def _normalize_profile_defaults(user: User, db: Session | None = None) -> User:
@@ -286,6 +364,10 @@ def _build_email_change_html(confirm_link: str, new_email: str) -> str:
 
 @router.post("/register", status_code=201)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    key = f"register:{body.email.lower()}"
+    if _is_rate_limited(key):
+        raise HTTPException(429, "Too many registration attempts. Try later.")
+    _record_attempt(key)
     email = body.email.lower()
 
     existing = db.query(User).filter(User.email == email).first()
@@ -430,6 +512,10 @@ def login(
     form: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
+    key = f"login:{form.username.lower()}"
+    if _is_rate_limited(key):
+        raise HTTPException(429, "Too many login attempts. Try later.")
+    _record_attempt(key)
     user = db.query(User).filter(User.email == form.username.lower()).first()
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -438,7 +524,7 @@ def login(
 
     _normalize_profile_defaults(user, db)
     return LoginResponse(
-        access_token=create_access_token(user.id),
+        access_token=create_access_token(user.id, role=user.role),
         role=user.role,
         first_name=user.first_name,
         last_name=user.last_name,
@@ -538,6 +624,7 @@ def request_email_change(
             user_id=current_user.id,
             new_email=new_email,
             token=token,
+            token_hash=_hash_token(token),
             expires_at=datetime.now(timezone.utc) + RESET_TOKEN_TTL,
         )
     )
@@ -556,15 +643,11 @@ def request_email_change(
 
 @router.post("/me/change-email/confirm")
 def confirm_email_change(token: str, db: Session = Depends(get_db)):
-    record = (
-        db.query(EmailChangeToken)
-        .filter(
-            EmailChangeToken.token == token,
-            EmailChangeToken.is_used.is_(False),
-            EmailChangeToken.expires_at > datetime.now(timezone.utc),
-        )
-        .first()
+    record = _find_token_by_hash(
+        db, EmailChangeToken, token, user_id=None
     )
+    if not record or record.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(400, "Недействительная или просроченная ссылка")
     if not record:
         raise HTTPException(400, "Недействительная или просроченная ссылка")
 
@@ -685,6 +768,187 @@ def get_children(
 
 
 # ---------------------------------------------------------------------------
+# MAX Bridge auth — привязка аккаунта MAX к внутреннему профилю
+# ---------------------------------------------------------------------------
+
+
+class MaxLinkRequest(BaseModel):
+    max_user_id_hashed: str
+
+
+class MaxLinkResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    role: UserRole
+    first_name: str
+    last_name: str
+
+
+def _verify_bot_signature(hashed_user_id: str, signature: str | None) -> None:
+    """Проверяет, что /auth/max-link вызвал именно MAX-бот.
+
+    Хеш MAX user_id — это фактически credential: по нему выдаётся JWT.
+    Поэтому одного хеша недостаточно, запрос должен быть подписан
+    HMAC-SHA256 на общем MAX_BOT_TOKEN.
+    """
+
+    secret = config.MAX_BOT_TOKEN
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="MAX bot integration is not configured",
+        )
+    expected = hmac.new(
+        secret.encode(),
+        hashed_user_id.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not signature or not hmac.compare_digest(signature, expected):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid bot signature",
+        )
+
+
+@router.post("/auth/max-link", response_model=MaxLinkResponse)
+def max_link(
+    body: MaxLinkRequest,
+    x_bot_signature: str | None = Header(default=None, alias="X-Bot-Signature"),
+    db: Session = Depends(get_db),
+):
+    """
+    Привязывает MAX user_id к существующему аккаунту и выдаёт JWT.
+
+    Используется ботом MAX: пользователь уже аутентифицирован в MAX,
+    бот передаёт хеш max_user_id (SHA-256 с солью), бэкенд ищет
+    пользователя с таким max_user_id в таблице users.
+
+    В упрощённом варианте (первый вход через бота) бот передаёт хеш,
+    бэкенд ищет пользователя по max_user_id (хранит хеш).
+    """
+    _verify_bot_signature(body.max_user_id_hashed, x_bot_signature)
+
+    user = (
+        db.query(User)
+        .filter(User.max_user_id == body.max_user_id_hashed)
+        .first()
+    )
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="MAX user not linked. Please log in via web first.",
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is not active")
+
+    _normalize_profile_defaults(user, db)
+    return MaxLinkResponse(
+        access_token=create_access_token(user.id, role=user.role),
+        role=user.role,
+        first_name=user.first_name,
+        last_name=user.last_name,
+    )
+
+
+@router.post("/auth/link-max", status_code=204)
+def link_max_user(
+    max_user_id_hashed: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Привязать текущий аккаунт к MAX user_id (хеш, вызов после логина через веб)."""
+    existing = (
+        db.query(User).filter(User.max_user_id == max_user_id_hashed).first()
+    )
+    if existing and existing.id != current_user.id:
+        raise HTTPException(400, "MAX user already linked to another account")
+    current_user.max_user_id = max_user_id_hashed
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Refresh — обмен старого JWT на новый (и отзыв старого)
+# ---------------------------------------------------------------------------
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    role: UserRole
+    first_name: str
+    last_name: str
+
+
+@router.post("/auth/refresh", response_model=RefreshResponse)
+def refresh(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
+) -> RefreshResponse:
+    """Обменивает текущий JWT на новый. Старый добавляется в черный список."""
+    from jose import jwt as _jwt
+
+    try:
+        payload = _jwt.decode(
+            token, config.SECRET_KEY, algorithms=[config.ALGORITHM]
+        )
+        jti = payload.get("jti")
+        exp = payload.get("exp")
+        if jti and exp:
+            revoke_token(
+                jti=jti,
+                user_id=current_user.id,
+                expires_at=datetime.fromtimestamp(exp, tz=timezone.utc),
+                db=db,
+            )
+    except JWTError:
+        pass
+
+    return RefreshResponse(
+        access_token=create_access_token(current_user.id, role=current_user.role),
+        role=current_user.role,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Logout — отзыв текущего JWT
+# ---------------------------------------------------------------------------
+
+
+class LogoutResponse(BaseModel):
+    message: str
+
+
+@router.post("/logout", response_model=LogoutResponse)
+def logout(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    token: str = Depends(oauth2_scheme),
+) -> LogoutResponse:
+    """Добавляет текущий JWT в черный список."""
+    from jose import jwt as _jwt
+
+    try:
+        payload = _jwt.decode(
+            token, config.SECRET_KEY, algorithms=[config.ALGORITHM]
+        )
+        jti = payload.get("jti")
+        exp = payload.get("exp")
+        if jti and exp:
+            revoke_token(
+                jti=jti,
+                user_id=current_user.id,
+                expires_at=datetime.fromtimestamp(exp, tz=timezone.utc),
+                db=db,
+            )
+    except JWTError:
+        pass  # токен уже недействителен — считаем, что отозван
+    return LogoutResponse(message="Logged out")
+
+
+# ---------------------------------------------------------------------------
 # Сброс пароля
 # ---------------------------------------------------------------------------
 
@@ -712,6 +976,7 @@ def request_password_reset(
         PasswordResetToken(
             user_id=user.id,
             token=token,
+            token_hash=_hash_token(token),
             expires_at=datetime.now(timezone.utc) + RESET_TOKEN_TTL,
         )
     )
@@ -723,7 +988,7 @@ def request_password_reset(
     try:
         send_password_reset_email(user.email, reset_link)
     except Exception as exc:  # noqa: BLE001
-        print(f"[MAIL] Failed to send password reset email: {exc}")
+        logger.warning("Failed to send password reset email: %s", exc)
 
     return {"message": _RESET_MESSAGE}
 
@@ -733,16 +998,10 @@ def confirm_password_reset(
     body: PasswordResetConfirm,
     db: Session = Depends(get_db),
 ):
-    record = (
-        db.query(PasswordResetToken)
-        .filter(
-            PasswordResetToken.token == body.token,
-            PasswordResetToken.is_used.is_(False),
-            PasswordResetToken.expires_at > datetime.now(timezone.utc),
-        )
-        .first()
+    record = _find_token_by_hash(
+        db, PasswordResetToken, body.token, user_id=None
     )
-    if not record:
+    if not record or record.expires_at <= datetime.now(timezone.utc):
         raise HTTPException(400, "Invalid or expired reset link")
 
     user = db.query(User).filter(User.id == record.user_id).first()

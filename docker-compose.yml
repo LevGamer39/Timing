@@ -105,6 +105,25 @@ services:
     networks:
       - vector_net
 
+  bot:
+    build:
+      context: ./bot
+      dockerfile: dockerfile
+    container_name: vector_bot
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - ollama
+    env_file:
+      - .env
+    environment:
+      - MAX_BOT_URL=http://backend:8000
+      - OLLAMA_URL=http://ollama:11434
+    volumes:
+      - ./bot/data:/app/data
+    networks:
+      - vector_net
+
   db:
     image: postgres:latest
     command: ["postgres", "-c", "log_statement=all", "-c", "log_destination=stderr"]

@@ -1,9 +1,16 @@
-"""Движок БД, фабрика сессий и первичное наполнение."""
+"""Движок БД, фабрика сессий и первичное наполнение.
+
+Движок и фабрика сессий создаются лениво — при первом обращении, а не при
+импорте модуля. Это позволяет импортировать `app.database` даже когда
+база данных ещё не запущена (например, при сборке тестов или при старте
+бота, который пока не подключён к БД).
+"""
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app import config
 from app.models import Base, User, UserRole
+
 
 def _engine_kwargs() -> dict:
     """Параметры движка: PostgreSQL получает пул и таймауты.
@@ -16,9 +23,39 @@ def _engine_kwargs() -> dict:
     return {"pool_pre_ping": True, "connect_args": {"connect_timeout": 10}}
 
 
-engine = create_engine(config.build_database_url(), **_engine_kwargs())
+class _LazySessionMaker:
+    """Ленивая фабрика сессий SQLAlchemy.
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Движок создаётся при первом вызове ``__call__`` или ``get_engine()``.
+    """
+
+    def __init__(self) -> None:
+        self._engine = None
+        self._sessionmaker = None
+
+    def _ensure(self):
+        if self._engine is None:
+            self._engine = create_engine(
+                config.build_database_url(), **_engine_kwargs()
+            )
+            self._sessionmaker = sessionmaker(
+                autocommit=False, autoflush=False, bind=self._engine
+            )
+        return self._sessionmaker
+
+    def __call__(self):
+        return self._ensure()()
+
+
+def get_engine():
+    """Возвращает SQLAlchemy engine, создавая его при необходимости."""
+    if SessionLocal._engine is None:
+        SessionLocal._ensure()
+    return SessionLocal._engine
+
+
+# Ленивая фабрика сессий: SessionLocal() создаёт сессию при вызове.
+SessionLocal = _LazySessionMaker()
 
 
 def get_db():
@@ -108,5 +145,5 @@ def create_tables() -> None:
     ``create_all`` не меняет существующие таблицы и колонки: правки схемы
     по-прежнему требуют ручного DDL — миграций в проекте нет.
     """
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=get_engine())
     _ensure_admin_user()

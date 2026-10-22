@@ -195,3 +195,7 @@ backend/data/app.db-shm
 graphify-out
 .opencode
 
+/dock
+
+# runtime-состояние MAX-бота
+bot/data/*.json

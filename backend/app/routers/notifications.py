@@ -1,6 +1,7 @@
 """HTML-шаблоны писем, отправка по SMTP и планировщик уведомлений."""
 import asyncio
 import html
+import logging
 import re
 import smtplib
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,8 @@ from app.models import (
     TaskStatus,
     User,
 )
+
+logger = logging.getLogger("vector.notifications")
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -362,9 +365,12 @@ async def _job_send_pending_emails() -> None:
                 attempts = _attempts_made(notification, now)
                 delay = _next_attempt_delay(attempts)
                 notification.scheduled_at = now + timedelta(minutes=delay)
-                print(
-                    f"[SCHEDULER] email to user {notification.user_id} "
-                    f"failed ({attempts + 1} attempt, retry in {delay}m): {exc}"
+                logger.warning(
+                    "email to user %s failed (attempt %d, retry in %dm): %s",
+                    notification.user_id,
+                    attempts + 1,
+                    delay,
+                    exc,
                 )
                 continue
 
@@ -375,13 +381,15 @@ async def _job_send_pending_emails() -> None:
 
         if pending:
             db.commit()
-            print(
-                f"[SCHEDULER] emails sent={sent} failed={failed} "
-                f"abandoned={abandoned}"
+            logger.info(
+                "emails sent=%d failed=%d abandoned=%d",
+                sent,
+                failed,
+                abandoned,
             )
     except Exception as exc:  # noqa: BLE001
         db.rollback()
-        print(f"[SCHEDULER] send_emails error: {exc}")
+        logger.exception("send_emails error: %s", exc)
     finally:
         db.close()
 
@@ -439,17 +447,17 @@ async def _job_check_overdue() -> None:
                     )
                     mailed += 1
                 except Exception as exc:  # noqa: BLE001
-                    print(
-                        f"[SCHEDULER] overdue mail to {user.id} failed: {exc}"
+                    logger.warning(
+                        "overdue mail to user %d failed: %s", user.id, exc
                     )
 
         db.commit()
-        print(
-            f"[SCHEDULER] marked overdue={len(overdue)} mailed={mailed}"
+        logger.info(
+            "marked overdue=%d mailed=%d", len(overdue), mailed
         )
     except Exception as exc:  # noqa: BLE001
         db.rollback()
-        print(f"[SCHEDULER] check_overdue error: {exc}")
+        logger.exception("check_overdue error: %s", exc)
     finally:
         db.close()
 
