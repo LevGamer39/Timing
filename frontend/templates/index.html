@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    {% block head %}
+    {{super()}}
+    <meta name="description" content="Вектор — учёба, задачи и помощь ИИ в одном пространстве">
+    {% endblock %}
+  </head>
+  <body>
+    {% block body %}
+    <div class="main-container">
+      <div class="main-wrapper">
+        <header class="header">
+          <div class="logo-container">
+            <svg class="logo-icon" width="35" height="26.53" viewBox="0 0 35 26.53">
+              <rect width="35" height="26.53" fill="#F8F7FF"/>
+            </svg>
+            <span class="logo-text">ВЕКТОР</span>
+          </div>
+          <a href="/help" class="help-link">Помощь →</a>
+        </header>
+
+        <section class="hero">
+          <h1 class="hero-title">Твой день. Твой Вектор.</h1>
+          <p class="hero-subtitle">Учёба, задачи и помощь ИИ — в одном пространстве.</p>
+
+          <div class="hero-actions">
+            <a href="/register" class="btn btn-primary">Создать аккаунт</a>
+            <a href="/login" class="btn btn-secondary">Уже есть аккаунт? Войти →</a>
+          </div>
+        </section>
+
+        <section class="dashboard-preview">
+          <div class="preview-header">
+            <span class="preview-title">ТВОЙ УЧЕБНЫЙ ДЕНЬ</span>
+            <h3 class="preview-subtitle">Всё важное — рядом</h3>
+          </div>
+
+          <div class="preview-cards">
+            <div class="preview-card" style="top: 562px; left: 202px;">
+              <span class="card-label">Расписание</span>
+              <div class="card-content">
+                <div class="card-main-text">Алгебра · 09:30</div>
+                <div class="card-subtext">Кабинет 204</div>
+              </div>
+            </div>
+
+            <div class="preview-card" style="top: 643px; left: 202px;">
+              <span class="card-label">Домашние задания</span>
+              <div class="card-content">
+                <div class="card-main-text">История · презентация</div>
+                <div class="card-subtext">Сегодня, до 15:00</div>
+              </div>
+            </div>
+
+            <div class="preview-card" style="top: 643px; left: 202px;">
+              <span class="card-label">Вектор ИИ</span>
+              <div class="card-content">
+                <div class="card-main-text">Понятно с первого шага</div>
+                <div class="card-subtext">Поможет разобраться в теме</div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <p class="hero-tagline">Вектор · учёба в одном месте</p>
+      </div>
+  </div>
+  <div class="gradient-overlay"></div>
+
+  {% endblock %}
+</body>
+</html>

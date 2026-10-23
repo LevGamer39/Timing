@@ -252,36 +252,20 @@ localStorage.getItem('user')    // JSON: { id, role, first_name, ... }
   `<body>` и стартует из `init()` или `DOMContentLoaded`.
 - Экранируй всё, что пришло от пользователя: `escapeHtml()` есть в
   `tasks.js`, `progress.js`, `settings.js`, `ai.js` — переиспользуй паттерн,
-  не вставляйinnerHTML сырыми данными.
+  не вставляй innerHTML сырыми данными.
 - Даты форматируй через `new Date(iso).toLocaleDateString('ru-RU', ...)`;
   на бэке всегда UTC.
 
+### 6. Адаптивный дизайн
+
+- Реализация интерфейса должна быть адаптивна хотя бы для 16x9 мониторов
+- Использование фиксированных размеров допустимо, но не рекомендуется
+- При реализации интерфейса по примеру от дизайнера (скриншот, фото) необходимо
+примерно определять какой layout хотел показать дизайнер (например если на фото элементы расположены примерно по центру,
+нужно использовать центрированный layout, чтобы реализация была адаптивной) 
+- Избегай CSS кода внутри HTML файлов. Весь CSS должен быть в style.css или другом файле, если того требует пользователь
+
 ---
-
-## Известные проблемы
-
-Не исправлены. Не докладывай о них как о новых, но и не считай их нормой.
-
-| # | Проблема | Файл |
-|---|---|---|
-| 1 | `const API = 'http://localhost:8000'` ломал вход из браузера | ✅ `window.location.origin` |
-| 2 | Редирект на несуществующий `/login.html` | ✅ `/login` |
-| 3 | Каталога `frontend/parent/` нет — 4 маршрута отдают 404 | `frontend/parent/` |
-| 4 | `student/profile.html` отсутствует — 404 | `frontend/student/` |
-| 5 | `DB_PATH=data/app.db` — мёртвая переменная, остатки SQLite удалены | ✅ `.env.example` |
-| 6 | `frontend/student/js/auth-guard.js` — неиспользуемая копия | `frontend/student/js/auth-guard.js` |
-| 7 | Chart.js и Google Fonts с CDN, Chart.js без версии | `frontend/student/dashboard.html` |
-| 8 | Логика топбара (уведомления/streak/аватар) продублирована в HTML | `frontend/**/*.html` |
-| 9 | `admin/settings.html` подключает `student/js/settings.js` | `frontend/admin/settings.html` |
-| 10 | `pydantic-settings` и `PyYAML` установлены, но не используются | `backend/requirements.txt` |
-| 11 | Фреймворка миграций нет: `create_all()` не меняет созданные таблицы | `backend/app/database.py` |
-| 12 | Планировщик рассчитан на один процесс uvicorn | `backend/app/routers/notifications.py` |
-| 13 | Свой SMTP невозможен: домен на `no-ip.com`, нет контроля над TXT- и PTR-записями | `docker-compose.yml`, DNS |
-
-Про 12: `docker-compose` запускает один `uvicorn`, поэтому джобы не
-дублируются. При нескольких воркерах каждый поднимет свой APScheduler —
-сначала поставь `ENABLE_SCHEDULER=false` лишним, либо вынеси джобы в
-отдельный процесс.
 
 ## Testing Guidelines
 
