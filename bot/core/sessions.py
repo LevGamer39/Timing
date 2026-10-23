@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from api import Backend, BackendError, Unauthorized
-from security import hash_user_id, mask_token
-from state import StateStore
+from core.security import hash_user_id, mask_token
+from core.state import StateStore
+from services.backend import Backend, BackendError
 
 logger = logging.getLogger("vector_bot.sessions")
 
@@ -14,17 +14,15 @@ logger = logging.getLogger("vector_bot.sessions")
 class SessionManager:
     """Кэш JWT по MAX user_id.
 
-    Токен не пишется на диск. Если он истёк или бот перезапустился, JWT
-    заново выдаётся бэкендом по стабильному хешу MAX user_id.
+    Токен не пишется на диск. После перезапуска бот заново получает JWT
+    у бэкенда по стабильному хешу MAX user_id.
     """
 
     def __init__(self, backend: Backend, store: StateStore) -> None:
         self._backend = backend
         self._store = store
         self._tokens: dict[int, str] = {}
-
-    def drop(self, max_user_id: int) -> None:
-        self._tokens.pop(max_user_id, None)
+        self._token_owners: dict[str, int] = {}
 
     async def token(
         self, max_user_id: int, *, force: bool = False
@@ -47,7 +45,11 @@ class SessionManager:
             return None
 
         token = str(payload["access_token"])
+        previous = self._tokens.get(max_user_id)
+        if previous:
+            self._token_owners.pop(previous, None)
         self._tokens[max_user_id] = token
+        self._token_owners[token] = max_user_id
         self._store.upsert_user(
             max_user_id,
             role=payload.get("role"),
@@ -63,28 +65,17 @@ class SessionManager:
         )
         return token
 
-    async def authorized(
-        self, max_user_id: int, call
-    ) -> tuple[object | None, str | None]:
-        """Выполняет ``call(token)``, один раз перевыпуская JWT при 401."""
+    async def refresh(self, stale_token: str) -> str | None:
+        """Меняет истёкший JWT и возвращает новый.
 
-        token = await self.token(max_user_id)
-        if token is None:
-            return None, None
-
-        try:
-            return await call(token), None
-        except Unauthorized:
-            self.drop(max_user_id)
-            token = await self.token(max_user_id, force=True)
-            if token is None:
-                return None, None
-            try:
-                return await call(token), None
-            except BackendError as exc:
-                return None, exc.detail
-        except BackendError as exc:
-            return None, exc.detail
+        Вызывается HTTP-клиентом при 401, чтобы бот не застревал с мёртвым
+        токеном до перезапуска.
+        """
+        max_user_id = self._token_owners.pop(stale_token, None)
+        if max_user_id is None:
+            return None
+        self._tokens.pop(max_user_id, None)
+        return await self.token(max_user_id, force=True)
 
     def role(self, max_user_id: int) -> str | None:
         user = self._store.user(max_user_id)

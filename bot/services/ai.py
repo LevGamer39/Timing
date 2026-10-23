@@ -1,8 +1,4 @@
-"""Разбор учебных текстов через Qwen и запасной regex-парсер.
-
-Ollama используется только для структурирования уже отфильтрованного текста.
-Если модель недоступна, бот не падает: включается аккуратный regex-fallback.
-"""
+"""Разбор учебных текстов через Qwen и запасной regex-парсер."""
 
 from __future__ import annotations
 
@@ -47,10 +43,15 @@ HOMEWORK_MARKERS = (
     "подготовь",
     "составь",
     "прочитай",
+    "прочитать",
     "пересказ",
     "упражнени",
+    "упр",
     "параграф",
     "страниц",
+    "стр.",
+    "стр ",
+    "номер",
     "к завтра",
     "к понедельник",
     "к пятниц",
@@ -85,21 +86,37 @@ BATCH_PROMPT = """Ты — школьный помощник VectorVK. Ниже 
 {messages}"""
 
 
-def _extract_json(raw: str) -> Any:
-    """Достаёт JSON из ответа модели, даже если она обернула его в ```."""
+def looks_like_homework(text: str) -> bool:
+    """Дешёвый keyword-фильтр до обращения к модели."""
+    if not settings.parser_keyword_filter:
+        return True
+    lowered = text.lower()
+    return any(marker in lowered for marker in HOMEWORK_MARKERS)
 
+
+def _extract_json(raw: str) -> Any:
+    """Достаёт первый JSON-объект или массив из ответа модели.
+
+    Раньше сначала искались фигурные скобки, поэтому массив
+    ``[{"index": 0}, {"index": 1}]`` обрезался до одного объекта и
+    ``json.loads`` падал с ``Extra data``. ``raw_decode`` берёт ровно одно
+    значение с того места, где оно начинается, и корректно разбирает оба
+    варианта.
+    """
     text = raw.strip()
     if text.startswith("```"):
         text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end > start:
-        return json.loads(text[start : end + 1])
-    start = text.find("[")
-    end = text.rfind("]")
-    if start != -1 and end > start:
-        return json.loads(text[start : end + 1])
+
+    decoder = json.JSONDecoder()
+    for index, character in enumerate(text):
+        if character not in "{[":
+            continue
+        try:
+            value, _ = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        return value
     raise ValueError("no JSON in model response")
 
 
@@ -116,13 +133,6 @@ async def _ollama(messages: list[dict[str, str]]) -> str:
         )
     response.raise_for_status()
     return response.json()["message"]["content"]
-
-
-def _keyword_filter_ok(text: str) -> bool:
-    if not settings.parser_keyword_filter:
-        return True
-    lowered = text.lower()
-    return any(marker in lowered for marker in HOMEWORK_MARKERS)
 
 
 def _subject(text: str) -> str | None:
@@ -181,7 +191,7 @@ def regex_parse(text: str) -> dict[str, Any]:
     """Предсказуемый разбор без нейросети."""
 
     return {
-        "is_homework": _keyword_filter_ok(text),
+        "is_homework": looks_like_homework(text),
         "title": _title(text),
         "subject": _subject(text),
         "deadline": _deadline(text),
@@ -255,7 +265,7 @@ async def parse_batch(texts: list[str]) -> list[dict[str, Any]]:
         return [
             {**regex_parse(text), "source": text}
             for text in texts
-            if _keyword_filter_ok(text)
+            if looks_like_homework(text)
         ]
 
 

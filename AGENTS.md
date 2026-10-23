@@ -147,10 +147,12 @@ def complete_task(task_id: int, db: Session = Depends(get_db),
 
 - `create_all()` создаёт **только отсутствующие таблицы**. Он не добавляет
   колонки и не меняет типы.
-- **Миграций в проекте нет.** `create_all()` создаёт только отсутствующие
-  таблицы, поэтому добавление колонки или ограничения требует ручного
-  `ALTER TABLE` — предупреди об этом явно. Ограничения, объявленные в
-  моделях, попадают в схему только при её создании.
+- **Фреймворка миграций в проекте нет.** `create_all()` создаёт только
+  отсутствующие таблицы. Несколько идемпотентных DDL-правок
+  (`notifications.attempts`, `users.avatar_url` → `TEXT`,
+  `parent_link_tokens.code` → `VARCHAR(8)`) применяются в
+  `_apply_schema_updates()` при старте; всё остальное по-прежнему требует
+  ручного `ALTER TABLE` — предупреди об этом явно.
 - `create_tables()` объявлена в `database.py` дважды; используется вторая
   (с `_ensure_admin_user()`). Не добавляй третью — сначала почини дубликат.
 
@@ -274,9 +276,10 @@ localStorage.getItem('user')    // JSON: { id, role, first_name, ... }
 | 8 | Логика топбара (уведомления/streak/аватар) продублирована в HTML | `frontend/**/*.html` |
 | 9 | `admin/settings.html` подключает `student/js/settings.js` | `frontend/admin/settings.html` |
 | 10 | `pydantic-settings` и `PyYAML` установлены, но не используются | `backend/requirements.txt` |
-| 11 | Фреймворка миграций нет: `create_all()` не меняет созданные таблицы | `backend/app/database.py` |
+| 11 | Фреймворка миграций нет: `create_all()` не меняет созданные таблицы; часть колонок догоняется в `_apply_schema_updates()` | `backend/app/database.py` |
 | 12 | Планировщик рассчитан на один процесс uvicorn | `backend/app/routers/notifications.py` |
 | 13 | Свой SMTP невозможен: домен на `no-ip.com`, нет контроля над TXT- и PTR-записями | `docker-compose.yml`, DNS |
+| 14 | Привязка MAX не реализована: `link-max` никто не вызывает, бот всегда отдаёт «аккаунт не привязан» | `backend/app/routers/users.py`, `bot/core/sessions.py` |
 
 Про 12: `docker-compose` запускает один `uvicorn`, поэтому джобы не
 дублируются. При нескольких воркерах каждый поднимет свой APScheduler —

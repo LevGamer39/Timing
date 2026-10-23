@@ -1,11 +1,5 @@
-"""Движок БД, фабрика сессий и первичное наполнение.
-
-Движок и фабрика сессий создаются лениво — при первом обращении, а не при
-импорте модуля. Это позволяет импортировать `app.database` даже когда
-база данных ещё не запущена (например, при сборке тестов или при старте
-бота, который пока не подключён к БД).
-"""
-from sqlalchemy import create_engine
+"""Движок БД, фабрика сессий и первичное наполнение."""
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app import config
@@ -23,39 +17,8 @@ def _engine_kwargs() -> dict:
     return {"pool_pre_ping": True, "connect_args": {"connect_timeout": 10}}
 
 
-class _LazySessionMaker:
-    """Ленивая фабрика сессий SQLAlchemy.
-
-    Движок создаётся при первом вызове ``__call__`` или ``get_engine()``.
-    """
-
-    def __init__(self) -> None:
-        self._engine = None
-        self._sessionmaker = None
-
-    def _ensure(self):
-        if self._engine is None:
-            self._engine = create_engine(
-                config.build_database_url(), **_engine_kwargs()
-            )
-            self._sessionmaker = sessionmaker(
-                autocommit=False, autoflush=False, bind=self._engine
-            )
-        return self._sessionmaker
-
-    def __call__(self):
-        return self._ensure()()
-
-
-def get_engine():
-    """Возвращает SQLAlchemy engine, создавая его при необходимости."""
-    if SessionLocal._engine is None:
-        SessionLocal._ensure()
-    return SessionLocal._engine
-
-
-# Ленивая фабрика сессий: SessionLocal() создаёт сессию при вызове.
-SessionLocal = _LazySessionMaker()
+engine = create_engine(config.build_database_url(), **_engine_kwargs())
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db():
@@ -115,7 +78,6 @@ def _ensure_admin_user() -> None:
                 is_verified=True,
                 notify_email=True,
                 notify_browser=True,
-                notify_telegram=False,
                 notify_digest_time="08:00",
             )
         )
@@ -139,11 +101,37 @@ def _bootstrap_password_hash() -> str:
     return hash_password(config.ADMIN_PASSWORD)
 
 
+def _apply_schema_updates() -> None:
+    """Идемпотентно догоняет схему до текущих моделей.
+
+    ``create_all`` создаёт только отсутствующие таблицы и не трогает уже
+    существующие. Полноценных миграций в проекте нет, поэтому несколько
+    безопасных DDL-изменений выполняются здесь при старте. Все операции
+    идемпотентны, повторный запуск ничего не ломает.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    statements = (
+        # Счётчик попыток доставки письма: без колонки backoff не рос.
+        "ALTER TABLE notifications "
+        "ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0",
+        # Аватар приходит data URL на несколько килобайт, varchar(500) падал.
+        "ALTER TABLE users ALTER COLUMN avatar_url TYPE TEXT",
+        # Код привязки родителя стал восьмизначным.
+        "ALTER TABLE parent_link_tokens "
+        "ALTER COLUMN code TYPE VARCHAR(8)",
+    )
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
 def create_tables() -> None:
     """Создаёт отсутствующие таблицы и гарантирует наличие админа.
 
     ``create_all`` не меняет существующие таблицы и колонки: правки схемы
-    по-прежнему требуют ручного DDL — миграций в проекте нет.
+    догоняются в :func:`_apply_schema_updates` или ручным DDL.
     """
-    Base.metadata.create_all(bind=get_engine())
+    Base.metadata.create_all(bind=engine)
+    _apply_schema_updates()
     _ensure_admin_user()

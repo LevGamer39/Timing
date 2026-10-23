@@ -1,9 +1,4 @@
-"""Парсер домашних заданий в чатах класса.
-
-Схема: дешёвый keyword-фильтр → буфер → пакетный разбор Qwen → карточка с
-кнопкой «Добавить себе». Пользователь сам решает, добавлять ли задание,
-поэтому ложные срабатывания модели ничего не ломают.
-"""
+"""Парсер домашних заданий в чатах класса."""
 
 from __future__ import annotations
 
@@ -16,16 +11,15 @@ from maxapi import Bot
 from maxapi.enums.parse_mode import Format
 from maxapi.types.updates.message_created import MessageCreated
 
-from ai import parse_batch, parse_task
 from config import settings
+from core.state import StateStore
 from keyboards import homework_keyboard
+from services.ai import looks_like_homework, parse_batch, parse_task
 from texts import esc
-from state import StateStore
 
-logger = logging.getLogger("vector_bot.parser")
+logger = logging.getLogger("vector_bot.homework")
 
 MAX_BUFFER = 50
-MAX_CARDS_PER_FLUSH = 5
 
 
 class HomeworkParser:
@@ -38,8 +32,6 @@ class HomeworkParser:
         self._loops: dict[int, asyncio.Task[None]] = {}
         self._pending: dict[int, dict[str, Any]] = {}
         self._counter = 0
-
-    # ── Управление чатами ─────────────────────────────────────────────────
 
     async def enable(self, chat_id: int, title: str | None = None) -> None:
         self._store.set_homework_chat(chat_id, True, title)
@@ -71,8 +63,6 @@ class HomeworkParser:
             task.cancel()
         self._loops.clear()
 
-    # ── Приём сообщений ───────────────────────────────────────────────────
-
     async def feed(self, event: MessageCreated) -> None:
         if not settings.parser_enabled:
             return
@@ -81,7 +71,7 @@ class HomeworkParser:
             return
 
         text = self._text_of(event.message)
-        if not text or not self._looks_like_homework(text):
+        if not text or not looks_like_homework(text):
             return
 
         buffer = self._buffers.setdefault(chat_id, [])
@@ -98,7 +88,7 @@ class HomeworkParser:
         logger.info("ДЗ-буфер чата %s: %d сообщений", chat_id, len(buffer))
 
     async def feed_edited(self, event: Any) -> None:
-        """При редактировании сообщения заменяем текст в буфере."""
+        """При редактировании сообщения заменяет текст в буфере."""
 
         message = event.message
         chat_id = message.recipient.chat_id
@@ -115,7 +105,7 @@ class HomeworkParser:
             if item["mid"] == message.body.mid:
                 item["text"] = text
                 return
-        if self._looks_like_homework(text):
+        if looks_like_homework(text):
             buffer.append(
                 {
                     "text": text,
@@ -123,8 +113,6 @@ class HomeworkParser:
                     "ts": datetime.now(timezone.utc).isoformat(),
                 }
             )
-
-    # ── Ручная пометка ────────────────────────────────────────────────────
 
     async def manual(self, event: MessageCreated) -> None:
         message = event.message
@@ -143,18 +131,16 @@ class HomeworkParser:
         parsed["chat_id"] = message.recipient.chat_id
         await self._send_card(parsed, source=text)
 
-    # ── Пакетный разбор ───────────────────────────────────────────────────
-
     async def _loop(self, chat_id: int) -> None:
         interval = max(1, settings.parser_batch_interval_minutes) * 60
-        try:
-            while True:
-                await asyncio.sleep(interval)
+        while True:
+            await asyncio.sleep(interval)
+            try:
                 await self.flush(chat_id)
-        except asyncio.CancelledError:
-            raise
-        except Exception:  # noqa: BLE001 — цикл не должен умирать
-            logger.exception("Парсер чата %s остановился", chat_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 — цикл не должен умирать
+                logger.exception("Ошибка разбора чата %s", chat_id)
 
     async def flush(self, chat_id: int) -> None:
         buffer = self._buffers.get(chat_id)
@@ -166,7 +152,9 @@ class HomeworkParser:
         logger.info("Разбор %d сообщений чата %s", len(texts), chat_id)
 
         found = await parse_batch(texts)
-        for item in found[:MAX_CARDS_PER_FLUSH]:
+        # Раньше отправлялись только первые пять найденных заданий, остальные
+        # молча терялись вместе с очищенным буфером.
+        for item in found:
             item["chat_id"] = chat_id
             await self._send_card(item, source=item.get("source", ""))
 
@@ -178,7 +166,6 @@ class HomeworkParser:
         self._counter += 1
         uid = self._counter
         self._pending[uid] = item
-        # Ограничиваем память: старые карточки всё равно уже неактуальны.
         if len(self._pending) > 200:
             for old in sorted(self._pending)[:50]:
                 self._pending.pop(old, None)
@@ -204,15 +191,8 @@ class HomeworkParser:
         except Exception:  # noqa: BLE001
             logger.exception("Не удалось отправить карточку ДЗ в чат %s", chat_id)
 
-    # ── Очередь карточек ──────────────────────────────────────────────────
-
-    def pending(self, uid: int) -> dict[str, Any] | None:
-        return self._pending.get(uid)
-
     def pop_pending(self, uid: int) -> dict[str, Any] | None:
         return self._pending.pop(uid, None)
-
-    # ── Вспомогательное ───────────────────────────────────────────────────
 
     @staticmethod
     def _text_of(message: Any) -> str | None:
@@ -226,30 +206,3 @@ class HomeworkParser:
             if transcription:
                 return transcription
         return None
-
-    @staticmethod
-    def _looks_like_homework(text: str) -> bool:
-        if not settings.parser_keyword_filter:
-            return True
-        lowered = text.lower()
-        markers = (
-            "домашн",
-            "дз",
-            "задани",
-            "реши",
-            "выучи",
-            "напиши",
-            "подготовь",
-            "составь",
-            "прочитай",
-            "пересказ",
-            "упражнени",
-            "параграф",
-            "страниц",
-            "к завтра",
-            "к понедельник",
-            "к пятниц",
-            "к среде",
-            "до ",
-        )
-        return any(marker in lowered for marker in markers)

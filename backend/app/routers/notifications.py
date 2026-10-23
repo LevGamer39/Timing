@@ -253,24 +253,11 @@ def _next_attempt_delay(attempts: int) -> int:
 
 
 def _attempts_made(notification: Notification, now: datetime) -> int:
-    """Восстанавливает число попыток по отметкам отсрочки в строке.
-
-    Колонки ``attempts`` нет (в проекте нет фреймворка миграций), поэтому
-    количество попыток кодируется временем следующей отправки.
-    """
-    if not notification.scheduled_at:
-        return 0
-    scheduled = notification.scheduled_at
-    if scheduled.tzinfo is None:
-        scheduled = scheduled.replace(tzinfo=timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-    waited_minutes = (now - scheduled).total_seconds() / 60
-    best = 0
-    for index, delay in enumerate(RETRY_BACKOFF_MINUTES):
-        if waited_minutes >= delay:
-            best = index + 1
-    return best
+    """Сколько раз письмо уже пытались отправить."""
+    attempts = getattr(notification, "attempts", None)
+    if isinstance(attempts, int):
+        return max(0, attempts)
+    return 0
 
 
 def create_notification(
@@ -354,7 +341,10 @@ async def _job_send_pending_emails() -> None:
                 continue
 
             try:
-                send_email(
+                # SMTP синхронный и может висеть до таймаута; в общем цикле
+                # событий это останавливает все остальные запросы.
+                await asyncio.to_thread(
+                    send_email,
                     user.email,
                     notification.title,
                     _notification_html(notification.title, notification.body),
@@ -364,6 +354,7 @@ async def _job_send_pending_emails() -> None:
                 failed += 1
                 attempts = _attempts_made(notification, now)
                 delay = _next_attempt_delay(attempts)
+                notification.attempts = attempts + 1
                 notification.scheduled_at = now + timedelta(minutes=delay)
                 logger.warning(
                     "email to user %s failed (attempt %d, retry in %dm): %s",
@@ -440,7 +431,8 @@ async def _job_check_overdue() -> None:
             user = users.get(task.student_id)
             if user and user.notify_email:
                 try:
-                    send_email(
+                    await asyncio.to_thread(
+                        send_email,
                         user.email,
                         f"Просрочена задача: {task.title} — Vector",
                         _overdue_task_html(task.title, deadline_str),

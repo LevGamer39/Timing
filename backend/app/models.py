@@ -33,7 +33,6 @@ class TaskPriority(str, enum.Enum):
 class NotificationChannel(str, enum.Enum):
     email = "email"
     browser = "browser"
-    telegram = "telegram"
 
 
 class User(Base):
@@ -45,11 +44,10 @@ class User(Base):
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     role = Column(SAEnum(UserRole), nullable=False)
-    avatar_url = Column(String(500), nullable=True)
+    avatar_url = Column(Text, nullable=True)
     grade = Column(String(20), nullable=True)  # для ученика: "10А"
     teacher_subject = Column(String(100), nullable=True)
     teacher_invite_code = Column(String(16), nullable=True)
-    telegram_id = Column(String(100), nullable=True, unique=True)
     is_active = Column(Boolean, default=False)  # активируется после подтверждения email
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -58,7 +56,6 @@ class User(Base):
     # Настройки уведомлений
     notify_email = Column(Boolean, default=True)
     notify_browser = Column(Boolean, default=True)
-    notify_telegram = Column(Boolean, default=False)
     notify_digest_time = Column(String(5), default="08:00")  # "HH:MM"
 
     classes_taught = relationship("Class", back_populates="teacher")
@@ -269,6 +266,7 @@ class Notification(Base):
     channel = Column(SAEnum(NotificationChannel), nullable=False)
     is_read = Column(Boolean, default=False)
     is_sent = Column(Boolean, default=False)
+    attempts = Column(Integer, nullable=False, default=0, server_default="0")
     scheduled_at = Column(DateTime(timezone=True), nullable=True)
     sent_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -277,12 +275,16 @@ class Notification(Base):
 
 
 class ParentLinkToken(Base):
-    """6-значный код который ученик показывает родителю для привязки."""
+    """Код, который ученик показывает родителю для привязки.
+
+    Код восьмизначный: шестизначный перебирался за время жизни, тем более
+    что TTL раньше был сутки.
+    """
     __tablename__ = "parent_link_tokens"
 
     id = Column(Integer, primary_key=True)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    code = Column(String(6), nullable=False, index=True)
+    code = Column(String(8), nullable=False, index=True)
     is_used = Column(Boolean, default=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -293,8 +295,7 @@ class PasswordResetToken(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    token = Column(String(64), unique=True, nullable=False, index=True)  # обратная совместимость
-    token_hash = Column(String(128), unique=True, nullable=True, index=True)  # хеш токена (безопасное хранение)
+    token = Column(String(64), unique=True, nullable=False, index=True)
     is_used = Column(Boolean, default=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -306,8 +307,7 @@ class EmailChangeToken(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     new_email = Column(String(255), nullable=False)
-    token = Column(String(64), unique=True, nullable=False, index=True)  # обратная совместимость
-    token_hash = Column(String(128), unique=True, nullable=True, index=True)  # хеш токена (безопасное хранение)
+    token = Column(String(64), unique=True, nullable=False, index=True)
     is_used = Column(Boolean, default=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -323,17 +323,3 @@ class AIMessage(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="ai_messages")
-
-
-class TokenBlacklist(Base):
-    """Список отозванных JWT (logout, смена пароля, скомпрометированный токен)."""
-
-    __tablename__ = "token_blacklist"
-
-    id = Column(Integer, primary_key=True)
-    jti = Column(String(64), unique=True, nullable=False, index=True)  # ID токена
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    user = relationship("User")

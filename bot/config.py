@@ -56,7 +56,6 @@ class Settings:
 
     # MAX Bot API
     max_bot_token: str
-    max_api_base: str
 
     # Внутренний бэкенд VectorVK
     backend_url: str
@@ -114,7 +113,6 @@ def load_settings() -> Settings:
 
     return Settings(
         max_bot_token=_str("MAX_BOT_TOKEN"),
-        max_api_base=_str("MAX_API_BASE", "https://platform-api2.max.ru").rstrip("/"),
         backend_url=_str("MAX_BOT_URL", "http://backend:8000").rstrip("/"),
         backend_timeout=_float("BOT_BACKEND_TIMEOUT", 30.0),
         update_mode=update_mode,

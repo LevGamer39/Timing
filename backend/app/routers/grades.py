@@ -2,7 +2,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,18 @@ class GradeCreate(BaseModel):
     assignment_id: int | None = None
     comment: str | None = None
 
+    @field_validator("subject")
+    @classmethod
+    def _subject_length(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Subject must not be blank")
+        if len(value) > MAX_SUBJECT_LENGTH:
+            raise ValueError(
+                f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
+            )
+        return value
+
 
 class BulkGradeItem(BaseModel):
     student_id: int
@@ -48,6 +60,18 @@ class BulkGradeCreate(BaseModel):
     assignment_id: int
     subject: str
     items: list[BulkGradeItem]
+
+    @field_validator("subject")
+    @classmethod
+    def _subject_length(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Subject must not be blank")
+        if len(value) > MAX_SUBJECT_LENGTH:
+            raise ValueError(
+                f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
+            )
+        return value
 
 
 class GradeResponse(BaseModel):

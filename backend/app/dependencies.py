@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app import config
 from app.database import get_db
-from app.models import TokenBlacklist, User, UserRole
+from app.models import User, UserRole
 
 SECRET_KEY = config.SECRET_KEY
 ALGORITHM = config.ALGORITHM
@@ -36,10 +36,7 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """Разрешает bearer-токен в активного пользователя.
-
-    Проверяет blacklist (отозванные токены) и наличиеclaims sub, exp, jti.
-    """
+    """Разрешает bearer-токен в активного пользователя."""
     if not SECRET_KEY:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -47,20 +44,12 @@ def get_current_user(
         )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Одноразовые токены (например, OAuth state) не должны открывать API.
+        if payload.get("scope") is not None:
+            raise ValueError("token is not an access token")
         user_id = int(payload["sub"])
-        jti = payload.get("jti")
     except (JWTError, KeyError, TypeError, ValueError):
         raise _unauthorized()
-
-    # Проверка черного списка токенов
-    if jti:
-        blacklisted = (
-            db.query(TokenBlacklist)
-            .filter(TokenBlacklist.jti == jti, TokenBlacklist.user_id == user_id)
-            .first()
-        )
-        if blacklisted:
-            raise _unauthorized()
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
@@ -78,24 +67,6 @@ def require_role(*roles: UserRole) -> Callable[..., User]:
 
     def dependency(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied",
-            )
-        return current_user
-
-    return dependency
-
-
-def require_self_or_roles(*roles: UserRole) -> Callable[..., User]:
-    """Разрешает указанные роли или самому пользователю читать себя.
-
-    Используется эндпоинтами, где смешаны «свои данные» и данные по роли.
-    """
-    allowed = (*roles, UserRole.admin)
-
-    def dependency(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied",

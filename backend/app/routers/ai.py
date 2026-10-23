@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app import config
@@ -132,6 +132,16 @@ INTENT_PROMPT = """Определи действие пользователя и
 
 class ChatRequest(BaseModel):
     message: str
+
+    @field_validator("message")
+    @classmethod
+    def _message_length(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Message must not be blank")
+        if len(value) > 4000:
+            raise ValueError("Message must be <= 4000 characters")
+        return value
 
 
 class ChatResponse(BaseModel):
@@ -632,13 +642,19 @@ def get_history(
     current_user: User = Depends(require_role(UserRole.student)),
     db: Session = Depends(get_db),
 ):
-    return (
+    """Последние сообщения в хронологическом порядке.
+
+    Раньше сортировка была по возрастанию и ``limit`` отрезал первые 100
+    сообщений, поэтому история со временем переставала обновляться.
+    """
+    rows = (
         db.query(AIMessage)
         .filter(AIMessage.user_id == current_user.id)
-        .order_by(AIMessage.created_at.asc())
+        .order_by(AIMessage.created_at.desc(), AIMessage.id.desc())
         .limit(MAX_HISTORY_ROWS)
         .all()
     )
+    return list(reversed(rows))
 
 
 @router.post("/chat", response_model=ChatResponse)

@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_role
+from app.enrollment import (
+    add_missing_assignment_tasks,
+    refresh_student_grade,
+)
 from app.models import (
     Assignment,
     Class,
@@ -573,7 +577,10 @@ def remove_student(
     )
     if not membership:
         raise HTTPException(404, "Student not in this class")
+    student_id = membership.student_id
     db.delete(membership)
+    db.flush()
+    refresh_student_grade(student_id, db)
     db.commit()
 
 
@@ -622,6 +629,8 @@ def join_class(
             ClassMembership(student_id=current_user.id, class_id=class_.id)
         )
 
+    db.flush()
+    add_missing_assignment_tasks(current_user.id, class_.id, db)
     current_user.grade = class_.name
     db.commit()
 

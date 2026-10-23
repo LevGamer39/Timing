@@ -1,7 +1,5 @@
 """Клавиатуры и callback-кнопки на штатных средствах maxapi."""
 
-from __future__ import annotations
-
 from maxapi.types.attachments.buttons import CallbackButton
 from maxapi.types.attachments.buttons.attachment_button import AttachmentButton
 from maxapi.utils.inline_keyboard import InlineKeyboardBuilder

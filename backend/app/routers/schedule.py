@@ -14,6 +14,8 @@ router = APIRouter(prefix="/api/schedule", tags=["schedule"])
 _HHMM_RE = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
 MAX_SUBJECT_LENGTH = 100
+MAX_TEACHER_LENGTH = 255
+MAX_ROOM_LENGTH = 50
 
 
 def _validate_hhmm(value: str) -> str:
@@ -61,6 +63,30 @@ class ScheduleEntryCreate(BaseModel):
     @classmethod
     def _valid_time(cls, value: str) -> str:
         return _validate_hhmm(value)
+
+    @field_validator("teacher_name")
+    @classmethod
+    def _teacher_length(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if len(value) > MAX_TEACHER_LENGTH:
+            raise ValueError(
+                f"Teacher name must be <= {MAX_TEACHER_LENGTH} characters"
+            )
+        return value or None
+
+    @field_validator("room")
+    @classmethod
+    def _room_length(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if len(value) > MAX_ROOM_LENGTH:
+            raise ValueError(
+                f"Room must be <= {MAX_ROOM_LENGTH} characters"
+            )
+        return value or None
 
 
 class ScheduleEntryResponse(BaseModel):

@@ -1,18 +1,15 @@
-"""HTTP-клиент к бэкенду VectorVK.
-
-Бот не подключается к PostgreSQL и не знает паролей БД. Все операции идут
-через существующее API бэкенда. Здесь собраны только те методы, которые
-реально нужны боту, — чтобы пути и схемы не расползались по обработчикам.
-"""
+"""HTTP-клиент к бэкенду VectorVK."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 import httpx
 
 from config import settings
-from security import sign_request
+from core.security import sign_request
+
+UnauthorizedHandler = Callable[[str], Awaitable[str | None]]
 
 
 class BackendError(Exception):
@@ -25,7 +22,7 @@ class BackendError(Exception):
 
 
 class Unauthorized(BackendError):
-    """Токен истёк или отозван."""
+    """Токен истёк или больше не принимается."""
 
 
 def _detail(response: httpx.Response) -> str:
@@ -58,6 +55,13 @@ class Backend:
             base_url=base_url or settings.backend_url,
             timeout=settings.backend_timeout,
         )
+        self._unauthorized_handler: UnauthorizedHandler | None = None
+
+    def set_unauthorized_handler(
+        self, handler: UnauthorizedHandler
+    ) -> None:
+        """Регистрирует обновление JWT по истёкшему токену."""
+        self._unauthorized_handler = handler
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -68,26 +72,49 @@ class Backend:
         path: str,
         *,
         token: str | None = None,
+        _retry: bool = True,
         **kwargs: Any,
     ) -> Any:
-        headers = kwargs.pop("headers", {})
+        headers = dict(kwargs.pop("headers", {}))
+        extra_headers = dict(headers)
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
-        response = await self._client.request(method, path, headers=headers, **kwargs)
+        try:
+            response = await self._client.request(
+                method, path, headers=headers, **kwargs
+            )
+        except httpx.RequestError as exc:
+            # Сетевые сбои раньше вылетали мимо BackendError и обрывали
+            # обработчик без ответа пользователю.
+            raise BackendError(
+                503, f"Бэкенд недоступен: {exc.__class__.__name__}"
+            ) from exc
 
         if response.status_code == 401:
+            if token and _retry and self._unauthorized_handler is not None:
+                fresh = await self._unauthorized_handler(token)
+                if fresh and fresh != token:
+                    return await self._request(
+                        method,
+                        path,
+                        token=fresh,
+                        _retry=False,
+                        headers=extra_headers,
+                        **kwargs,
+                    )
             raise Unauthorized(401, _detail(response))
         if response.status_code >= 400:
             raise BackendError(response.status_code, _detail(response))
         if response.status_code == 204 or not response.content:
             return None
-        return response.json()
-
-    # ── Аутентификация ────────────────────────────────────────────────────
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise BackendError(502, "Бэкенд вернул некорректный ответ") from exc
 
     async def max_link(self, hashed_user_id: str) -> dict[str, Any]:
-        """Меняет хеш MAX user_id на JWT. Только для запросов от бота."""
+        """Меняет подписанный хеш MAX user_id на JWT."""
 
         return await self._request(
             "POST",
@@ -95,21 +122,6 @@ class Backend:
             json={"max_user_id_hashed": hashed_user_id},
             headers={"X-Bot-Signature": sign_request(hashed_user_id)},
         )
-
-    async def link_max(self, token: str, hashed_user_id: str) -> None:
-        """Привязывает MAX к аккаунту, в который уже выполнен вход."""
-
-        await self._request(
-            "POST",
-            "/api/users/auth/link-max",
-            token=token,
-            params={"max_user_id_hashed": hashed_user_id},
-        )
-
-    async def me(self, token: str) -> dict[str, Any]:
-        return await self._request("GET", "/api/users/me", token=token)
-
-    # ── Задания ───────────────────────────────────────────────────────────
 
     async def list_tasks(
         self, token: str, status: str | None = None
@@ -132,9 +144,7 @@ class Backend:
         )
 
     async def delete_task(self, token: str, task_id: int) -> None:
-        await self._request(
-            "DELETE", f"/api/tasks/{task_id}", token=token
-        )
+        await self._request("DELETE", f"/api/tasks/{task_id}", token=token)
 
     async def child_tasks(
         self, token: str, student_id: int
@@ -142,8 +152,6 @@ class Backend:
         return await self._request(
             "GET", f"/api/tasks/child/{student_id}", token=token
         )
-
-    # ── Оценки ────────────────────────────────────────────────────────────
 
     async def my_grades(self, token: str) -> list[dict[str, Any]]:
         return await self._request("GET", "/api/grades/my", token=token)
@@ -161,19 +169,8 @@ class Backend:
             "GET", f"/api/grades/child/{student_id}", token=token
         )
 
-    # ── Расписание ────────────────────────────────────────────────────────
-
     async def my_schedule(self, token: str) -> list[dict[str, Any]]:
         return await self._request("GET", "/api/schedule/my", token=token)
-
-    async def child_schedule(
-        self, token: str, student_id: int
-    ) -> list[dict[str, Any]]:
-        return await self._request(
-            "GET", f"/api/schedule/child/{student_id}", token=token
-        )
-
-    # ── ИИ и родительские связи ───────────────────────────────────────────
 
     async def ai_chat(self, token: str, message: str) -> dict[str, Any]:
         return await self._request(
@@ -187,8 +184,4 @@ class Backend:
         return await self._request("GET", "/api/classes", token=token)
 
 
-__all__ = [
-    "Backend",
-    "BackendError",
-    "Unauthorized",
-]
+__all__ = ["Backend", "BackendError", "Unauthorized"]

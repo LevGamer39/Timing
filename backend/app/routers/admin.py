@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_role
+from app.enrollment import (
+    add_missing_assignment_tasks,
+    refresh_student_grade,
+)
 from app.models import Class, ClassMembership, InviteCode, User, UserRole
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -100,6 +104,8 @@ class AdminClassUpdate(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError("Class name must not be blank")
+        if len(value) > MAX_NAME_LENGTH:
+            raise ValueError(f"Name must be <= {MAX_NAME_LENGTH} characters")
         return value
 
 
@@ -263,6 +269,10 @@ def _enroll(db: Session, class_id: int, student_id: int) -> None:
         existing.class_id = class_id
     else:
         db.add(ClassMembership(student_id=student_id, class_id=class_id))
+
+    db.flush()
+    add_missing_assignment_tasks(student_id, class_id, db)
+    refresh_student_grade(student_id, db)
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +473,14 @@ def update_class(
 
     if body.name is not None:
         class_.name = body.name
+        db.flush()
+        # grade — денормализованная копия названия класса.
+        for row in (
+            db.query(ClassMembership.student_id)
+            .filter(ClassMembership.class_id == class_id)
+            .all()
+        ):
+            refresh_student_grade(row[0], db)
     if body.teacher_id is not None:
         teacher = (
             db.query(User)
@@ -523,6 +541,8 @@ def remove_student_from_class(
     if not membership:
         raise HTTPException(404, "Student not found in class")
     db.delete(membership)
+    db.flush()
+    refresh_student_grade(student_id, db)
     db.commit()
 
 
@@ -540,7 +560,16 @@ def delete_class(
     class_ = db.query(Class).filter(Class.id == class_id).first()
     if not class_:
         raise HTTPException(404, "Class not found")
+    student_ids = [
+        row[0]
+        for row in db.query(ClassMembership.student_id)
+        .filter(ClassMembership.class_id == class_id)
+        .all()
+    ]
     db.delete(class_)
+    db.flush()
+    for student_id in student_ids:
+        refresh_student_grade(student_id, db)
     db.commit()
 
 

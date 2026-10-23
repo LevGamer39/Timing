@@ -39,31 +39,28 @@ def test_first_retry_is_not_immediate():
 
 
 # ---------------------------------------------------------------------------
-# Подсчёт попыток без отдельной колонки
+# Счётчик попыток (колонка notifications.attempts)
 # ---------------------------------------------------------------------------
 
 
 class _Row:
-    def __init__(self, scheduled_at):
-        self.scheduled_at = scheduled_at
+    def __init__(self, attempts):
+        self.attempts = attempts
 
 
 def test_fresh_row_counts_as_zero_attempts():
     now = datetime.now(timezone.utc)
-    assert _attempts_made(_Row(None), now) == 0
+    assert _attempts_made(_Row(0), now) == 0
 
 
-def test_attempts_inferred_from_backoff_age():
+def test_attempts_are_read_from_the_column():
     now = datetime.now(timezone.utc)
-    # Отметка 30 минут назад -> письмо пережило паузы в 5 и 15 минут.
-    row = _Row(now - timedelta(minutes=30))
-    assert _attempts_made(row, now) >= 2
+    assert _attempts_made(_Row(2), now) == 2
 
 
-def test_naive_timestamps_are_treated_as_utc():
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    row = _Row(now - timedelta(minutes=30))
-    assert _attempts_made(row, now) >= 2
+def test_negative_attempts_are_clamped():
+    now = datetime.now(timezone.utc)
+    assert _attempts_made(_Row(-5), now) == 0
 
 
 def test_retry_window_is_bounded():

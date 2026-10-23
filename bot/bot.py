@@ -1,12 +1,4 @@
-"""Точка входа MAX-бота VectorVK.
-
-Бот использует библиотеку ``maxapi`` (pip install maxapi) — это аналог
-aiogram для мессенджера MAX. Своего HTTP-клиента к MAX API здесь нет.
-
-Режимы:
-- ``long_polling`` — по умолчанию, удобно для разработки;
-- ``webhook`` — боевой режим, требует HTTPS-URL и ``WEBHOOK_SECRET``.
-"""
+"""Точка входа MAX-бота VectorVK."""
 
 from __future__ import annotations
 
@@ -18,13 +10,14 @@ from maxapi.enums.parse_mode import Format
 from maxapi.types.command import BotCommand
 from maxapi.webhook.aiohttp import AiohttpMaxWebhook
 
-from api import Backend
 from config import settings, validate
-from handlers import register_handlers
-from parser import HomeworkParser
-from scheduler import Scheduler
-from sessions import SessionManager
-from state import StateStore
+from core.context import AppContext
+from core.sessions import SessionManager
+from core.state import StateStore
+from routers import include_routers
+from services.backend import Backend
+from services.homework import HomeworkParser
+from services.reminders import ReminderScheduler
 
 logger = logging.getLogger("vector_bot")
 
@@ -65,10 +58,18 @@ async def main() -> None:
     await store.load()
 
     sessions = SessionManager(backend, store)
+    backend.set_unauthorized_handler(sessions.refresh)
     parser = HomeworkParser(bot, store)
-    scheduler = Scheduler(bot, backend, sessions, store)
+    scheduler = ReminderScheduler(bot, backend, sessions, store)
+    ctx = AppContext(
+        bot=bot,
+        backend=backend,
+        store=store,
+        sessions=sessions,
+        parser=parser,
+    )
 
-    register_handlers(dp, bot, backend, store, sessions, parser)
+    include_routers(dp, ctx)
     await parser.start_existing()
     await scheduler.start()
 

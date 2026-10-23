@@ -10,18 +10,35 @@ MAX API вызывается через библиотеку [`maxapi`](https://
 
 ```
 bot/
-├── bot.py          # Точка входа: Bot + Dispatcher, polling или webhook
-├── config.py       # Единственный источник настроек (load_dotenv)
-├── handlers.py     # Команды, текст, голос, callback-кнопки, события чатов
-├── parser.py       # Парсер ДЗ: keyword-фильтр → буфер → Qwen → карточка
-├── ai.py           # Qwen через Ollama + regex-fallback
-├── api.py          # HTTP-клиент к бэкенду VectorVK
-├── sessions.py     # JWT в памяти, повторная выдача по хешу MAX user_id
-├── security.py     # HMAC-хеш user_id, подпись запросов, маскирование токенов
-├── scheduler.py    # Напоминания и недельная сводка
-├── state.py        # JSON-состояние (пользователи, чаты, отметки)
-├── keyboards.py    # Inline-клавиатуры maxapi
-├── texts.py        # Форматирование сообщений и экранирование HTML
+├── bot.py              # Точка входа: Bot + Dispatcher, polling или webhook
+├── config.py           # Настройки из общего .env
+├── core/
+│   ├── context.py      # Зависимости, общие для роутеров
+│   ├── filters.py      # Фильтр callback-payload
+│   ├── security.py     # HMAC-хеш и подпись запросов
+│   ├── sessions.py     # JWT в памяти
+│   ├── state.py        # JSON-состояние
+│   └── ui.py           # Ответы, автор события, проверка привязки
+├── services/
+│   ├── backend.py      # HTTP-клиент к бэкенду
+│   ├── ai.py           # Qwen через Ollama + regex-fallback
+│   ├── homework.py     # Парсер ДЗ в чатах класса
+│   ├── reminders.py    # Напоминания и недельная сводка
+│   ├── tasks.py        # Создание заданий
+│   ├── ai_chat.py      # ИИ-чат
+│   └── views.py        # Готовые ответы для команд и меню
+├── routers/
+│   ├── common.py       # /start, /help, /cancel, события бота
+│   ├── tasks.py        # /today, /add, /done, кнопки заданий
+│   ├── grades.py       # /grades, /summary
+│   ├── schedule.py     # /schedule
+│   ├── ai_chat.py      # /ai
+│   ├── homework.py     # /hw и кнопки карточек
+│   ├── menu.py         # callback-кнопки меню
+│   └── messages.py     # Свободный текст и голосовые
+├── keyboards/          # Inline-клавиатуры
+├── texts/              # Тексты и форматирование
+├── data/               # runtime-состояние (volume)
 ├── dockerfile
 └── requirements.txt
 ```

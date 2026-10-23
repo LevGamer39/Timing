@@ -16,6 +16,27 @@ router = APIRouter(prefix="/api/auth/yandex", tags=["yandex_auth"])
 
 YANDEX_TOKEN_URL = "https://oauth.yandex.ru/token"
 YANDEX_INFO_URL = "https://login.yandex.ru/info?format=json"
+LINK_STATE_TTL_MINUTES = 10
+
+
+def create_link_state(user_id: int) -> str:
+    """Короткоживущий токен для OAuth ``state``.
+
+    В ``state`` уходит не обычный access-токен, а отдельная подпись со
+    ``scope``. Она годится только для завершения привязки и не даёт доступа
+    к API, даже если попадёт в логи Яндекса или referer.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from jose import jwt
+
+    payload = {
+        "sub": str(user_id),
+        "scope": "yandex_link",
+        "exp": datetime.now(timezone.utc)
+        + timedelta(minutes=LINK_STATE_TTL_MINUTES),
+    }
+    return jwt.encode(payload, config.SECRET_KEY, algorithm=config.ALGORITHM)
 
 
 def _require_config() -> None:
@@ -133,21 +154,18 @@ async def yandex_callback(code: str, db: Session = Depends(get_db)):
 @router.get("/link")
 async def initiate_link(
     current_user: User = Depends(get_current_user),
-    token: str | None = None,
 ):
     """Начинает привязку аккаунта *авторизованного* пользователя к Яндексу.
 
-    Раньше у эндпоинта не было зависимости авторизации, и он доверял строке
-    с токеном, присланной клиентом.
+    ``token`` больше не принимается из query: клиент мог подставить чужой
+    JWT, и привязка уходила не тому пользователю.
     """
     _require_config()
-    if not token:
-        token = create_access_token(current_user.id)
     url = (
         f"https://oauth.yandex.ru/authorize?response_type=code"
         f"&client_id={config.YANDEX_CLIENT_ID}"
         f"&redirect_uri={config.YANDEX_LINK_CALLBACK}"
-        f"&state={token}"
+        f"&state={create_link_state(current_user.id)}"
     )
     return RedirectResponse(url)
 
@@ -168,6 +186,8 @@ async def confirm_link(
         payload = jwt.decode(
             state, config.SECRET_KEY, algorithms=[config.ALGORITHM]
         )
+        if payload.get("scope") != "yandex_link":
+            raise ValueError("wrong token scope")
         user_id = int(payload["sub"])
     except (JWTError, KeyError, TypeError, ValueError) as exc:
         raise HTTPException(401, "Not authenticated") from exc

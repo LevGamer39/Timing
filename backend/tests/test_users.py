@@ -109,6 +109,15 @@ def test_registration_rejects_blank_name():
         )
 
 
+def test_registration_rejects_admin_role():
+    """Админ создаётся бутстрапом, а не самозаписью."""
+    with pytest.raises(ValueError):
+        RegisterRequest(
+            email="a@b.ru", password="longenough",
+            first_name="A", last_name="B", role=UserRole.admin,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Полный HTTP-сценарий
 # ---------------------------------------------------------------------------
@@ -222,6 +231,41 @@ def test_deactivated_user_loses_access(client):
 def test_teacher_registration_requires_invite(client):
     response = _register(client, "t@example.com", role="teacher")
     assert response.status_code == 400
+
+
+def test_admin_registration_is_rejected_over_http(client):
+    response = _register(client, "evil@example.com", role="admin")
+    assert response.status_code == 422
+
+
+def test_reregistration_cannot_overwrite_pending_account(client):
+    """Атакующий не должен подменять пароль чужой неподтверждённой заявки."""
+    assert _register(client, "pending@example.com").status_code == 201
+    second = _register(
+        client, "pending@example.com", password="attackerpass1"
+    )
+    assert second.status_code == 400
+
+    code = _extract_code(client.sent_emails[0][2])
+    assert client.post(
+        "/api/users/verify-email", json={"code": code}
+    ).status_code == 200
+
+    # Старый пароль по-прежнему рабочий, пароль атакующего — нет.
+    assert client.post(
+        "/api/users/login",
+        data={
+            "username": "pending@example.com",
+            "password": "supersecret123",
+        },
+    ).status_code == 200
+    assert client.post(
+        "/api/users/login",
+        data={
+            "username": "pending@example.com",
+            "password": "attackerpass1",
+        },
+    ).status_code == 401
 
 
 def test_teacher_registration_with_valid_invite(client, real_db):
