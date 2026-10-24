@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    {% block head %}
+    {{ super() }}
+    <meta name="description" content="Вход в аккаунт Вектор">
+    <title>Войти в аккаунт — Вектор</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet">
+    {% endblock %}
+  </head>
+  <body>
+    {% block body %}
+    <div class="login-page">
+      <div class="gradient-overlay"></div>
+
+      <header class="login-header">
+        <a href="/" class="logo-container" aria-label="Вектор — на главную">
+          <svg class="logo-icon" width="35" height="26.53" viewBox="0 0 35 26.53" aria-hidden="true">
+            <rect width="35" height="26.53" fill="#F8F7FF"/>
+          </svg>
+          <span class="logo-text">ВЕКТОР</span>
+        </a>
+        <a href="/help" class="help-link">Помощь ↗</a>
+      </header>
+
+      <main class="login-main">
+        <h1 class="login-title">С возвращением</h1>
+        <p class="login-subtitle">Войдите, чтобы продолжить свой день.</p>
+
+        <section class="login-panel" aria-labelledby="service-login-title">
+          <div class="login-social">
+            <h2 class="login-panel-title" id="service-login-title">Войти через сервис</h2>
+            <p class="login-panel-hint">Используй привязанный аккаунт</p>
+
+            <div class="login-social-buttons">
+              <button type="button" class="social-btn" id="btn-yandex">
+                <svg class="social-icon" width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+                  <rect width="15" height="15" fill="#FF0000"/>
+                </svg>
+                <span>Яндекс</span>
+              </button>
+              <button type="button" class="social-btn">
+                <svg class="social-icon" width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+                  <rect width="15" height="15" fill="#0077FF"/>
+                </svg>
+                <span>ВКонтакте</span>
+              </button>
+            </div>
+
+            <p class="login-note">Быстрый вход в один шаг.</p>
+          </div>
+
+          <form class="login-form" id="login-form" novalidate>
+            <h2 class="login-panel-title">Войти через почту</h2>
+
+            <div class="form-field">
+              <label class="form-label" for="email">Электронная почта</label>
+              <input class="form-input" id="email" name="username" type="email" placeholder="name@example.ru" autocomplete="email" required>
+            </div>
+
+            <div class="form-field">
+              <label class="form-label" for="password">Пароль</label>
+              <div class="password-wrap">
+                <input class="form-input" id="password" name="password" type="password" placeholder="Введите пароль" autocomplete="current-password" required>
+                <button type="button" class="password-toggle" id="toggle-password" aria-label="Показать пароль">
+                  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+                    <rect width="15" height="15" fill="currentColor"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <p class="form-error" id="login-error" role="alert" hidden></p>
+
+            <div class="login-actions">
+              <a class="forgot-link" href="/reset-password">Забыли пароль?</a>
+              <button type="submit" class="btn btn-primary auth-submit" id="login-submit">Войти</button>
+            </div>
+          </form>
+        </section>
+
+        <p class="login-register">Нет аккаунта? <a href="/register">Зарегистрироваться →</a></p>
+      </main>
+    </div>
+
+    <script>
+      const ROUTES = {
+        student: '/dashboard',
+        teacher: '/teacher/dashboard',
+        parent: '/parent/dashboard',
+        admin: '/admin/dashboard'
+      };
+
+      const form = document.getElementById('login-form');
+      const errorEl = document.getElementById('login-error');
+      const submitBtn = document.getElementById('login-submit');
+      const passwordInput = document.getElementById('password');
+
+      document.getElementById('toggle-password').addEventListener('click', () => {
+        const show = passwordInput.type === 'password';
+        passwordInput.type = show ? 'text' : 'password';
+        document.getElementById('toggle-password').setAttribute(
+          'aria-label', show ? 'Скрыть пароль' : 'Показать пароль'
+        );
+      });
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+
+        const email = document.getElementById('email').value.trim();
+        const password = passwordInput.value;
+
+        if (!email || !password) {
+          errorEl.textContent = 'Заполните все поля';
+          errorEl.hidden = false;
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Вхожу…';
+
+        try {
+          const response = await fetch('/api/users/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ username: email, password })
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.detail || 'Неверный email или пароль');
+
+          localStorage.setItem('token', data.access_token);
+          localStorage.setItem('user', JSON.stringify({
+            role: data.role,
+            first_name: data.first_name,
+            last_name: data.last_name
+          }));
+          window.location.href = ROUTES[data.role] || '/dashboard';
+        } catch (error) {
+          errorEl.textContent = error.message || 'Неверный email или пароль';
+          errorEl.hidden = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Войти';
+        }
+      });
+
+      document.getElementById('btn-yandex').addEventListener('click', async () => {
+        try {
+          const response = await fetch('/api/auth/yandex/login-url');
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.detail || 'Яндекс-вход недоступен');
+          window.location.href = data.url;
+        } catch (error) {
+          errorEl.textContent = error.message;
+          errorEl.hidden = false;
+        }
+      });
+
+      (async () => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        try {
+          const response = await fetch('/api/users/me', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!response.ok) {
+            localStorage.removeItem('token');
+            return;
+          }
+          const user = await response.json();
+          window.location.replace(ROUTES[user.role] || '/dashboard');
+        } catch (_) {
+          localStorage.removeItem('token');
+        }
+      })();
+    </script>
+    {% endblock %}
+  </body>
+</html>

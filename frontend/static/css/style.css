@@ -412,3 +412,401 @@ body {
   }
 }
 
+/* Login page - 1440×1000 design, centered and responsive */
+.login-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.login-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 1440px;
+  padding: 30px 48px 0;
+}
+
+.login-header .logo-container {
+  text-decoration: none;
+}
+
+.login-header .logo-icon {
+  display: block;
+}
+
+.login-header .logo-text {
+  display: inline;
+}
+
+.login-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 1440px;
+  padding: 99px 20px 80px;
+}
+
+.login-title {
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 42px;
+  line-height: 59px;
+  color: var(--text-white);
+  text-align: center;
+}
+
+.login-subtitle {
+  margin-top: 7px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.login-panel {
+  display: grid;
+  grid-template-columns: 391px minmax(0, 1fr);
+  width: 100%;
+  max-width: 1120px;
+  min-height: 401px;
+  margin-top: 87px;
+  padding: 40px 40px 50px;
+  border: 2px solid var(--border-color);
+  border-radius: 20px;
+}
+
+.login-social {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-panel-title {
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 31px;
+  color: var(--text-white);
+}
+
+.login-panel-hint {
+  margin-top: 16px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-muted);
+}
+
+.login-social-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 348px;
+  max-width: 100%;
+  margin-top: 36px;
+}
+
+.social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  height: 50px;
+  padding: 0 16px;
+  background: #12010A;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--text-white);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+  transition: border-color 0.3s ease, background-color 0.3s ease;
+}
+
+.social-btn:hover {
+  background: #1A0210;
+  border-color: var(--text-pink);
+}
+
+.social-btn:focus-visible {
+  outline: 2px solid var(--text-pink);
+  outline-offset: 2px;
+}
+
+.social-icon {
+  flex-shrink: 0;
+}
+
+.login-note {
+  margin-top: auto;
+  margin-bottom: 16px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-muted);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  padding-left: 44px;
+  border-left: 1px solid #472D3A;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-form .form-field:first-of-type {
+  margin-top: 26px;
+}
+
+.login-form .form-field + .form-field {
+  margin-top: 19px;
+}
+
+.form-label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-muted);
+}
+
+.form-input {
+  width: 100%;
+  height: 50px;
+  margin-top: 8px;
+  padding: 0 20px;
+  background: #12010A;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-white);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.form-input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--text-pink);
+  box-shadow: 0 0 0 1px var(--text-pink);
+}
+
+.password-wrap {
+  position: relative;
+}
+
+.password-wrap .form-input {
+  padding-right: 54px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-white);
+  opacity: 0.5;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  opacity: 1;
+}
+
+.form-error {
+  margin-top: 10px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-pink);
+}
+
+.login-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: auto;
+}
+
+.forgot-link {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-pink);
+  text-decoration: none;
+}
+
+.forgot-link:hover {
+  text-decoration: underline;
+}
+
+.auth-submit {
+  flex-shrink: 0;
+  width: 240px;
+}
+
+.login-register {
+  margin-top: 63px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-pink);
+  text-align: center;
+}
+
+.login-register a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.login-register a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 1024px) {
+  .login-header {
+    padding: 24px 24px 0;
+  }
+
+  .login-main {
+    padding: 64px 20px 64px;
+  }
+
+  .login-panel {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    margin-top: 56px;
+    padding: 32px;
+  }
+
+  .login-social-buttons {
+    width: 100%;
+  }
+
+  .login-note {
+    margin-top: 32px;
+    margin-bottom: 0;
+  }
+
+  .login-form {
+    margin-top: 32px;
+    padding-top: 32px;
+    padding-left: 0;
+    border-top: 1px solid #472D3A;
+    border-left: none;
+  }
+
+  .login-actions {
+    margin-top: 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  .login-header {
+    padding: 20px 20px 0;
+  }
+
+  .login-main {
+    padding: 56px 16px 48px;
+  }
+
+  .login-title {
+    font-size: 32px;
+    line-height: 42px;
+  }
+
+  .login-subtitle {
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .login-panel {
+    margin-top: 40px;
+    padding: 24px 20px;
+    border-radius: 16px;
+  }
+
+  .login-panel-title {
+    font-size: 20px;
+    line-height: 28px;
+  }
+
+  .login-social-buttons {
+    gap: 14px;
+    margin-top: 24px;
+  }
+
+  .social-btn {
+    height: 46px;
+  }
+
+  .login-form {
+    margin-top: 24px;
+    padding-top: 24px;
+  }
+
+  .login-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .auth-submit {
+    width: 100%;
+  }
+
+  .forgot-link {
+    text-align: center;
+  }
+
+  .login-register {
+    margin-top: 40px;
+  }
+}
+
