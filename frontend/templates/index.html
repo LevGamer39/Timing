@@ -6,6 +6,10 @@
     {% block head %}
     {{super()}}
     <meta name="description" content="Вектор — учёба, задачи и помощь ИИ в одном пространстве">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700&amp;display=swap" rel="stylesheet">
+    <title>Вектор — твой день, твоя учёба</title>
     {% endblock %}
   </head>
   <body>
@@ -14,7 +18,7 @@
       <div class="main-wrapper">
         <header class="header">
           <div class="logo-container">
-            <svg class="logo-icon" width="35" height="26.53" viewBox="0 0 35 26.53">
+            <svg class="logo-icon" width="35" height="26.53" viewBox="0 0 35 26.53" aria-hidden="true">
               <rect width="35" height="26.53" fill="#F8F7FF"/>
             </svg>
             <span class="logo-text">ВЕКТОР</span>
@@ -24,7 +28,7 @@
 
         <section class="hero">
           <h1 class="hero-title">Твой день. Твой Вектор.</h1>
-          <p class="hero-subtitle">Учёба, задачи и помощь ИИ — в одном пространстве.</p>
+          <p class="hero-subtitle">Учёба, задачи и помощь ИИ — в одном понятном пространстве.</p>
 
           <div class="hero-actions">
             <a href="/register" class="btn btn-primary">Создать аккаунт</a>
@@ -33,42 +37,26 @@
         </section>
 
         <section class="dashboard-preview">
-          <div class="preview-header">
-            <span class="preview-title">ТВОЙ УЧЕБНЫЙ ДЕНЬ</span>
-            <h3 class="preview-subtitle">Всё важное — рядом</h3>
-          </div>
+          <span class="preview-title">ТВОЙ УЧЕБНЫЙ ДЕНЬ</span>
+          <h3 class="preview-subtitle">Всё важное — рядом</h3>
 
-          <div class="preview-cards">
-            <div class="preview-card" style="top: 562px; left: 202px;">
-              <span class="card-label">Расписание</span>
-              <div class="card-content">
-                <div class="card-main-text">Алгебра · 09:30</div>
-                <div class="card-subtext">Кабинет 204</div>
-              </div>
-            </div>
-
-            <div class="preview-card" style="top: 643px; left: 202px;">
-              <span class="card-label">Домашние задания</span>
-              <div class="card-content">
-                <div class="card-main-text">История · презентация</div>
-                <div class="card-subtext">Сегодня, до 15:00</div>
-              </div>
-            </div>
-
-            <div class="preview-card" style="top: 643px; left: 202px;">
-              <span class="card-label">Вектор ИИ</span>
-              <div class="card-content">
-                <div class="card-main-text">Понятно с первого шага</div>
-                <div class="card-subtext">Поможет разобраться в теме</div>
-              </div>
+          <div class="preview-lesson">
+            <span class="lesson-time">09:30</span>
+            <div class="lesson-info">
+              <div class="lesson-subject">Алгебра</div>
+              <div class="lesson-subtext">Квадратные уравнения</div>
             </div>
           </div>
+
+          <hr class="preview-divider">
+          <a href="/register" class="preview-ai-link">Вектор ИИ поможет разобраться →</a>
         </section>
-        <p class="hero-tagline">Вектор · учёба в одном месте</p>
-      </div>
-  </div>
-  <div class="gradient-overlay"></div>
 
-  {% endblock %}
-</body>
+        <p class="hero-tagline">Ученикам · учителям · родителям</p>
+      </div>
+    </div>
+    <div class="gradient-overlay"></div>
+
+    {% endblock %}
+  </body>
 </html>

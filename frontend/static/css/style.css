@@ -39,6 +39,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 100%;
 }
 
 /* Gradient overlay (1320px, 980px at 118.41%, 119.19%) */
@@ -54,15 +55,15 @@ body {
 
 .header {
   position: relative;
-  width: 1440px;
-  height: 1000px;
+  width: 100%;
+  max-width: 1440px;
+  height: 120px;
   left: 0;
   top: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 30px 48px;
-  height: 120px;
 }
 
 /* Logo container */
@@ -183,90 +184,98 @@ body {
 }
 
 .dashboard-preview {
-  border: 2px solid #53263F;
-  border-radius: 18px;
-  padding: 24px;
-}
-
-.preview-header {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 24px;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 32px 40px 36px;
+  border: 2px solid var(--border-color);
+  border-radius: 18px;
 }
 
-/* Preview title "ТВОЙ УЧЕБНЫЙ ДЕНЬ" (123×15 at 202px left, 562px top) */
+/* Preview title "ТВОЙ УЧЕБНЫЙ ДЕНЬ" */
 .preview-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-style: normal;
   font-weight: 600;
   font-size: 11px;
   line-height: 15px;
-  color: #FFA5D9;
+  color: var(--text-pink);
 }
 
-/* Preview subtitle "Всё важное — рядом" (283×39 at 202px left, 589px top) */
+/* Preview subtitle "Всё важное — рядом" */
 .preview-subtitle {
+  margin-top: 8px;
   font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
   font-style: normal;
   font-weight: 700;
   font-size: 28px;
   line-height: 39px;
-  color: #F8F7FF;
+  color: var(--text-white);
 }
 
-/* Preview cards container */
-.preview-cards {
+/* Next lesson row */
+.preview-lesson {
   display: flex;
-  gap: 24px;
+  align-items: flex-start;
+  gap: 46px;
+  margin-top: 28px;
 }
 
-/* Individual card (336×119) */
-.preview-card {
-  box-sizing: border-box;
-  width: 336px;
-  height: 119px;
-  background-color: #12010A;
-  border: 1px solid #53263F;
-  border-radius: 18px;
+.lesson-time {
+  flex-shrink: 0;
+  width: 84px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 33px;
+  color: var(--text-pink);
+}
+
+.lesson-info {
   display: flex;
   flex-direction: column;
-  padding: 16px;
 }
 
-.card-label {
+.lesson-subject {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-style: normal;
   font-weight: 600;
-  font-size: 12px;
-  line-height: 17px;
-  color: #FFA5D9;
-  margin-bottom: 8px;
+  font-size: 24px;
+  line-height: 33px;
+  color: var(--text-white);
 }
 
-.card-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.card-main-text {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-style: normal;
-  font-weight: 600;
-  font-size: 16px;
-  line-height: 22px;
-  color: #F8F7FF;
-}
-
-.card-subtext {
+.lesson-subtext {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-style: normal;
   font-weight: 400;
-  font-size: 12px;
-  line-height: 17px;
-  color: #C2A6B7;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--text-muted);
+}
+
+.preview-divider {
+  margin: 28px 0 0;
+  border: 0;
+  border-top: 1px solid #472D3A;
+}
+
+.preview-ai-link {
+  margin-top: 18px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--text-pink);
+  text-decoration: none;
+}
+
+.preview-ai-link:hover {
+  text-decoration: underline;
 }
 
 /* Responsive approximations for different screen sizes */
@@ -344,10 +353,6 @@ body {
     padding: 60px 20px;
   }
 
-  .preview-header {
-    margin-bottom: 24px;
-  }
-
   .preview-title {
     font-size: 9px;
   }
@@ -355,24 +360,6 @@ body {
   .preview-subtitle {
     font-size: 24px;
     line-height: 32px;
-  }
-
-  .preview-cards {
-    flex-wrap: wrap;
-  }
-
-  .preview-card {
-    width: calc(50% - 12px);
-    height: auto;
-  }
-
-  .card-main-text {
-    font-size: 14px;
-    line-height: 18px;
-  }
-
-  .card-subtext {
-    font-size: 10px;
   }
 }
 
@@ -396,19 +383,6 @@ body {
   .preview-subtitle {
     font-size: 20px;
     line-height: 28px;
-  }
-
-  .preview-cards {
-    flex-direction: column;
-  }
-
-  .preview-card {
-    width: 100%;
-  }
-
-  .logo-icon,
-  .logo-text {
-    display: none;
   }
 }
 
@@ -564,6 +538,18 @@ body {
   font-size: 12px;
   line-height: 17px;
   color: var(--text-muted);
+}
+
+/* "или по электронной почте" — only shown in the mobile layout */
+.login-divider {
+  display: none;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--text-muted);
+  text-align: center;
 }
 
 .login-form {
@@ -746,67 +732,236 @@ body {
   }
 }
 
+/* Mobile 390×844: landing and login */
 @media (max-width: 640px) {
+  .main-container {
+    width: 100%;
+    height: auto;
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  .main-wrapper {
+    min-height: 100vh;
+    padding: 35px 20px 76px;
+  }
+
+  /* Centered logo, the help link is not part of the mobile design */
+  .header {
+    width: 100%;
+    height: auto;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .header .help-link,
+  .login-header .help-link {
+    display: none;
+  }
+
+  .logo-container {
+    gap: 13px;
+  }
+
+  .logo-icon {
+    width: 34px;
+    height: 25.77px;
+  }
+
+  .logo-text {
+    font-size: 23px;
+    line-height: 32px;
+  }
+
+  .hero {
+    width: 100%;
+    padding: 86px 0 0;
+  }
+
+  .hero-title {
+    margin-bottom: 0;
+    font-size: 29px;
+    line-height: 41px;
+  }
+
+  .hero-subtitle {
+    max-width: 212px;
+    margin: 19px auto 0;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .hero-actions {
+    width: 100%;
+    margin: 44px 0 0;
+    gap: 22px;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 0;
+  }
+
+  .btn-primary {
+    width: 100%;
+    max-width: 342px;
+  }
+
+  .btn-secondary {
+    font-size: 12px;
+    line-height: 17px;
+  }
+
+  .dashboard-preview {
+    width: 100%;
+    max-width: 342px;
+    margin: 56px auto 0;
+    padding: 20px;
+    border-radius: 18px;
+  }
+
+  .preview-title {
+    font-size: 11px;
+    line-height: 15px;
+  }
+
+  .preview-subtitle {
+    margin-top: 22px;
+    font-size: 22px;
+    line-height: 31px;
+  }
+
+  .preview-lesson {
+    gap: 31px;
+    margin-top: 30px;
+  }
+
+  .lesson-time {
+    width: 44px;
+    font-size: 15px;
+    line-height: 21px;
+  }
+
+  .lesson-subject {
+    font-size: 17px;
+    line-height: 24px;
+  }
+
+  .lesson-subtext {
+    font-size: 12px;
+    line-height: 17px;
+  }
+
+  .preview-divider {
+    margin-top: 23px;
+  }
+
+  .preview-ai-link {
+    margin-top: 16px;
+    font-size: 12px;
+    line-height: 17px;
+  }
+
+  .hero-tagline {
+    margin-top: 75px;
+    font-size: 11px;
+    line-height: 15px;
+  }
+
+  /* Login */
   .login-header {
-    padding: 20px 20px 0;
+    padding: 35px 20px 0;
+    justify-content: center;
   }
 
   .login-main {
-    padding: 56px 16px 48px;
+    padding: 54px 20px 103px;
   }
 
   .login-title {
-    font-size: 32px;
-    line-height: 42px;
+    font-size: 28px;
+    line-height: 39px;
   }
 
   .login-subtitle {
-    margin-top: 8px;
-    font-size: 14px;
-    line-height: 20px;
+    margin-top: 9px;
+    font-size: 12px;
+    line-height: 17px;
   }
 
   .login-panel {
-    margin-top: 40px;
-    padding: 24px 20px;
-    border-radius: 16px;
+    display: block;
+    width: 100%;
+    max-width: 342px;
+    min-height: 0;
+    margin: 72px auto 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
   }
 
-  .login-panel-title {
-    font-size: 20px;
-    line-height: 28px;
+  .login-panel-title,
+  .login-panel-hint,
+  .login-note {
+    display: none;
   }
 
   .login-social-buttons {
-    gap: 14px;
-    margin-top: 24px;
+    flex-direction: row;
+    gap: 12px;
+    width: 100%;
+    margin-top: 0;
   }
 
   .social-btn {
+    flex: 1;
+    min-width: 0;
     height: 46px;
+    padding: 0;
+  }
+
+  .login-divider {
+    display: block;
+    margin-top: 29px;
   }
 
   .login-form {
+    margin-top: 29px;
+    padding: 0;
+    border: 0;
+  }
+
+  .login-form .form-field:first-of-type {
+    margin-top: 0;
+  }
+
+  .login-form .form-field + .form-field {
     margin-top: 24px;
-    padding-top: 24px;
+  }
+
+  .form-input {
+    font-size: 12px;
   }
 
   .login-actions {
-    flex-direction: column-reverse;
+    flex-direction: column;
     align-items: stretch;
-    gap: 16px;
+    gap: 26px;
+    margin-top: 17px;
+  }
+
+  .forgot-link {
+    text-align: right;
   }
 
   .auth-submit {
     width: 100%;
   }
 
-  .forgot-link {
-    text-align: center;
-  }
-
   .login-register {
-    margin-top: 40px;
+    margin-top: 63px;
+    font-size: 12px;
+    line-height: 17px;
   }
 }
 
