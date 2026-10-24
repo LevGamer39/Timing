@@ -9,6 +9,12 @@
   --border-color: #53263F;
   --gradient-start: #6B034B;
   --gradient-end: #B70B8C;
+  --background-gradient-start: #FF006C;
+  --background-gradient-end: #000;
+  --bg-secondary: #12010A;
+  --hover-bg-dark: #1A0210;
+  --border-dark: #472D3A;
+  --shadow-pink: #8B0464;
 }
 
 * {
@@ -49,7 +55,7 @@ body {
   height: 100vh;
   right: 0;
   top: 0;
-  background: radial-gradient(84.18% 107.63% at 118.41% 119.19%, #FF006C 0%, rgba(0, 0, 0, 0) 100%);
+  background: radial-gradient(84.18% 107.63% at 118.41% 119.19%, var(--background-gradient-start) 0%, var(--background-gradient-end) 100%);
   z-index: -999;
 }
 
@@ -77,7 +83,7 @@ body {
 .logo-icon {
   width: 35px;
   height: 26.53px;
-  background-color: #F8F7FF;
+  background-color: var(--text-white);
   opacity: 0.8;
 }
 
@@ -88,7 +94,7 @@ body {
   font-weight: 600;
   font-size: 24px;
   line-height: 34px;
-  color: #F8F7FF;
+  color: var(--text-white);
   opacity: 0.8;
 }
 
@@ -99,7 +105,7 @@ body {
   font-weight: 400;
   font-size: 12px;
   line-height: 17px;
-  color: #C2A6B7;
+  color: var(--text-muted);
   text-decoration: none;
 }
 
@@ -115,7 +121,7 @@ body {
   font-weight: 700;
   font-size: 56px;
   line-height: 78px;
-  color: #F8F7FF;
+  color: var(--text-white);
   margin-bottom: 20px;
 }
 
@@ -126,7 +132,7 @@ body {
   font-weight: 500;
   font-size: 18px;
   line-height: 25px;
-  color: #C2A6B7;
+  color: var(--text-muted);
   margin-bottom: 60px;
 }
 
@@ -154,10 +160,10 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(0deg, #000000, #000000), radial-gradient(50% 50% at 50% 50%, #6B034B 0%, #B70B8C 100%);
-  border: 1px solid #732B5A;
-  box-shadow: inset 0px -5px 4px #8B0464, inset 0px 2px 4px rgba(255, 255, 255, 0.1);
-  color: #F8F7FF;
+  background: linear-gradient(0deg, var(--bg-dark), var(--bg-dark)), radial-gradient(50% 50% at 50% 50%, var(--gradient-start) 0%, var(--gradient-end) 100%);
+  border: 1px solid var(--border-color);
+  box-shadow: inset 0px -5px 4px var(--shadow-pink), inset 0px 2px 4px rgba(255, 255, 255, 0.1);
+  color: var(--text-white);
   width: 360px;
   height: 50px;
 }
@@ -167,7 +173,7 @@ body {
 }
 
 .btn-secondary {
-  color: #FFA5D9;
+  color: var(--text-pink);
   font-weight: 500;
   font-size: 13px;
   line-height: 18px;
@@ -179,7 +185,7 @@ body {
   font-weight: 500;
   font-size: 12px;
   line-height: 17px;
-  color: #C2A6B7;
+  color: var(--text-muted);
   margin-top: 125px;
 }
 
@@ -260,7 +266,7 @@ body {
 .preview-divider {
   margin: 28px 0 0;
   border: 0;
-  border-top: 1px solid #472D3A;
+  border-top: 1px solid var(--border-dark);
 }
 
 .preview-ai-link {
@@ -276,6 +282,81 @@ body {
 
 .preview-ai-link:hover {
   text-decoration: underline;
+}
+
+/* Preview title "ТВОЙ УЧЕБНЫЙ ДЕНЬ" (123×15 at 202px left, 562px top) */
+.preview-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--text-pink);
+}
+
+/* Preview subtitle "Всё важное — рядом" (283×39 at 202px left, 589px top) */
+.preview-subtitle {
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 39px;
+  color: var(--text-white);
+}
+
+/* Preview cards container */
+.preview-cards {
+  display: flex;
+  gap: 24px;
+  margin-top: 20px;
+}
+
+/* Individual card (336×119) */
+.preview-card {
+  box-sizing: border-box;
+  width: 336px;
+  height: 119px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.card-label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-pink);
+  margin-bottom: 8px;
+}
+
+.card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-main-text {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text-white);
+}
+
+.card-subtext {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-muted);
 }
 
 /* Responsive approximations for different screen sizes */
@@ -360,6 +441,10 @@ body {
   .preview-subtitle {
     font-size: 24px;
     line-height: 32px;
+  }
+
+  .preview-card:not(:nth-child(1)) {
+    display: none;
   }
 }
 
@@ -502,7 +587,7 @@ body {
   width: 100%;
   height: 50px;
   padding: 0 16px;
-  background: #12010A;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   color: var(--text-white);
@@ -516,7 +601,7 @@ body {
 }
 
 .social-btn:hover {
-  background: #1A0210;
+  background: var(--hover-bg-dark);
   border-color: var(--text-pink);
 }
 
@@ -556,7 +641,7 @@ body {
   display: flex;
   flex-direction: column;
   padding-left: 44px;
-  border-left: 1px solid #472D3A;
+  border-left: 1px solid var(--border-dark);
 }
 
 .form-field {
@@ -586,7 +671,7 @@ body {
   height: 50px;
   margin-top: 8px;
   padding: 0 20px;
-  background: #12010A;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 10px;
   color: var(--text-white);
@@ -723,7 +808,7 @@ body {
     margin-top: 32px;
     padding-top: 32px;
     padding-left: 0;
-    border-top: 1px solid #472D3A;
+    border-top: 1px solid var(--border-dark);
     border-left: none;
   }
 
