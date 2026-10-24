@@ -52,6 +52,39 @@ VectorVK/
 │   ├── nginx.conf.template      # Шаблон: домен подставляется через envsubst
 │   ├── docker-entrypoint.sh     # Подстановка APP_DOMAIN + самоподписанный cert
 │   └── Dockerfile               # nginx:alpine + openssl
+├── bot/                         # MAX-бот (переезд из плоского в пакетную структуру)
+│   ├── bot.py                   # Точка входа: Bot + Dispatcher, polling или webhook
+│   ├── config.py                # Настройки из общего .env
+│   ├── core/                    # Общие зависимости
+│   │   ├── context.py           # AppContext, общий для роутеров
+│   │   ├── filters.py           # Фильтр callback-payload
+│   │   ├── security.py          # HMAC-хеш и подпись запросов
+│   │   ├── sessions.py          # JWT в памяти
+│   │   ├── state.py             # JSON-состояние
+│   │   └── ui.py                # Ответы, автор события, проверка привязки
+│   ├── services/                # Бизнес-логика бота
+│   │   ├── backend.py           # HTTP-клиент к бэкенду
+│   │   ├── ai.py                # Qwen через Ollama + regex-fallback
+│   │   ├── ai_chat.py           # ИИ-чат
+│   │   ├── homework.py          # Парсер ДЗ в чатах класса
+│   │   ├── reminders.py         # Напоминания и недельная сводка
+│   │   ├── tasks.py             # Создание заданий
+│   │   └── views.py             # Готовые ответы для команд и меню
+│   ├── routers/                 # Обработчики команд и кнопок
+│   │   ├── ai_chat.py           # /ai
+│   │   ├── common.py            # /start, /help, /cancel, события бота
+│   │   ├── grades.py            # /grades, /summary
+│   │   ├── homework.py          # /hw и кнопки карточек
+│   │   ├── menu.py              # callback-кнопки меню
+│   │   ├── messages.py          # Свободный текст и голосовые
+│   │   ├── schedule.py          # /schedule
+│   │   └── tasks.py             # /today, /add, /done, кнопки заданий
+│   ├── keyboards/               # Inline-клавиатуры maxapi
+│   ├── texts/                   # Тексты и форматирование
+│   ├── data/                    # runtime-состояние (volume)
+│   ├── dockerfile
+│   └── requirements.txt
+│
 ├── docker-compose.yml           # backend, ollama, nginx, certbot, db
 ├── .env.example
 └── AGENTS.md
@@ -153,8 +186,8 @@ def complete_task(task_id: int, db: Session = Depends(get_db),
   `parent_link_tokens.code` → `VARCHAR(8)`) применяются в
   `_apply_schema_updates()` при старте; всё остальное по-прежнему требует
   ручного `ALTER TABLE` — предупреди об этом явно.
-- `create_tables()` объявлена в `database.py` дважды; используется вторая
-  (с `_ensure_admin_user()`). Не добавляй третью — сначала почини дубликат.
+- `create_tables()` объявлена в `database.py` один раз (с `_ensure_admin_user()`).
+  Не добавляй вторую — сначала почини существующую.
 
 ### 5. Конфигурация
 
