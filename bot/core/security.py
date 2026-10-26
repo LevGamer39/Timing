@@ -30,9 +30,10 @@ def _salt() -> bytes:
 def hash_user_id(max_user_id: int | str) -> str:
     """Стабильный необратимый идентификатор MAX-пользователя."""
 
+    normalized = str(int(str(max_user_id).strip())) # " 001 " -> "1"
     return hmac.new(
         _salt(),
-        str(max_user_id).encode(),
+        f"max:{normalized}".encode(), # если в будущем будет интеграция не только с MAX
         hashlib.sha256,
     ).hexdigest()
 

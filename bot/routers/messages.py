@@ -16,8 +16,16 @@ from core.ui import (
 )
 from keyboards import main_menu
 from services.ai_chat import answer as ai_answer
+from services.backend import BackendError
 from services.tasks import create_from_text
 from texts import HELP_TEXT
+from texts.messages import (
+    REGISTER_CHECK_FAILED_TEXT,
+    REGISTER_DONE_TEXT,
+    REGISTER_INVITE_TEXT,
+    REGISTER_LOGIN_EXISTS_TEXT,
+    REGISTER_LOGIN_TEXT,
+)
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -46,11 +54,41 @@ def build_router(ctx: AppContext) -> Router:
             )
             return
 
+        # Регистрация идёт до require_token: у нового пользователя JWT ещё
+        # нет, а логин и код приглашения нужно собрать именно у него.
+        user = event_user(event)
+        pending = ctx.registration.get(user.user_id) if user else None
+        if pending is not None:
+            answer = text.strip()
+            if not answer:
+                await respond(
+                    event,
+                    REGISTER_LOGIN_TEXT
+                    if "login" not in pending
+                    else REGISTER_INVITE_TEXT,
+                )
+                return
+            if "login" not in pending:
+                try:
+                    available = await ctx.backend.login_available(answer)
+                except BackendError:
+                    await respond(event, REGISTER_CHECK_FAILED_TEXT)
+                    return
+                if not available:
+                    await respond(event, REGISTER_LOGIN_EXISTS_TEXT)
+                    return
+                pending["login"] = answer
+                await respond(event, REGISTER_INVITE_TEXT)
+                return
+            pending["invite_code"] = answer
+            ctx.registration.pop(user.user_id, None)
+            await respond(event, REGISTER_DONE_TEXT)
+            return
+
         token = await require_token(ctx, event)
         if token is None:
             return
 
-        user = event_user(event)
         if user is not None and user.user_id in ctx.ai_mode:
             await ai_answer(ctx, event, token, text)
             return

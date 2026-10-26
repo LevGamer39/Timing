@@ -5,6 +5,7 @@
 и отправку письма с OTP.
 """
 import pytest
+from fastapi import HTTPException
 
 from app.dependencies import get_current_user, require_role
 from app.models import UserRole
@@ -13,6 +14,7 @@ from app.routers.users import (
     RegisterRequest,
     create_access_token,
     hash_password,
+    login_available,
     verify_password,
 )
 
@@ -116,6 +118,25 @@ def test_registration_rejects_admin_role():
             email="a@b.ru", password="longenough",
             first_name="A", last_name="B", role=UserRole.admin,
         )
+
+
+# ---------------------------------------------------------------------------
+# Проверка свободного логина (бот, шаг «Придумайте логин»)
+# ---------------------------------------------------------------------------
+
+
+def test_login_check_reports_taken_and_free(db, make_user):
+    make_user("busy-login@test.local", UserRole.student, login="Busy")
+    # Регистр не важен: иначе обходятся два аккаунта, различающихся им.
+    assert login_available("busy", db) == {"available": False}
+    assert login_available("BUSY", db) == {"available": False}
+    assert login_available("free", db) == {"available": True}
+
+
+def test_login_check_rejects_blank_login(db):
+    with pytest.raises(HTTPException) as error:
+        login_available("   ", db)
+    assert error.value.status_code == 400
 
 
 # ---------------------------------------------------------------------------

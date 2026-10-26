@@ -123,6 +123,14 @@ class Backend:
             headers={"X-Bot-Signature": sign_request(hashed_user_id)},
         )
 
+    async def login_available(self, login: str) -> bool:
+        """Свободен ли логин при регистрации (регистр не важен)."""
+
+        payload = await self._request(
+            "GET", "/api/users/login-available", params={"login": login}
+        )
+        return bool(payload.get("available"))
+
     async def list_tasks(
         self, token: str, status: str | None = None
     ) -> list[dict[str, Any]]:

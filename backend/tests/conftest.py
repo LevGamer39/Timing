@@ -207,6 +207,9 @@ def make_user(db):
     def _make(email: str, role: UserRole, **kwargs) -> User:
         user = User(
             email=email,
+            # Колонка users.login объявлена NOT NULL; фабрика подставляет
+            # email, чтобы старые тесты не падали на ограничении.
+            login=kwargs.pop("login", email),
             password_hash=kwargs.pop("password_hash", "x"),
             first_name=kwargs.pop("first_name", "Ivan"),
             last_name=kwargs.pop("last_name", "Ivanov"),

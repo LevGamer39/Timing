@@ -13,7 +13,7 @@ from maxapi.types.updates.message_edited import MessageEdited
 
 from core.context import AppContext
 from core.ui import event_user, get_token, respond, role_of
-from keyboards import main_menu
+from keyboards import main_menu, register_keyboard
 from texts import HELP_TEXT, UNLINKED_TEXT, esc
 
 
@@ -35,7 +35,11 @@ def build_router(ctx: AppContext) -> Router:
         await ctx.bot.send_message(
             chat_id=event.chat_id,
             text=text,
-            attachments=[main_menu(ctx.sessions.role(user_id))],
+            attachments=[
+                main_menu(ctx.sessions.role(user_id))
+                if token
+                else register_keyboard()
+            ],
             format=Format.HTML,
         )
         await ctx.store.save()
@@ -76,7 +80,13 @@ def build_router(ctx: AppContext) -> Router:
         if token:
             sender = event_user(event)
             text = f"Привет, {esc(sender.first_name)}! 👋\nЯ помогу не забыть про домашку."
-        await respond(event, text, keyboard=main_menu(role_of(ctx, event)))
+        await respond(
+            event,
+            text,
+            keyboard=(
+                main_menu(role_of(ctx, event)) if token else register_keyboard()
+            ),
+        )
         await ctx.store.save()
 
     @router.message_created(Command("help"))
@@ -88,6 +98,7 @@ def build_router(ctx: AppContext) -> Router:
         user = event_user(event)
         if user is not None:
             ctx.ai_mode.discard(user.user_id)
+            ctx.registration.pop(user.user_id, None)
         await respond(
             event,
             "Вышли из ИИ-чата.",

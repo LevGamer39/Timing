@@ -11,6 +11,7 @@ from core.ui import event_user, require_token, respond, role_of
 from keyboards import main_menu
 from services import views
 from texts import HELP_TEXT
+from texts.messages import REGISTER_LOGIN_TEXT
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -21,6 +22,19 @@ def build_router(ctx: AppContext) -> Router:
         action = (event.callback.payload or "")[5:]
         user = event_user(event)
 
+        if user is not None and action != "register":
+            ctx.registration.pop(user.user_id, None)
+
+        if action == "register":
+            if user is not None:
+                ctx.registration[user.user_id] = {}
+                # Пустой список вложений очищает клавиатуру: attachments=None
+                # в MAX означает «оставить вложения исходного сообщения»,
+                # поэтому кнопка «Зарегистрироваться» оставалась висеть.
+                await event.answer(
+                    new_text=REGISTER_LOGIN_TEXT, attachments=[]
+                )
+            return
         if action == "add":
             if user is not None:
                 # «Добавить» должно выходить из ИИ-чата, иначе следующий

@@ -70,6 +70,9 @@ def _ensure_admin_user() -> None:
         db.add(
             User(
                 email=config.ADMIN_EMAIL,
+                # Колонка login объявлена NOT NULL, а механизм логинов ещё
+                # не готов: до него админ входит по email.
+                login=config.ADMIN_EMAIL,
                 password_hash=_bootstrap_password_hash(),
                 first_name=config.ADMIN_FIRST_NAME,
                 last_name=config.ADMIN_LAST_NAME,

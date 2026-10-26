@@ -12,6 +12,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from jose import jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, field_validator
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import config
@@ -437,6 +438,9 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
     user = User(
         email=email,
+        # Заглушка до механизма логинов: колонка NOT NULL, а формат логина
+        # при обычной регистрации ещё не определён.
+        login=email,
         password_hash=hash_password(body.password),
         first_name=body.first_name,
         last_name=body.last_name,
@@ -467,6 +471,29 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     return {
         "message": "Registration successful. Check your email for verification code."
     }
+
+
+@router.get("/login-available")
+def login_available(login: str, db: Session = Depends(get_db)) -> dict[str, bool]:
+    """Свободен ли логин. Нужен боту на шаге придумывания логина.
+
+    Сравнение регистронезависимое: ``func.lower`` не даёт завести два
+    аккаунта, различающихся только регистром символов.
+    """
+    login = login.strip().lower()
+    if not login or len(login) > 255:
+        raise HTTPException(400, "Login must be 1-255 characters")
+
+    key = f"login-check:{login}"
+    if _is_rate_limited(key):
+        raise HTTPException(429, "Too many attempts. Try later.")
+    _record_attempt(key)
+
+    exists = (
+        db.query(User.id).filter(func.lower(User.login) == login).first()
+        is not None
+    )
+    return {"available": not exists}
 
 
 def _client_host(request: Request) -> str:

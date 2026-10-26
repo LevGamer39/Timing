@@ -63,9 +63,18 @@ def homework_keyboard(index: int) -> AttachmentButton:
     return builder.as_markup()
 
 
+def register_keyboard() -> AttachmentButton:
+    """Кнопки для регистрации"""
+
+    builder = InlineKeyboardBuilder()
+    builder.row(_button("Зарегистрироваться", "menu:register"))
+    return builder.as_markup()
+
+
 __all__ = [
     "main_menu",
     "tasks_keyboard",
     "task_actions",
     "homework_keyboard",
+    "register_keyboard",
 ]
