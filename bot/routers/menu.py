@@ -9,7 +9,7 @@ from core.context import AppContext
 from core.filters import PayloadPrefix
 from core.ui import event_user, require_token, respond, role_of
 from keyboards import main_menu
-from services import views
+from services import registration, views
 from texts import HELP_TEXT
 from texts.messages import REGISTER_LOGIN_TEXT
 
@@ -27,7 +27,7 @@ def build_router(ctx: AppContext) -> Router:
 
         if action == "register":
             if user is not None:
-                ctx.registration[user.user_id] = {}
+                registration.begin(ctx, user.user_id)
                 # Пустой список вложений очищает клавиатуру: attachments=None
                 # в MAX означает «оставить вложения исходного сообщения»,
                 # поэтому кнопка «Зарегистрироваться» оставалась висеть.

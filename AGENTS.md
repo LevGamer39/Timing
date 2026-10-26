@@ -64,6 +64,7 @@ VectorVK/
 │   │   └── ui.py                # Ответы, автор события, проверка привязки
 │   ├── services/                # Бизнес-логика бота
 │   │   ├── backend.py           # HTTP-клиент к бэкенду
+│   │   ├── registration.py      # Диалог регистрации (логин → код → имя)
 │   │   ├── ai.py                # Qwen через Ollama + regex-fallback
 │   │   ├── ai_chat.py           # ИИ-чат
 │   │   ├── homework.py          # Парсер ДЗ в чатах класса
@@ -73,6 +74,7 @@ VectorVK/
 │   ├── routers/                 # Обработчики команд и кнопок
 │   │   ├── ai_chat.py           # /ai
 │   │   ├── common.py            # /start, /help, /cancel, события бота
+│   │   ├── registration.py      # Кнопки подтверждения имени
 │   │   ├── grades.py            # /grades, /summary
 │   │   ├── homework.py          # /hw и кнопки карточек
 │   │   ├── menu.py              # callback-кнопки меню
@@ -148,6 +150,9 @@ parent_task = relationship("Task", back_populates="subtasks", remote_side="[Task
 
 - `User.tasks` и `User.grades` требуют `foreign_keys=`, потому что у `User`
   несколько путей к `Task`/`Grade`. Не добавляй связь, не указав `foreign_keys`.
+- `User.login` — идентификатор входа: у веб-аккаунта он равен email, у
+  аккаунта из MAX — придуманный логин. `email` и `password_hash` nullable:
+  аккаунт из бота создаётся без них и входит только по `max_user_id`.
 - `Task.subtasks` / `Task.parent_task` — рекурсивная связь через `parent_task_id`.
 - `Class.class_` и `Assignment.class_` используют подчёркивание, потому что
   `class` — зарезервированное слово Python.
@@ -183,7 +188,8 @@ def complete_task(task_id: int, db: Session = Depends(get_db),
 - **Фреймворка миграций в проекте нет.** `create_all()` создаёт только
   отсутствующие таблицы. Несколько идемпотентных DDL-правок
   (`notifications.attempts`, `users.avatar_url` → `TEXT`,
-  `parent_link_tokens.code` → `VARCHAR(8)`) применяются в
+  `parent_link_tokens.code` → `VARCHAR(8)`, `users.login` с бэкфиллом из
+  `email`, `email`/`password_hash` → nullable) применяются в
   `_apply_schema_updates()` при старте; всё остальное по-прежнему требует
   ручного `ALTER TABLE` — предупреди об этом явно.
 - `create_tables()` объявлена в `database.py` один раз (с `_ensure_admin_user()`).
@@ -312,7 +318,7 @@ localStorage.getItem('user')    // JSON: { id, role, first_name, ... }
 | 11 | Фреймворка миграций нет: `create_all()` не меняет созданные таблицы; часть колонок догоняется в `_apply_schema_updates()` | `backend/app/database.py` |
 | 12 | Планировщик рассчитан на один процесс uvicorn | `backend/app/routers/notifications.py` |
 | 13 | Свой SMTP невозможен: домен на `no-ip.com`, нет контроля над TXT- и PTR-записями | `docker-compose.yml`, DNS |
-| 14 | Привязка MAX не реализована: `link-max` никто не вызывает, бот всегда отдаёт «аккаунт не привязан» | `backend/app/routers/users.py`, `bot/core/sessions.py` |
+| 14 | Привязка существующего веб-аккаунта к MAX не реализована: `link-max` никто не вызывает. Новые пользователи регистрируются прямо в боте (`/api/users/auth/max-register`), а привязать аккаунт, созданный на сайте, нельзя | `backend/app/routers/users.py`, `bot/core/sessions.py` |
 
 Про 12: `docker-compose` запускает один `uvicorn`, поэтому джобы не
 дублируются. При нескольких воркерах каждый поднимет свой APScheduler —

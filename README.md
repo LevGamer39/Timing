@@ -415,12 +415,17 @@ nginx (через `envsubst` в `docker-entrypoint.sh`) и в CORS бэкенд�
 | `ENABLE_SCHEDULER` | `true` | Фоновые джобы (выключаются в тестах) |
 | `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` | — | OAuth Яндекса |
 | `YANDEX_LOGIN_CALLBACK` / `YANDEX_LINK_CALLBACK` | из `APP_URL` | Redirect URI Яндекса |
+| `MAX_BOT_TOKEN` | — | Токен MAX-бота; им же подписываются его запросы к API (`X-Bot-Signature`) |
+| `BOT_USER_ID_SALT` | из `MAX_BOT_TOKEN` | Соль хеширования MAX user_id. Смена соли инвалидирует привязки |
 
 ---
 
 ## Система авторизации
 
 - Регистрация → подтверждение email **6-значным кодом, 15 минут**
+- Регистрация из **MAX-бота**: логин + инвайт-код, без email и пароля.
+  Код класса делает пользователя учеником и зачисляет в класс, одноразовый
+  код из `invite_codes` — учителем
 - Учитель регистрируется **только по инвайт-коду** (16 символов, выдаёт админ).
   Код списывается при подтверждении email
 - JWT (`HS256`), время жизни 7 дней, хранится в `localStorage.token`

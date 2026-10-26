@@ -71,10 +71,20 @@ def register_keyboard() -> AttachmentButton:
     return builder.as_markup()
 
 
+def name_confirm_keyboard() -> AttachmentButton:
+    """Подтверждение имени из профиля MAX или ручная правка."""
+
+    builder = InlineKeyboardBuilder()
+    builder.row(_button("✅ Всё верно", "reg:name:ok"))
+    builder.row(_button("✏️ Изменить", "reg:name:edit"))
+    return builder.as_markup()
+
+
 __all__ = [
     "main_menu",
     "tasks_keyboard",
     "task_actions",
     "homework_keyboard",
     "register_keyboard",
+    "name_confirm_keyboard",
 ]

@@ -41,7 +41,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     login = Column(String(255), unique=True, nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=True, index=True)
-    password_hash = Column(String(255), nullable=False)
+    # NULL у аккаунтов, зарегистрированных из MAX: пароль не запрашивается,
+    # вход идёт по привязке max_user_id.
+    password_hash = Column(String(255), nullable=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     role = Column(SAEnum(UserRole), nullable=False)

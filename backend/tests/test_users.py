@@ -8,13 +8,16 @@ import pytest
 from fastapi import HTTPException
 
 from app.dependencies import get_current_user, require_role
-from app.models import UserRole
+from app.models import ClassMembership, User, UserRole
 from app.routers.users import (
+    MaxRegisterRequest,
     ProfileUpdateRequest,
     RegisterRequest,
     create_access_token,
     hash_password,
+    invite_code_info,
     login_available,
+    max_register,
     verify_password,
 )
 
@@ -137,6 +140,136 @@ def test_login_check_rejects_blank_login(db):
     with pytest.raises(HTTPException) as error:
         login_available("   ", db)
     assert error.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Регистрация из MAX-бота: инвайт-код и создание аккаунта
+# ---------------------------------------------------------------------------
+
+HASH = "a" * 64
+
+
+def _bot_signature(hashed: str) -> str:
+    import hashlib
+    import hmac
+
+    from app import config
+
+    return hmac.new(
+        config.MAX_BOT_TOKEN.encode(),
+        hashed.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _max_body(**overrides) -> MaxRegisterRequest:
+    payload = {
+        "max_user_id_hashed": HASH,
+        "login": "NewStudent",
+        "invite_code": "AAAA111111",
+        "first_name": "Иван",
+        "last_name": "Иванов",
+    }
+    payload.update(overrides)
+    return MaxRegisterRequest(**payload)
+
+
+def test_invite_code_knows_its_role(db, klass, invite_code):
+    """Бот должен понимать по коду, ученика или учителя он регистрирует."""
+    info = invite_code_info(klass.invite_code.lower(), db)
+    assert info.valid is True
+    assert info.role == UserRole.student
+    assert info.class_name == klass.name
+
+    teacher_info = invite_code_info(invite_code.code.lower(), db)
+    assert teacher_info.valid is True
+    assert teacher_info.role == UserRole.teacher
+    assert teacher_info.class_name is None
+
+    assert invite_code_info("NOPE", db).valid is False
+
+
+def test_max_register_creates_student_in_class(db, klass):
+    body = _max_body()
+    response = max_register(body, _bot_signature(HASH), db)
+
+    user = db.query(User).filter(User.login == "newstudent").first()
+    assert user is not None
+    assert user.role == UserRole.student
+    assert user.email is None
+    assert user.password_hash is None
+    assert user.max_user_id == HASH
+    assert user.is_active and user.is_verified
+    assert user.grade == klass.name
+
+    membership = (
+        db.query(ClassMembership)
+        .filter(ClassMembership.student_id == user.id)
+        .first()
+    )
+    assert membership is not None
+    assert membership.class_id == klass.id
+    assert response.role == UserRole.student
+
+
+def test_max_register_teacher_consumes_invite(db, invite_code):
+    body = _max_body(invite_code=invite_code.code, login="teacher-max")
+    response = max_register(body, _bot_signature(HASH), db)
+
+    user = db.query(User).filter(User.login == "teacher-max").first()
+    assert user is not None
+    assert user.role == UserRole.teacher
+    assert response.role == UserRole.teacher
+
+    db.refresh(invite_code)
+    assert invite_code.is_used is True
+    assert invite_code.used_by_id == user.id
+
+
+def test_max_register_is_idempotent(db, klass):
+    """Повторная отправка после потерянного ответа не должна застревать."""
+    body = _max_body()
+    signature = _bot_signature(HASH)
+    first = max_register(body, signature, db)
+    second = max_register(body, signature, db)
+
+    assert first.access_token
+    assert second.access_token
+    assert db.query(User).filter(User.login == "newstudent").count() == 1
+
+
+def test_max_register_rejects_busy_login(db, klass, make_user):
+    make_user("busy@test.local", UserRole.student, login="busy")
+    with pytest.raises(HTTPException) as error:
+        max_register(_max_body(login="BUSY"), _bot_signature(HASH), db)
+    assert error.value.status_code == 400
+
+
+def test_max_register_rejects_unknown_invite(db):
+    with pytest.raises(HTTPException) as error:
+        max_register(_max_body(invite_code="NOPE"), _bot_signature(HASH), db)
+    assert error.value.status_code == 400
+
+
+def test_max_register_requires_bot_signature(db):
+    with pytest.raises(HTTPException) as error:
+        max_register(_max_body(), "not-a-signature", db)
+    assert error.value.status_code == 403
+
+
+def test_max_register_normalizes_login():
+    body = _max_body(login="  NewStudent  ")
+    assert body.login == "newstudent"
+
+
+def test_max_register_rejects_login_with_spaces():
+    with pytest.raises(ValueError):
+        _max_body(login="Ivan Petrov")
+
+
+def test_passwordless_account_cannot_log_in_by_password():
+    """У аккаунта из MAX нет хеша: вход по паролю должен быть отказом, не 500."""
+    assert verify_password("anything", None) is False
 
 
 # ---------------------------------------------------------------------------

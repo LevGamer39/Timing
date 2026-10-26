@@ -48,6 +48,8 @@ os.environ.setdefault("SMTP_HOST", "")
 os.environ.setdefault("OLLAMA_URL", "http://localhost:11434")
 os.environ.setdefault("OLLAMA_MODEL", "qwen2.5:7b")
 os.environ.setdefault("APP_URL", "http://localhost:8000")
+# Подпись запросов бота (X-Bot-Signature) для /api/users/auth/max-*.
+os.environ.setdefault("MAX_BOT_TOKEN", "test-bot-token")
 os.environ.setdefault("DEBUG", "true")
 # Фоновые задачи срабатывали бы по таймеру во время прогона сьюта.
 os.environ.setdefault("ENABLE_SCHEDULER", "false")

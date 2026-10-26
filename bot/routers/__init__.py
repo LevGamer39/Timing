@@ -12,6 +12,7 @@ from routers import (
     homework,
     menu,
     messages,
+    registration,
     schedule,
     tasks,
 )
@@ -26,6 +27,7 @@ def include_routers(dp: Dispatcher, ctx: AppContext) -> None:
         schedule.build_router(ctx),
         ai_chat.build_router(ctx),
         homework.build_router(ctx),
+        registration.build_router(ctx),
         menu.build_router(ctx),
         messages.build_router(ctx),
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from core.security import hash_user_id, mask_token
 from core.state import StateStore
@@ -45,6 +46,23 @@ class SessionManager:
             return None
 
         token = str(payload["access_token"])
+        self.remember(max_user_id, token, payload)
+        logger.info(
+            "Сессия MAX user %s: role=%s token=%s",
+            max_user_id,
+            payload.get("role"),
+            mask_token(token),
+        )
+        return token
+
+    def remember(
+        self, max_user_id: int, token: str, payload: dict[str, Any]
+    ) -> None:
+        """Сохраняет JWT и данные профиля из ответа бэкенда.
+
+        Используется и при обычном входе по привязке, и сразу после
+        регистрации из бота: второй запрос ``/auth/max-link`` не нужен.
+        """
         previous = self._tokens.get(max_user_id)
         if previous:
             self._token_owners.pop(previous, None)
@@ -57,13 +75,6 @@ class SessionManager:
             last_name=payload.get("last_name"),
             linked=True,
         )
-        logger.info(
-            "Сессия MAX user %s: role=%s token=%s",
-            max_user_id,
-            payload.get("role"),
-            mask_token(token),
-        )
-        return token
 
     async def refresh(self, stale_token: str) -> str | None:
         """Меняет истёкший JWT и возвращает новый.

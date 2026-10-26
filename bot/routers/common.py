@@ -23,6 +23,8 @@ def build_router(ctx: AppContext) -> Router:
     @router.bot_started()
     async def bot_started(event: BotStarted) -> None:
         user_id = event.user.user_id
+        # Повторный вход начинает диалог регистрации с чистого листа.
+        ctx.registration.pop(user_id, None)
         ctx.store.upsert_user(
             user_id,
             chat_id=event.chat_id,
@@ -75,10 +77,13 @@ def build_router(ctx: AppContext) -> Router:
 
     @router.message_created(CommandStart())
     async def start(event: MessageCreated) -> None:
+        # /start — способ выйти из регистрации и начать заново.
+        sender = event_user(event)
+        if sender is not None:
+            ctx.registration.pop(sender.user_id, None)
         token = await get_token(ctx, event)
         text = UNLINKED_TEXT
         if token:
-            sender = event_user(event)
             text = f"Привет, {esc(sender.first_name)}! 👋\nЯ помогу не забыть про домашку."
         await respond(
             event,
@@ -101,7 +106,7 @@ def build_router(ctx: AppContext) -> Router:
             ctx.registration.pop(user.user_id, None)
         await respond(
             event,
-            "Вышли из ИИ-чата.",
+            "Вышли из текущего режима.",
             keyboard=main_menu(role_of(ctx, event)),
         )
 

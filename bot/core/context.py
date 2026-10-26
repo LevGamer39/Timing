@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from maxapi import Bot
 
@@ -23,4 +24,4 @@ class AppContext:
     parser: HomeworkParser
     ai_mode: set[int] = field(default_factory=set)
     notified_unlinked: set[int] = field(default_factory=set)
-    registration: dict[int, dict[str, str]] = field(default_factory=dict)
+    registration: dict[int, dict[str, Any]] = field(default_factory=dict)

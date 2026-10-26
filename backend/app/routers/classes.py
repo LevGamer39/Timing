@@ -46,7 +46,7 @@ class ClassResponse(BaseModel):
 class StudentResponse(BaseModel):
     id: int
     name: str
-    email: str
+    email: str | None
     grade: str | None
 
 
@@ -57,7 +57,7 @@ class ClassOption(BaseModel):
 class StudentProgressRow(BaseModel):
     student_id: int
     name: str
-    email: str
+    email: str | None
     status: TaskStatus | None
     score: float | None
     grade: float | None
@@ -88,7 +88,7 @@ class StudentAssignmentCell(BaseModel):
 class ClassStudentDetail(BaseModel):
     id: int
     name: str
-    email: str
+    email: str | None
     grade: str | None
     assignments: list[StudentAssignmentCell]
 

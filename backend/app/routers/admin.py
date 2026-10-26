@@ -40,7 +40,7 @@ class AdminTeacherResponse(BaseModel):
     id: int
     first_name: str
     last_name: str
-    email: str
+    email: str | None
     teacher_subject: str | None
     class_count: int
 
@@ -49,7 +49,7 @@ class AdminStudentResponse(BaseModel):
     id: int
     first_name: str
     last_name: str
-    email: str
+    email: str | None
     grade: str | None
     is_active: bool
     class_id: int | None

@@ -334,7 +334,7 @@ async def _job_send_pending_emails() -> None:
             user = (
                 db.query(User).filter(User.id == notification.user_id).first()
             )
-            if not user or not user.notify_email:
+            if not user or not user.notify_email or not user.email:
                 # Отправлять некуда — закрываем, чтобы очередь не копилась.
                 notification.is_sent = True
                 notification.sent_at = now
@@ -429,7 +429,7 @@ async def _job_check_overdue() -> None:
             )
 
             user = users.get(task.student_id)
-            if user and user.notify_email:
+            if user and user.notify_email and user.email:
                 try:
                     await asyncio.to_thread(
                         send_email,

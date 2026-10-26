@@ -123,6 +123,17 @@ def _apply_schema_updates() -> None:
         # Код привязки родителя стал восьмизначным.
         "ALTER TABLE parent_link_tokens "
         "ALTER COLUMN code TYPE VARCHAR(8)",
+        # Логин появился ради регистрации из MAX-бота. На старой базе
+        # колонки нет, а модель объявляет её NOT NULL: без бэкфилла любой
+        # запрос к users падал бы с "column users.login does not exist".
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS login VARCHAR(255)",
+        "UPDATE users SET login = COALESCE(email, 'user-' || id) "
+        "WHERE login IS NULL",
+        "ALTER TABLE users ALTER COLUMN login SET NOT NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_login ON users (login)",
+        # Аккаунт из бота создаётся без email и без пароля.
+        "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
+        "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL",
     )
     with engine.begin() as connection:
         for statement in statements:

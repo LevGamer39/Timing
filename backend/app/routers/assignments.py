@@ -108,7 +108,7 @@ class AssignmentResponse(BaseModel):
 class AssignmentStudentProgress(BaseModel):
     student_id: int
     student_name: str
-    email: str
+    email: str | None
     status: TaskStatus | None
     grade: float | None
 

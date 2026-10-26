@@ -131,6 +131,37 @@ class Backend:
         )
         return bool(payload.get("available"))
 
+    async def invite_code_info(self, code: str) -> dict[str, Any]:
+        """Существует ли инвайт-код и для какой роли он выдан."""
+
+        return await self._request(
+            "GET", "/api/users/invite-code", params={"code": code}
+        )
+
+    async def max_register(
+        self,
+        hashed_user_id: str,
+        *,
+        login: str,
+        invite_code: str,
+        first_name: str,
+        last_name: str,
+    ) -> dict[str, Any]:
+        """Регистрирует аккаунт из MAX и сразу выдаёт JWT."""
+
+        return await self._request(
+            "POST",
+            "/api/users/auth/max-register",
+            json={
+                "max_user_id_hashed": hashed_user_id,
+                "login": login,
+                "invite_code": invite_code,
+                "first_name": first_name,
+                "last_name": last_name,
+            },
+            headers={"X-Bot-Signature": sign_request(hashed_user_id)},
+        )
+
     async def list_tasks(
         self, token: str, status: str | None = None
     ) -> list[dict[str, Any]]:
