@@ -1,0 +1,53 @@
+<!-- fragment:screen -->
+
+<header class="top narrow">
+  <a class="icon-btn" href="#/mail" aria-label="Закрыть без отправки" id="close">{{0}}</a>
+  <h1 style="font-size: 20px">Новое письмо</h1>
+</header>
+<form class="stack narrow card pad" id="f" novalidate style="margin-top: 8px">
+  <div class="field">
+    <label class="label" for="to">Кому</label>
+    <div id="to-box"></div>
+    <span class="hint" id="to-hint">Учитель, ученик, родитель, весь класс или администрация</span>
+  </div>
+  <div class="field">
+    <label class="label" for="subj">Тема</label>
+    <input class="input" id="subj" value="{{1}}" placeholder="О чём письмо" maxlength="120">
+  </div>
+  <div class="field">
+    <label class="label" for="text">Текст</label>
+    <textarea class="input" id="text" placeholder="Текст письма"></textarea>
+  </div>
+  <div class="stack-sm">
+    <label class="btn ghost sm" style="align-self: flex-start; cursor: pointer">{{2}}Прикрепить файл или фото<input type="file" id="file" multiple class="sr-only"></label>
+    <div id="files" class="chips"></div>
+  </div>
+  <p class="error" id="err" role="alert" hidden></p>
+  <button class="btn block" type="submit">{{3}}Отправить</button>
+</form>
+<!-- /fragment:screen -->
+
+<!-- fragment:to-x -->
+<span class="to-chip">{{0}}<button type="button" id="to-x" aria-label="Убрать получателя">{{1}}</button></span>
+            <div class="hint" style="margin-top: 4px">{{2}}</div>
+<!-- /fragment:to-x -->
+
+<!-- fragment:to -->
+<div class="row" style="gap: 8px; flex-wrap: wrap"><input class="input grow" id="to" autocomplete="off" placeholder="Начните вводить фамилию" role="combobox" aria-expanded="false" aria-controls="sug" style="min-width: 200px"><button class="btn ghost sm" type="button" id="pick">{{0}}Выбрать из списка</button></div><div class="card sug" id="sug" role="listbox" hidden style="margin-top: 8px"></div>
+<!-- /fragment:to -->
+
+<!-- fragment:row -->
+
+<div class="row"><h2 class="h2 grow" style="font-size: 20px">Кому написать</h2><button class="icon-btn" type="button" data-close aria-label="Закрыть">{{0}}</button></div>
+<div class="stack-sm" style="margin-top: 12px">
+{{1}}
+</div>
+<!-- /fragment:row -->
+
+<!-- fragment:card -->
+
+  <details class="card more">
+    <summary>{{0}}<span class="muted small" style="font-weight: 600">{{1}}</span></summary>
+    <div class="sug" style="border-top: 1px solid var(--line)">{{2}}</div>
+  </details>
+<!-- /fragment:card -->

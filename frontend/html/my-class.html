@@ -1,0 +1,79 @@
+<!-- fragment:only-mobile -->
+
+  <div class="only-mobile stack-sm">
+    <div class="chips">{{0}}</div>
+    <div class="card lessons">{{1}}
+    </div>
+  </div>
+  <div class="card dt-box only-desk">
+    <table class="dt compact" aria-label="Посещаемость {{2}} сегодня">
+      <thead><tr><th>Ученик</th>{{3}}<th class="num">Весь день</th></tr></thead>
+      <tbody>{{4}}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint" style="margin: 0 4px">Нажмите на ячейку, чтобы поставить или снять «Н». Ученик и родитель увидят пропуск в дневнике сразу, администратор — в разделе «Пропуски». Прошлые дни — во вкладке «Пропуски».</p>
+<!-- /fragment:only-mobile -->
+
+<!-- fragment:p-card -->
+
+      <div class="p-card">
+        <div class="row" style="gap: 8px"><b class="grow">{{0}}</b><button type="button" class="btn ghost sm" data-day="{{1}}">{{2}}</button></div>
+        <div class="att-row">{{3}}</div>
+      </div>
+<!-- /fragment:p-card -->
+
+<!-- fragment:num -->
+
+        <tr><td style="font-weight: 600">{{0}}</td>
+        {{1}}
+        <td class="num"><button type="button" class="btn ghost sm" data-day="{{2}}">{{3}}</button></td></tr>
+<!-- /fragment:num -->
+
+<!-- fragment:num-2 -->
+<td class="num"><button type="button" class="att{{0}}" data-r="{{1}}" data-n="{{2}}" aria-pressed="{{3}}" aria-label="{{4}}, {{5}} урок: {{6}}">{{7}}</button></td>
+<!-- /fragment:num-2 -->
+
+<!-- fragment:card -->
+
+  <div class="card lessons only-mobile">{{0}}
+  </div>
+  <div class="card dt-box only-desk">
+    <table class="dt compact" aria-label="Средние баллы {{1}} по предметам">
+      <thead><tr><th>Ученик</th>{{2}}<th class="num">Пропуски</th><th class="num">Общий</th></tr></thead>
+      <tbody>{{3}}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint" style="margin: 0 4px">Средние с учётом весов работ, пропуски — за {{4}}. Полное название предмета — при наведении на сокращение.</p>
+<!-- /fragment:card -->
+
+<!-- fragment:p-card-2 -->
+
+    <div class="p-card">
+      <div class="row" style="gap: 8px"><span class="grow"><b>{{0}}</b><br><span class="muted small">Пропущено уроков: {{1}}</span></span><span class="g avg {{2}}">{{3}}</span></div>
+      <span class="chips">{{4}}</span>
+    </div>
+<!-- /fragment:p-card-2 -->
+
+<!-- fragment:stack -->
+
+{{0}}
+<div class="stack" style="margin-top: 8px">
+  <div class="row" style="flex-wrap: wrap; align-items: flex-end">
+    <div class="grow">
+      <p class="eyebrow">Классный руководитель · {{1}}</p>
+      <h1 class="title-l" style="margin-top: 4px">Мой класс · {{2}}</h1><a class="btn ghost sm" href="#/classes/{{3}}">Ученики и приглашения</a>
+    </div>
+    <span class="pill">{{4}} учеников</span>
+    {{5}}
+    {{6}}
+  </div>
+  <div class="seg" role="tablist" aria-label="Что показать" style="max-width: 640px">
+    <button role="tab" type="button" data-tab="att" aria-selected="{{7}}">Сегодня</button>
+    <button role="tab" type="button" data-tab="hist" aria-selected="{{8}}">Пропуски</button>
+    <button role="tab" type="button" data-tab="avg" aria-selected="{{9}}">Успеваемость</button>
+  </div>
+  {{10}}
+</div>
+<!-- /fragment:stack -->

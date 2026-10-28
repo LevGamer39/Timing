@@ -66,15 +66,16 @@ app.include_router(yandex_auth.router)
 def serve(relative_path: str) -> FileResponse:
     """Отдаёт страницу из frontend/.
 
-    Отсутствующие файлы дают 404. Раньше FileResponse возвращался без
-    проверки, поэтому любой маршрут, указывающий на несуществующий файл
-    (student/profile.html, parent/*.html), давал 500.
+    Приложение — одна оболочка `index.html`, остальные экраны живут в хеше
+    (`#/home`, `#/diary`). Поэтому старые адреса (`/login`, `/dashboard`,
+    `/teacher/*` и т.п.) отдают оболочку: она сама решает, куда перейти.
+    Прямой 404 остался бы только для отсутствующего `index.html`.
     """
     target = os.path.join(frontend_path, relative_path)
     if not os.path.isfile(target):
-        raise HTTPException(
-            status_code=404, detail=f"Page not found: {relative_path}"
-        )
+        target = os.path.join(frontend_path, "index.html")
+    if not os.path.isfile(target):
+        raise HTTPException(status_code=404, detail="Frontend is not built")
     return FileResponse(target)
 
 
@@ -227,3 +228,13 @@ async def page_not_found(request: Request, exc: Exception):
     if os.path.exists(path_404):
         return FileResponse(path_404, status_code=404)
     return HTMLResponse("<h1>404</h1>", status_code=404)
+
+
+# SPA: css/, js/, html/ лежат рядом с index.html и запрашиваются с корня.
+# Монтируется последним: иначе Mount("/") перехватил бы страницы и /health.
+if os.path.exists(frontend_path):
+    app.mount(
+        "/",
+        StaticFiles(directory=frontend_path, html=True),
+        name="frontend",
+    )

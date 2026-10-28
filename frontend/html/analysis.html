@@ -1,0 +1,22 @@
+<!-- fragment:ask -->
+
+<header class="top">
+  <a class="icon-btn" href="#/journal/{{0}}" aria-label="Назад в журнал">{{1}}</a>
+  <div class="grow">
+    <div class="muted small" style="display: flex; align-items: center; gap: 8px">{{2}}Вектор ИИ · анализ</div>
+    <h1 style="font-size: 22px">{{3}} {{4}} · {{5}}, {{6}}</h1>
+  </div>
+</header>
+<div class="chat" style="max-width: 760px; margin-top: 8px; padding-bottom: 96px">
+  <div class="bubble ai">Что посмотреть по этой работе?</div>
+  {{7}}
+  <div class="quick">{{8}}</div>
+</div>
+<form class="composer" id="ask">
+  <div class="composer-in">
+    <label class="sr-only" for="q">Вопрос по классу или работе</label>
+    <input id="q" placeholder="Спросить про класс или работу…" autocomplete="off">
+    <button class="icon-btn" type="submit" aria-label="Отправить">{{9}}</button>
+  </div>
+</form>
+<!-- /fragment:ask -->

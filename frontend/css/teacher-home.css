@@ -1,0 +1,30 @@
+
+.mrow:not(.unread) .mail-who, .mrow:not(.unread) .mail-subj { font-weight: 500; }
+
+.mrow.unread .mail-who, .mrow.unread .mail-subj { font-weight: 800; }
+
+.mrow.unread .mail-date { color: var(--muted); font-weight: 700; }
+
+
+/* Учитель */
+.t-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px 24px; align-items: start; }
+
+.t-span { grid-column: 1 / -1; }
+@media (min-width: 1024px) {
+
+  .t-grid { gap: 24px; }
+}
+
+
+.tl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+
+.tl:last-child { border-bottom: 0; }
+
+.tl.past { color: var(--muted); }
+
+.tl-time { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 800; }
+
+.tl-what { grid-column: 1; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; font-size: 15px; }
+
+/* Класс — главное, что ищет учитель в списке уроков. */
+.tl-cls { font-size: 24px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; }

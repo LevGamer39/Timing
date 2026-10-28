@@ -1,0 +1,31 @@
+<!-- fragment:bot -->
+<section class="card pad stack demo-bot" aria-labelledby="bot-title"><h2 class="h2" id="bot-title">Демо-бот MAX</h2><p class="hint">Симуляция бота в этом браузере. Настоящий MAX пока не подключён.</p>
+    {{5}}<form id="invite-f" class="stack-sm" novalidate><label class="label" for="invite">Приглашение школы · первый вход или ещё ребёнок</label><input class="input" id="invite" value="{{3}}" placeholder="VK-000000-000000" autocomplete="off"><button class="btn ghost" type="submit">Отправить приглашение боту</button></form>
+    {{4}}
+    <form id="bot-f" class="stack-sm" novalidate><label class="label" for="bot-login">Уже зарегистрированы · логин</label><input class="input" id="bot-login" value="{{0}}" autocapitalize="none" spellcheck="false"><button class="btn" type="submit">Вход</button></form>
+    <p class="hint">В симуляции логин выбирает MAX-профиль. В настоящем боте профиль определяется самим MAX.</p>
+    <div role="status" aria-live="polite" class="stack-sm"><p {{7}}>{{1}}</p>{{2}}</div>{{6}}
+  </section>
+<!-- /fragment:bot -->
+
+<!-- fragment:choose-login -->
+<form id="choose-login-f" class="stack-sm" novalidate>
+    <label class="label" for="choose-login">Придумайте логин</label>
+    <input class="input" id="choose-login" value="{{0}}" aria-invalid="{{1}}" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="4" maxlength="32" aria-describedby="login-rules choose-login-error">
+    <p class="hint" id="login-rules">Латиница, цифры и точка · 4–32 символа</p>
+    <p id="choose-login-error" class="error" role="alert"{{2}}>{{3}}</p>
+    <div class="bot-suggestions">{{4}}</div>
+    <button class="btn" type="submit">Сохранить логин</button></form>
+<!-- /fragment:choose-login -->
+
+<!-- fragment:profile -->
+<p class="hint">MAX-профиль · {{0}}</p><button class="btn ghost sm" type="button" id="new-max-person">Другой человек в демо</button>
+<!-- /fragment:profile -->
+
+<!-- fragment:password -->
+<details><summary class="bot-password-toggle">Пароль в боте</summary><form id="bot-secret-f" class="stack-sm" novalidate><label class="label" for="bot-secret">Задать или изменить пароль</label><input class="input" type="password" id="bot-secret" autocomplete="new-password" minlength="8" aria-describedby="bot-secret-hint"><p class="hint" id="bot-secret-hint">Не меньше 8 символов</p><button class="btn ghost" type="submit">Сохранить в боте</button></form></details>
+<!-- /fragment:password -->
+
+<!-- fragment:demo-access -->
+<details class="card demo-access"><summary>Демо-доступ · четыре роли</summary><div class="pad stack-sm"><p class="hint">Примеры профилей. Изменения хранятся только в вашем браузере.</p><div class="demo-roles">{{0}}</div></div></details>
+<!-- /fragment:demo-access -->

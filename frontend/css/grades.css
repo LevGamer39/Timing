@@ -1,0 +1,22 @@
+
+.chev { color: var(--muted); flex: none; }
+
+.select-sm { min-height: 44px; border-radius: 999px; font-size: 14px; font-weight: 700; width: auto; }
+
+
+
+
+.ab-nav .select-sm { width: 100%; }
+
+.subj-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+
+.subj-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; text-decoration: none; color: var(--text); }
+@media (min-width: 1024px) {
+
+
+  .subj-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+}
+
+.subj-average { display: inline-flex; align-items: center; gap: 8px; flex: none; white-space: nowrap; font-size: 15px; }
+@media (hover: hover) { .subj-card:hover { border-color: var(--input-border); background: color-mix(in srgb, var(--card) 94%, var(--text)); } }
+.subj-card:active { background: color-mix(in srgb, var(--card) 90%, var(--text)); border-color: var(--input-border); }

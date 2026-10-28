@@ -1,0 +1,51 @@
+<!-- fragment:add -->
+{{0}}<div class="stack" style="margin-top: 8px">
+  <h1 class="title-l">{{1}}</h1>
+  <details class="card more"><summary>Как получить доступ</summary><p>Добавьте человека по ФИО и передайте код или распечатанное приглашение. В боте MAX он отправит код и придумает логин. Родитель отправляет коды других детей в тот же аккаунт. Ученику без MAX можно не активировать код: дневник смотрит родитель. В демо бот находится на экране входа.</p></details>
+  <div class="class-controls"><nav class="ab-tabs" aria-label="Классы">{{4}}</nav>{{5}}</div>
+  <div class="row roster-heading"><h2 class="h2 grow">{{6}} · {{7}} {{8}}</h2><button class="btn sm" id="add" type="button" aria-label="Добавить ученика в {{3}}">{{2}}Добавить ученика</button><button class="btn ghost sm" id="print" type="button">Печать приглашений</button></div>
+  <div class="card roster-list">{{9}}</div>
+</div>
+<!-- /fragment:add -->
+
+<!-- fragment:add-class -->
+<button class="btn ghost sm" id="add-class" type="button" style="align-self: flex-start">{{0}}Добавить класс</button><div class="class-homeroom"><label class="label" for="ct">Классный руководитель {{1}}</label><select class="input" id="ct"><option value="">— не назначен —</option>{{2}}</select></div>
+<!-- /fragment:add-class -->
+
+<!-- fragment:person -->
+<article class="roster-entry"><div class="roster-person"><div class="roster-name"><b>{{0}}</b><span class="roster-role">Ученик {{6}}</span></div>{{1}}<button class="icon-btn" data-del="{{3}}" type="button" aria-label="Удалить ученика {{4}}">{{5}}</button></div>{{2}}</article>
+<!-- /fragment:person -->
+
+<!-- fragment:cf -->
+
+<h2 class="h2" style="font-size: 20px">Новый класс</h2>
+<form class="stack" id="cf" novalidate style="margin-top: 12px">
+  <div class="field"><label class="label" for="cn">Название</label><input class="input" id="cn" maxlength="4" placeholder="Например, 9А" autocomplete="off"><span class="hint">Цифра и буква. Учеников добавите после.</span></div>
+  <p class="error" id="ce" role="alert" hidden></p>
+  <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">Добавить класс</button></div>
+</form>
+<!-- /fragment:cf -->
+
+<!-- fragment:parent -->
+<div class="roster-parent"><div class="roster-person"><div class="roster-name"><b>{{0}}</b><span class="hint">Родитель</span></div>{{1}}<button class="icon-btn" type="button" data-remove-parent="{{2}}" data-student="{{3}}" aria-label="Удалить родителя {{0}}">{{4}}</button></div></div>
+<!-- /fragment:parent -->
+
+<!-- fragment:pf -->
+<h2 class="h2">Родители · {{0}}</h2>
+<form id="pf" class="stack parent-form" novalidate>
+  <p class="hint">Каждый родитель получит отдельное приглашение к этому ребёнку.</p>
+  <div id="parent-fields" class="stack-sm"></div>
+  <button class="btn ghost sm" id="add-parent-field" type="button">Добавить ещё родителя</button>
+  <p class="error" id="pe" hidden role="alert"></p>
+  <div class="row parent-form-actions"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">Создать приглашения</button></div>
+</form>
+<!-- /fragment:pf -->
+
+<!-- fragment:parent-field -->
+<div class="parent-field"><div class="field"><label class="label" for="{{0}}">ФИО родителя {{1}}</label><input class="input" id="{{0}}" maxlength="120" autocomplete="off" placeholder="Фамилия Имя Отчество"></div><button class="icon-btn" type="button" data-remove-field aria-label="Убрать поле родителя {{1}}">{{2}}</button></div>
+<!-- /fragment:parent-field -->
+
+<!-- fragment:sf -->
+<h2 class="h2">Новый ученик · {{0}}</h2><form id="sf" class="stack" novalidate><label class="label" for="sn">ФИО ученика</label><input class="input" id="sn" autocomplete="off" maxlength="100" placeholder="Фамилия Имя Отчество"><p id="se" class="error" role="alert" hidden></p><button class="btn" type="submit">Создать приглашение</button></form>
+<!-- /fragment:sf -->
+

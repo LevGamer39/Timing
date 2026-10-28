@@ -34,19 +34,16 @@ VectorVK/
 │   ├── requirements-dev.txt
 │   └── data/                    # остатки SQLite, см. «Известные проблемы»
 │
-├── frontend/
-│   ├── *.html                   # Лендинг, login, register, verify,
-│   │                            #   reset-password*, change-*, settings, 404
-│   ├── css/                     # base, index, login, register, verify, reset-password
-│   ├── js/                      # api.js, auth-guard.js, login.js, register.js,
-│   │                            #   verify.js, mobile-nav.js
-│   ├── student/                 # dashboard, tasks, calendar, progress, ai
-│   │   ├── css/  js/            #   + settings.js
-│   ├── teacher/                 # dashboard, classes, class, assignments,
-│   │                            #   assignment-new, profile, settings, common
-│   ├── admin/                   # dashboard, settings  (+ js/dashboard.js)
-│   ├── parent/                  # ⚠ папки нет — см. «Известные проблемы»
-│   └── favicon/
+├── frontend/                    # SPA без сборки: index.html + css/ js/ html/
+│   ├── index.html               # единственная оболочка, навигация по #/...
+│   ├── css/                     # app, palettes + <экран>.css
+│   ├── js/                      # main, store, data, ui, <экран>.js
+│   │   ├── shared/              # логика нескольких экранов
+│   │   └── vendor/qr/           # генератор QR (MIT)
+│   ├── html/                    # <экран>.html + manifest.json
+│   ├── robots.txt
+│   ├── *.cmd                    # запуск/остановка http.server на Windows
+│   └── README.md                # единственная документация фронтенда
 │
 ├── nginx/
 │   ├── nginx.conf.template      # Шаблон: домен подставляется через envsubst
@@ -104,10 +101,10 @@ VectorVK/
 `watchfiles`, `websockets` как `sys_platform != "win32"` — они не собираются на
 Windows. Локальная разработка на Windows работает.
 
-**Каталога `frontend/parent/` нет.** Роль `parent` полностью реализована в API
+**Фронтенд — SPA без сборки.** Роль `parent` реализована в API
 (`/api/grades/child/{id}`, `/api/tasks/child/{id}`, `/api/schedule/child/{id}`,
-`/api/users/me/children`), но маршруты в `main.py` ссылаются на несуществующие
-`parent/*.html` (теперь отдают 404, а не 500).
+`/api/users/me/children`) и в демо-интерфейсе; связка SPA с API пока не
+сделана — источник данных `js/store.js` (демо в `localStorage`).
 
 
 
@@ -228,74 +225,56 @@ nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend чер
 
 ## Frontend Guidelines
 
+Фронтенд — статический SPA без сборки: `frontend/index.html` и три каталога
+`css/`, `js/`, `html/`. Навигация по хешу (`#/home`, `#/diary`,
+`#/journal/...`); сервер отдаёт одну оболочку, а страницы — функции экранов.
+
 ### 1. Загрузка ресурсов
 
-- Все страницы отдаёт FastAPI. Стили и скрипты — по абсолютному пути
-  `/static/...`: `<script src="/static/student/js/tasks.js">`.
-- nginx проксирует **весь** трафик на backend, включая `/static`. Отдельного
-  `location /static` в `nginx.conf.template` нет — не добавляй.
-- Стилизуй через существующие классы в `frontend/*/css/*.css` и
-  `css/base.css`. Дизайн-система: тёмная «аврора» (фиолетовые градиенты
-  `#654DFD` → `#2400FF`), акцент `#F1642F`, шрифты Inter (внутренние) и
-  Nunito (публичные).
+- Стили и скрипты лежат рядом с `index.html` и подключаются относительно:
+  `css/app.css`, `js/main.js`. Backend монтирует `frontend/` в корень, nginx
+  проксирует весь трафик — отдельный `location` не нужен.
+- Старые серверные адреса (`/login`, `/dashboard`, `/teacher/*`) отдают ту же
+  оболочку: `serve()` в `main.py` подставляет `index.html` для отсутствующих
+  страниц.
+- Стилизуй через `css/app.css` и `<экран>.css`. Дизайн-система: две темы
+  (`data-theme`), акценты (`data-accent`), шрифт Inter.
 - UI-текст — на русском, язык интерфейса `ru-RU`.
 
-### 2. api.js — единственная точка доступа к API
+### 2. Данные
 
-```javascript
-// DO: все страницы используют хелперы api.js
-const me = await get('/api/users/me');
-const task = await post('/api/tasks', { title: '...' });
+- Единственная точка работы с данными — `js/store.js`; демо-данные — в
+  `js/data.js`, `js/teacher-data.js`, `js/admin-data.js`.
+- Прямой `fetch` в экранах не пиши: серверный слой адаптируется в `store.js`.
+- Демо хранится в `localStorage` под ключом `vector-demo-v1`.
 
-// DON'T: писать fetch() напрямую в страницах/скриптах порталов
-```
+### 3. Экраны и шаблоны
 
-Функции: `getToken`, `getUser`, `setAuth`, `logout`, `requireAuth(roles)`,
-`get`, `post`, `patch`, `del`, `postForm`.
+- Экран — `xxxView({ params, path, go, rerender })`, возвращает
+  `{ html, mount }` (плюс `captureDraft`/`restoreDraft`, если нужно).
+- HTML-фрагменты — `html/<экран>.html` с комментариями
+  `<!-- fragment:имя -->`; список файлов — `html/manifest.json`.
+- Подстановки — `fragment('экран', 'имя', [значения])`, `{{0}}`, `{{1}}`.
+- Любой пользовательский текст — через `esc()`.
+- Новый экран: `html/x.html`, `css/x.css`, `js/x.js`, запись в
+  `html/manifest.json`, `ROUTES` в `js/main.js` и `<link>` в `index.html`.
 
-`request()` сам обрабатывает 401 (вызывает `logout`), парсит ответ и бросает
-`Error` с `detail` из тела.
+### 4. Роли
 
-API-база — `window.location.origin`, а не жёсткий порт: страница и запросы
-идут на один домен, всё проксирует nginx. Возврат в логин — на `/login`
-(имя файла во `frontend/` — `login.html`, но маршрут именно такой).
+| Роль | Меню |
+|---|---|
+| student / parent | главная, дневник, оценки, почта |
+| teacher | главная, журнал, мой класс, почта |
+| admin | главная, классы, учителя, расписание, пропуски, почта |
 
-### 3. LocalStorage
+Клиентская роль — только для интерфейса; серверная проверка `require_role`
+обязательна.
 
-```javascript
-// Ровно два ключа, фиксированы во всём проекте:
-localStorage.getItem('token')   // JWT
-localStorage.getItem('user')    // JSON: { id, role, first_name, ... }
-```
+### 5. Стиль кода
 
-`role` из `user` используется для клиентских редиректов и показа ролевых
-блоков. Он не заменяет серверную проверку — `require_role` обязателен на бэке.
-
-### 4. Роли и страницы
-
-| Раздел | Пути | Роль |
-|---|---|---|
-| Публичные | `/`, `/login`, `/register`, `/verify`, `/reset-password*` | — |
-| Ученик | `/dashboard`, `/student/tasks`, `/calendar`, `/progress`, `/ai` | student |
-| Учитель | `/teacher/*` | teacher |
-| Админ | `/admin/*` | admin |
-| Общие | `/settings`, `/settings/change-email`, `/settings/change-password` | любая |
-
-- Новую страницу **обязательно** зарегистрируй роутом в `main.py` через
-  `serve("путь/к/file.html")` — иначе она недоступна.
-- `requireAuth` вызывай **до** рендера данных, иначе возможен flash
-  неавторизованного контента.
-- На каждой странице подключай `/static/js/mobile-nav.js`.
-
-### 5. Скрипты страниц
-
-- Скрипт портала (`student/js/*.js`, `teacher/js/*.js`) подключается в конце
-  `<body>` и стартует из `init()` или `DOMContentLoaded`.
-- Экранируй всё, что пришло от пользователя: `escapeHtml()` есть в
-  `tasks.js`, `progress.js`, `settings.js`, `ai.js` — переиспользуй паттерн,
-  не вставляйinnerHTML сырыми данными.
-- Даты форматируй через `new Date(iso).toLocaleDateString('ru-RU', ...)`;
-  на бэке всегда UTC.
+- ES-модули, `camelCase`, без сборщиков и npm.
+- Только vanilla JS; из CDN — только Google Fonts (Inter).
+- Даты — `new Date(iso).toLocaleDateString('ru-RU', ...)`; на бэке UTC.
 
 ---
 
@@ -305,15 +284,6 @@ localStorage.getItem('user')    // JSON: { id, role, first_name, ... }
 
 | # | Проблема | Файл |
 |---|---|---|
-| 1 | `const API = 'http://localhost:8000'` ломал вход из браузера | ✅ `window.location.origin` |
-| 2 | Редирект на несуществующий `/login.html` | ✅ `/login` |
-| 3 | Каталога `frontend/parent/` нет — 4 маршрута отдают 404 | `frontend/parent/` |
-| 4 | `student/profile.html` отсутствует — 404 | `frontend/student/` |
-| 5 | `DB_PATH=data/app.db` — мёртвая переменная, остатки SQLite удалены | ✅ `.env.example` |
-| 6 | `frontend/student/js/auth-guard.js` — неиспользуемая копия | `frontend/student/js/auth-guard.js` |
-| 7 | Chart.js и Google Fonts с CDN, Chart.js без версии | `frontend/student/dashboard.html` |
-| 8 | Логика топбара (уведомления/streak/аватар) продублирована в HTML | `frontend/**/*.html` |
-| 9 | `admin/settings.html` подключает `student/js/settings.js` | `frontend/admin/settings.html` |
 | 10 | `pydantic-settings` и `PyYAML` установлены, но не используются | `backend/requirements.txt` |
 | 11 | Фреймворка миграций нет: `create_all()` не меняет созданные таблицы; часть колонок догоняется в `_apply_schema_updates()` | `backend/app/database.py` |
 | 12 | Планировщик рассчитан на один процесс uvicorn | `backend/app/routers/notifications.py` |
@@ -421,9 +391,9 @@ docker exec vector_ollama ollama pull qwen2.5:7b
 ## File Naming
 
 - Backend: `snake_case` (`main.py`, `database.py`)
-- Frontend: страницы `kebab-case.html`, скрипты и стили — `camelCase.js` /
-  `kebab-case.css` (в проекте смешано: `api.js`, `auth-guard.js`,
-  `mobile-nav.js`, но `reset-password.css`)
+- Frontend: экраны `kebab-case` (`teacher-home.html`, `my-class.css`,
+  `teacher-home.js`), общие модули — `camelCase` (`store.js`, `ui.js`,
+  `templates.js`)
 - Роутеры — по домену: `users`, `admin`, `classes`, `assignments`, `tasks`,
   `grades`, `schedule`, `ai`, `notifications`, `yandex_auth`
 

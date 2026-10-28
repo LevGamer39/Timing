@@ -1,0 +1,44 @@
+<!-- fragment:stack -->
+
+{{0}}
+<div class="stack" style="margin-top: 8px">
+  <div class="hero">
+    <p class="muted" style="margin: 0">{{1}}, {{2}} · {{3}} · в демо для примера заведено {{4}} {{5}}</p>
+    <h1 class="title-l" style="margin-top: 4px">Добрый день, {{6}}</h1>
+  </div>
+  <div class="stats">
+    <a class="card pad stat" href="#/classes" style="text-decoration: none; color: inherit"><b>{{7}}</b><span>{{8}}</span></a>
+    <a class="card pad stat" href="#/classes" style="text-decoration: none; color: inherit"><b>{{9}}</b><span>{{10}}</span></a>
+    <a class="card pad stat" href="#/teachers" style="text-decoration: none; color: inherit"><b>{{11}}</b><span>{{12}}</span></a>
+    <div class="card pad stat"><b>{{13}}</b><span>ещё не вошли</span></div>
+  </div>
+  <div class="t-grid">
+    <section>
+      <div class="section-h"><h2 class="h2">Ещё не входили</h2><span class="muted small">{{14}}</span></div>
+      <div class="card lessons">
+        {{15}}
+      </div>
+    </section>
+    <section>
+      <div class="section-h"><h2 class="h2">Итоговые за {{16}}</h2><span class="muted small">до {{17}}</span></div>
+      <div class="card lessons">
+        {{18}}
+      </div>
+    </section>
+    <section>
+      <div class="section-h"><h2 class="h2">Новые письма</h2>{{19}}</div>
+      <div class="card lessons">
+        {{20}}
+      </div>
+    </section>
+  </div>
+</div>
+<!-- /fragment:stack -->
+
+<!-- fragment:list-row -->
+<a class="list-row" href="#/classes/{{0}}"><span class="grow"><b>{{1}}</b><br><span class="muted small">{{2}} · {{3}}</span></span><span class="pill wait">Не вошёл</span></a>
+<!-- /fragment:list-row -->
+
+<!-- fragment:list-row-2 -->
+<a class="list-row" href="#/mail/read/{{0}}"><span class="dot-new"></span><span class="grow"><b>{{1}}</b><br><span class="small">{{2}}</span></span><span class="muted small">{{3}}</span></a>
+<!-- /fragment:list-row-2 -->

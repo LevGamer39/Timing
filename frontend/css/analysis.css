@@ -1,0 +1,56 @@
+
+.bubble { max-width: 88%; padding: 12px 16px; font-size: 15px; line-height: 1.45; white-space: pre-line; }
+
+.bubble.ai { align-self: flex-start; background: var(--card); border: 1px solid var(--card-border); border-radius: 20px 20px 20px 6px; }
+
+.bubble.me { align-self: flex-end; background: var(--strong); color: var(--on-strong); border-radius: 20px 20px 6px 20px; }
+
+.quick { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.quick button { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1.5px solid var(--card-border); background: var(--card); font-weight: 700; font-size: 14px; }
+
+.quick button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+.composer {
+  position: fixed; z-index: 20; left: 0; right: 0; bottom: 0;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--bg-base);
+}
+
+[data-theme="dark"] .composer { --composer-bg: rgba(20, 14, 12, .96); }
+
+.composer-in { max-width: 528px; margin: 0 auto; display: flex; gap: 8px; align-items: center; padding: 4px 4px 4px 16px; border-radius: 999px; background: var(--card); border: 1.5px solid var(--input-border); }
+
+[data-theme="light"] .composer-in { background: #fff; }
+
+.composer-in input { flex: 1; min-width: 0; min-height: 44px; border: 0; background: transparent; outline: none; }
+
+.bars { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+
+.bar-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 150px; gap: 12px; align-items: center; font-size: 14px; }
+
+.cs-bars .bar-row { grid-template-columns: 36px minmax(0, 1fr) 96px; padding: 8px 8px; margin: 0 -8px; border-radius: 12px; }
+
+.cs-bars .bar-row.me { background: var(--soft); }
+
+.bar { height: 20px; border-radius: 6px; background: var(--soft); overflow: hidden; }
+
+.bar i { display: block; height: 100%; border-radius: 6px; background: var(--g5); }
+
+.bar i.g4 { background: var(--g4); }
+ .bar i.g3 { background: var(--g3); }
+ .bar i.g2 { background: var(--g2); }
+
+[data-theme="light"] .bar i.g5 { background: #2FA36B; }
+ [data-theme="light"] .bar i.g4 { background: #8CC152; }
+
+[data-theme="light"] .bar i.g3 { background: #F2C230; }
+ [data-theme="light"] .bar i.g2 { background: #E5534B; }
+@media (min-width: 1024px) {
+
+  .ai-main .composer { position: sticky; bottom: 0; padding: 16px 24px 24px; background: none; }
+
+  .ai-main .composer-in { max-width: none; }
+
+  .bubble { max-width: 72%; }
+}

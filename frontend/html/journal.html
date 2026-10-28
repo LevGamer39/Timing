@@ -1,0 +1,155 @@
+<!-- fragment:no -->
+
+<tr>
+  <td class="no">{{0}}</td>
+  <th scope="row" class="nm">{{1}}</th>
+  {{2}}
+  <td class="add-td"></td>
+  <td class="av" data-avg="{{3}}">{{4}}</td>
+  <td class="cell fin" data-r="{{5}}" data-c="{{6}}" tabindex="-1">{{7}}</td>
+</tr>
+<!-- /fragment:no -->
+
+<!-- fragment:jk -->
+
+{{0}}
+<div class="stack" style="margin-top: 8px">
+  <div class="j-bar">
+    <h1 class="title-l">Журнал</h1>
+    <label class="sr-only" for="jk">Класс и предмет</label>
+    <select class="input select-sm" id="jk">{{1}}</select>
+    <span class="pill">{{2}} · до {{3}}</span>
+    <span class="grow"></span>
+    <button class="btn sm only-mobile" type="button" id="finals">Итоги за {{4}}</button>
+    <button class="btn ghost sm" type="button" id="types">Типы работ</button>
+    <button class="btn ghost sm" type="button" id="analyze">{{5}}Проанализировать</button>
+  </div>
+  {{6}}
+  <div class="j-body">
+    <div class="card j-box">
+      <table class="jt" style="--lesson-count: {{12}}" role="grid" aria-label="Журнал {{7}}, {{8}}">
+        <colgroup class="journal-cols"><col class="no-col"><col class="name-col"><col class="lesson-col" span="{{12}}"><col class="average-col"></colgroup>
+        <thead><tr><th class="no">№</th><th class="nm">Ученик</th>{{9}}<th class="add-th"><button class="add-col" type="button" id="add" aria-label="Добавить урок">+</button></th><th class="av-h">Средний</th><th class="fin-h"><span>Итог</span><button class="mini-btn" type="button" id="avg" title="Заполнить колонку «Итог» по среднему">← из среднего</button></th></tr></thead>
+        <tbody>{{10}}</tbody>
+      </table>
+    </div>
+    <aside class="card pad j-panel" id="panel" aria-live="polite"></aside>
+  </div>
+  <div class="j-legend">
+    {{11}}<span><span class="g gn">Н</span> не был</span>
+    <span class="muted small">Клик по ячейке и цифра — оценка · «н» — пропуск · Enter — вниз · Tab — вправо · Delete — стереть · клик по дате — урок</span>
+  </div>
+</div>
+<!-- /fragment:jk -->
+
+<!-- fragment:lt -->
+
+<p class="eyebrow">Урок</p>
+<h2 class="h2" style="font-size: 20px">{{0}} · {{1}}</h2>
+<div class="field"><label class="label" for="lt">Тип работы</label>
+  <select class="input" id="lt">{{2}}<option value="__new">+ Свой тип работы…</option></select></div>
+<div class="field"><label class="label" for="lh">Домашнее задание</label>
+  <textarea class="input" id="lh" style="min-height: 96px" placeholder="Что задано к следующему уроку">{{3}}</textarea>
+  <span class="hint">Ученики и родители увидят его в дневнике</span></div>
+<p class="hint" style="margin: 0">Оценено {{4}} из {{5}}</p>
+<button class="btn ghost sm" type="button" id="del-lesson" style="color: var(--danger)">Удалить урок</button>
+<!-- /fragment:lt -->
+
+<!-- fragment:eyebrow -->
+
+<p class="eyebrow">Итог за {{0}}</p>
+<h2 class="h2" style="font-size: 20px">{{1}}</h2>
+<p style="margin: 0">Средний: <b>{{2}}</b></p>
+<p class="hint" style="margin: 0">Итоговую ставите вы: число от {{3}} до {{4}}. «Выставить средние» заполнит колонку по среднему.</p>
+<!-- /fragment:eyebrow -->
+
+<!-- fragment:cm -->
+
+<div class="field"><label class="label" for="cm">Комментарий к оценке</label>
+  <textarea class="input" id="cm" style="min-height: 80px" placeholder="Необязательно. Ученик и родитель увидят его">{{0}}</textarea></div>
+<!-- /fragment:cm -->
+
+<!-- fragment:mobile-grade -->
+<h2 class="h2">{{0}}</h2><p class="hint">{{1}} · от {{2}} до {{3}}</p><form id="mobile-grade" class="stack" novalidate><label class="label" for="grade-value">Оценка</label><input class="input" id="grade-value" inputmode="numeric" maxlength="3" value="{{4}}">{{5}}<div class="row" style="flex-wrap: wrap"><button class="btn grow" type="submit">Сохранить</button>{{6}}<button class="btn ghost" type="button" id="grade-clear">Стереть</button></div></form>
+<!-- /fragment:mobile-grade -->
+
+<!-- fragment:fill -->
+
+<div class="row"><h2 class="h2 grow" style="font-size: 20px">Итоги за {{0}}</h2><button class="icon-btn" type="button" data-close aria-label="Закрыть">{{1}}</button></div>
+<p class="muted small" style="margin: 4px 0 12px">Средний — с учётом весов. Итоговую ставите вы: число от {{2}} до {{3}}. Можно заполнить всех по среднему и поправить.</p>
+<button class="btn ghost sm" type="button" id="fill">← Заполнить по среднему</button>
+<form id="fin-f" novalidate style="margin-top: 12px">
+  <div class="card lessons" style="box-shadow: none">{{4}}</div>
+  <p class="error" id="fin-e" role="alert" hidden></p>
+  <button class="btn block" type="submit" style="margin-top: 12px">Сохранить итоговые</button>
+</form>
+<!-- /fragment:fill -->
+
+<!-- fragment:fin-row -->
+<label class="fin-row"><span>{{0}}</span>{{1}}
+      <input class="input fin-in" inputmode="numeric" maxlength="3" data-r="{{2}}" value="{{3}}" aria-label="Итог: {{4}}"></label>
+<!-- /fragment:fin-row -->
+
+<!-- fragment:ok -->
+
+<h2 class="h2" style="font-size: 20px">{{0}}</h2>
+<p class="muted" style="margin: 8px 0 16px">{{1}}</p>
+<div class="row" style="justify-content: flex-end; gap: 8px">
+  <button class="btn ghost sm" type="button" data-close>Отмена</button>
+  <button class="btn sm" type="button" id="ok">{{2}}</button>
+</div>
+<!-- /fragment:ok -->
+
+<!-- fragment:nt -->
+
+<h2 class="h2" style="font-size: 20px">Свой тип работы</h2>
+<form class="stack" id="nt" style="margin-top: 12px" novalidate>
+  <div class="field"><label class="label" for="ntn">Название</label><input class="input" id="ntn" maxlength="40" placeholder="Например, «Таблица» или «Проект»" autocomplete="off"></div>
+  <div class="field"><span class="label" id="ntw-l">Вес в среднем</span>
+    <div class="seg" role="group" aria-labelledby="ntw-l">{{0}}</div>
+    <span class="hint">×2 и ×3 весят в среднем больше, чем обычная работа</span></div>
+  <p class="error" id="nte" role="alert" hidden></p>
+  <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">Создать и выбрать</button></div>
+</form>
+<!-- /fragment:nt -->
+
+<!-- fragment:nl -->
+
+<h2 class="h2" style="font-size: 20px">Новый урок</h2>
+<form class="stack" id="nl" style="margin-top: 12px" novalidate>
+  <div class="field"><label class="label" for="nd">Дата</label><input class="input" id="nd" type="date" value="{{0}}" min="{{1}}" max="{{2}}"></div>
+  <div class="field"><label class="label" for="ntp">Тип работы</label><select class="input" id="ntp">{{3}}</select></div>
+  <p class="error" id="ne" role="alert" hidden></p>
+  <div class="row" style="justify-content: flex-end; gap: 8px">
+    <button class="btn ghost sm" type="button" data-close>Отмена</button>
+    <button class="btn sm" type="submit">Добавить</button>
+  </div>
+</form>
+<!-- /fragment:nl -->
+
+<!-- fragment:wt-row -->
+
+<div class="wt-row{{0}}">
+  <button class="wt-pick" type="button" data-pick="{{1}}" {{2}} aria-pressed="{{3}}">
+    <span class="wt-radio" aria-hidden="true"></span><span class="wt-name">{{4}}</span>
+  </button>
+  <span class="seg wt-w" role="group" aria-label="Вес: {{5}}">{{6}}</span>
+  <button class="icon-btn" type="button" data-del="{{7}}" aria-label="Удалить тип «{{8}}»" {{9}}>{{10}}</button>
+</div>
+<!-- /fragment:wt-row -->
+
+<!-- fragment:wt-list -->
+
+<div class="row"><h2 class="h2 grow" style="font-size: 20px">Типы работ и веса</h2><button class="icon-btn" type="button" data-close aria-label="Закрыть">{{0}}</button></div>
+<p class="muted small" style="margin: 4px 0 0">{{1}}
+  Кнопки ×1, ×2, ×3 — вес: во сколько раз оценка важнее в среднем. Вес меняется во всех ваших журналах.</p>
+<div class="wt-head" aria-hidden="true"><span>Тип работы</span><span>Вес</span></div>
+<div id="wt-list"></div>
+<form class="row" id="wt-add" style="margin-top: 16px; flex-wrap: wrap; gap: 8px" novalidate>
+  <label class="sr-only" for="wt-name">Новый тип работы</label>
+  <input class="input grow" id="wt-name" placeholder="Новый тип, например «Таблица»" maxlength="40" style="min-width: 200px">
+  <select class="input select-sm" id="wt-w" aria-label="Вес нового типа"><option value="1">×1</option><option value="2" selected>×2</option><option value="3">×3</option></select>
+  <button class="btn sm" type="submit">Добавить</button>
+</form>
+<button class="btn ghost block" type="button" data-close style="margin-top: 16px">Готово</button>
+<!-- /fragment:wt-list -->

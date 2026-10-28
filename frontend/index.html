@@ -1,44 +1,52 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ВЕКТОР — Главная</title>
-    <link rel="icon" type="image/svg+xml" href="/static/favicon/favicon.svg">
-    <link rel="icon" type="image/x-icon" href="/static/favicon/favicon.ico">
-    <link rel="apple-touch-icon" href="/static/favicon/apple-touch-icon.png">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/login.css">
-    <link rel="stylesheet" href="/static/css/index.css">
+<meta charset="utf-8">
+<script>
+// Тема до первой отрисовки и до загрузки модулей/шаблонов.
+(() => {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem('vector-demo-v1') || '{}'); } catch {}
+  const theme = saved?.theme;
+  document.documentElement.dataset.theme = theme === 'light' || theme === 'dark' ? theme : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  document.documentElement.dataset.accent = saved?.accent || 'orange';
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Вектор — демонстрация школьного электронного дневника и журнала для ученика, родителя, учителя и администратора.">
+<meta name="theme-color" content="#F6F4F1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#070708" media="(prefers-color-scheme: dark)">
+<title>Вектор</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8 -9 620 470'%3E%3Cpath fill='%23D4652C' d='M137 0H535C577 0 604 31 604 70C604 87 598 100 591 113L383 428Q370 452 344 452H298Q267 452 278 426L440 154Q454 130 427 113H201Q183 113 174 99L122 36Q111 17 124 6Q130 0 137 0Z'/%3E%3Cpath fill='%23D4652C' d='M24 165H301C329 165 347 196 333 220L208 429Q194 452 169 452H127Q95 452 107 426L229 271Q242 250 221 250H57Q43 250 33 240L4 199Q-3 188 5 177Q12 165 24 165Z'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/palettes.css">
+<link rel="stylesheet" href="css/login.css">
+<link rel="stylesheet" href="css/demo-bot.css">
+<link rel="stylesheet" href="css/home.css">
+<link rel="stylesheet" href="css/diary.css">
+<link rel="stylesheet" href="css/grades.css">
+<link rel="stylesheet" href="css/subject.css">
+<link rel="stylesheet" href="css/mail.css">
+<link rel="stylesheet" href="css/compose.css">
+<link rel="stylesheet" href="css/ai.css">
+<link rel="stylesheet" href="css/settings.css">
+<link rel="stylesheet" href="css/teacher-home.css">
+<link rel="stylesheet" href="css/journal.css">
+<link rel="stylesheet" href="css/analysis.css">
+<link rel="stylesheet" href="css/my-class.css">
+<link rel="stylesheet" href="css/admin-home.css">
+<link rel="stylesheet" href="css/classes.css">
+<link rel="stylesheet" href="css/teachers.css">
+<link rel="stylesheet" href="css/schedule.css">
+<link rel="stylesheet" href="css/attendance.css">
 </head>
 <body>
-    <div class="bg">
-        <div class="bg-v2"></div>
-        <div class="bg-v3"></div>
-    </div>
-
-    <div class="wrapper">
-        <header class="top-nav">
-            <div class="logo">ВЕКТОР</div>
-            <div class="nav-buttons">
-                <a href="register" class="btn-nav btn-register">Создать аккаунт</a>
-                <a href="login" class="btn-nav btn-login-top">Вход</a>
-            </div>
-        </header>
-
-        <main class="main-content">
-            <div class="card index-card">
-                <h1 class="hero-title">ВЕКТОР</h1>
-                <p class="hero-subtitle">
-                    Ваш личный ИИ-ассистент, помощник в распределении задач и грамотного планирования.
-                </p>
-                <button class="btn-try">Опробуйте сейчас</button>
-            </div>
-        </main>
-    </div>
-    <script src="/static/js/auth-guard.js"></script>
-    <script>
-        window.AuthGuard?.redirectIfAuthenticated();
-    </script>
+<div class="bg" aria-hidden="true"></div>
+<div id="app"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script type="module" src="js/main.js"></script>
 </body>
 </html>

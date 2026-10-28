@@ -1,0 +1,67 @@
+
+
+.ls {
+  position: relative; display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 12px; align-items: start;
+  padding: 16px 16px; border-bottom: 1px solid var(--line); text-decoration: none; color: var(--text);
+}
+
+.ls:last-child { border-bottom: 0; }
+
+
+/* Нижний лист, подсказки, тост */
+.overlay { position: fixed; inset: 0; z-index: 40; background: rgba(10, 8, 6, .45); display: flex; align-items: flex-end; justify-content: center; }
+@media (min-width: 1024px) {
+ .overlay { align-items: center; }
+}
+
+.dt { width: 100%; border-collapse: collapse; font-size: 15px; }
+
+.dt th, .dt td { text-align: left; padding: 0 16px; height: 56px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+
+.dt th { height: 44px; font-size: 13px; font-weight: 700; color: var(--muted); }
+
+.dt tr:last-child td { border-bottom: 0; }
+
+.dt td.num { text-align: center; }
+
+.dt .acts { text-align: right; }
+.teacher-actions { gap: 8px; flex-wrap: wrap; }
+.teacher-delete { color: var(--muted); }
+.teacher-delete:hover { color: var(--danger); }
+.teacher-person { display: grid; gap: 16px; align-items: center; }
+.teacher-person .chips { margin-top: 8px; }
+#lf fieldset.row { flex-wrap: wrap; gap: 8px; }
+@media (min-width: 1024px) {
+  .teacher-person { grid-template-columns: minmax(0, 1fr) 492px 160px; gap: 16px; }
+  .teacher-actions { justify-content: flex-end; }
+}
+
+
+.p-card { display: flex; flex-direction: column; gap: 8px; padding: 16px 16px; border-bottom: 1px solid var(--line); }
+
+.p-card:last-child { border-bottom: 0; }
+@media (min-width: 1024px) {
+
+  .spread .ls { grid-template-columns: 22px minmax(150px, 1fr) minmax(0, 1.5fr) auto; align-items: center; padding: 8px 24px; min-height: 52px; border-bottom: 0; }
+
+  .spread .ls + .ls { border-top: 1px solid var(--line); }
+}
+
+
+.dt.compact th, .dt.compact td { padding: 0 8px; }
+
+.dt.compact th:first-child, .dt.compact td:first-child { padding-left: 16px; }
+@media print {
+
+  body > *:not(.overlay), .bg { display: none !important; }
+
+  .overlay { position: static; background: none; }
+}
+
+@media (max-width: 600px) { .teacher-roster { background: none; border: 0; box-shadow: none; overflow: visible; display: grid; gap: 12px; } .teacher-person { background: var(--card); border: 1px solid var(--card-border); border-radius: 24px; } }
+
+@media (max-width: 1023px) {
+  .teacher-person { position: relative; }
+  .teacher-person .roster-name { padding-right: 56px; }
+  .teacher-delete { position: absolute; top: 16px; right: 16px; }
+}

@@ -1,0 +1,27 @@
+
+.mrow:not(.unread) .mail-who, .mrow:not(.unread) .mail-subj { font-weight: 500; }
+
+.mrow.unread .mail-who, .mrow.unread .mail-subj { font-weight: 800; }
+
+.mrow.unread .mail-date { color: var(--muted); font-weight: 700; }
+
+
+/* Учитель */
+.t-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px 24px; align-items: start; }
+
+
+.stat { display: flex; flex-direction: column; gap: 4px; }
+
+.stat b { font-size: 36px; line-height: 1; font-weight: 800; letter-spacing: -0.03em; }
+
+.stat span { color: var(--muted); font-weight: 600; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+@media (max-width: 600px) {
+ .stats { grid-template-columns: 1fr 1fr; gap: 12px; }
+ .stat b { font-size: 28px; }
+}
+@media (min-width: 1024px) {
+
+  .t-grid { gap: 24px; }
+}

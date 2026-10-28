@@ -40,8 +40,9 @@
 | **Canvas API** | Кольцо прогресса |
 | **LocalStorage** | JWT-токен и профиль сессии |
 
-> Статику раздаёт сам FastAPI: каталог `frontend/` смонтирован на `/static`,
-> HTML-страницы отдаются через явные роуты в `main.py`.
+> Статику раздаёт сам FastAPI: каталог `frontend/` смонтирован в корень
+> (и в `/static` для совместимости). Фронтенд — SPA на `frontend/index.html`,
+> старые адреса отдают ту же оболочку.
 
 ---
 
@@ -163,20 +164,14 @@ VectorVK/
 │   ├── requirements-dev.txt
 │   └── data/                    # остатки SQLite, см. «Известные проблемы»
 │
-├── frontend/
-│   ├── index.html  login.html  register.html  verify.html
-│   ├── reset-password.html  reset-password-new.html
-│   ├── change-email.html  change-email-confirm.html  change-password.html
-│   ├── settings.html  404.html
-│   ├── css/                     # base, index, login, register, verify, reset-password
-│   ├── js/                      # api.js, auth-guard.js, login.js, register.js,
-│   │                            #   verify.js, mobile-nav.js
-│   ├── student/                 # dashboard, tasks, calendar, progress, ai
-│   ├── teacher/                 # dashboard, classes, class, assignments,
-│   │                            #   assignment-new, profile, settings
-│   ├── admin/                   # dashboard, settings
-│   ├── parent/                  # ⚠ папки нет — см. «Известные проблемы»
-│   └── favicon/
+├── frontend/                    # SPA без сборки: index.html + css/ js/ html/
+│   ├── index.html               # единственная оболочка, навигация по #/...
+│   ├── css/                     # app, palettes + <экран>.css
+│   ├── js/                      # main, store, data, ui, <экран>.js
+│   │   ├── shared/              # общая логика экранов
+│   │   └── vendor/qr/           # генератор QR (MIT)
+│   ├── html/                    # <экран>.html + manifest.json
+│   └── README.md                # документация фронтенда
 │
 ├── nginx/
 │   ├── nginx.conf.template      # Шаблон: домен подставляется через envsubst
@@ -193,12 +188,12 @@ VectorVK/
 |---|---|---|
 | **Ученик** | Задачи, календарь, ИИ-чат, прогресс, оценки, расписание, профиль | `/student/*` ✅ |
 | **Учитель** | Классы, создание заданий, прогресс учеников, выставление оценок | `/teacher/*` ✅ |
-| **Родитель** | Просмотр задач, оценок и расписания ребёнка (только чтение) | `/parent/*` ⚠ роуты есть, страниц нет |
+| **Родитель** | Просмотр задач, оценок и расписания ребёнка (только чтение) | SPA: роль `parent` ✅ |
 | **Администратор** | Инвайт-коды, классы, пользователи, сводка по школе | `/admin/*` ✅ |
 
 API родителя работает полностью (`/api/grades/child/{id}`,
 `/api/tasks/child/{id}`, `/api/schedule/child/{id}`, `/api/users/me/children`).
-Не хватает только веб-интерфейса.
+В SPA роль `parent` есть; связка с сервером пока не сделана — данные демо.
 
 ---
 
@@ -639,18 +634,14 @@ DNS-хостингом.
 | Нет ограничений целостности | ✅ модели + миграция 001 |
 | `uvloop` не ставится на Windows | ✅ маркеры платформы |
 
-### Фронтенд (не трогал, по условию задачи)
+### Фронтенд
 
-| # | Проблема | Файл |
+| # | Что сделано | Где |
 |---|---|---|
-| 1 | `const API = 'http://localhost:8000'` — вход из браузера не работал | ✅ `window.location.origin` |
-| 2 | Редирект на несуществующий `/login.html` | ✅ `/login` |
-| 3 | Нет `frontend/parent/` — 4 маршрута отдают 404 | `frontend/parent/` |
-| 4 | Нет `student/profile.html` — 404 | `frontend/student/` |
-| 5 | `frontend/student/js/auth-guard.js` — неиспользуемая копия | `frontend/student/js/auth-guard.js` |
-| 6 | Chart.js и Google Fonts с CDN, Chart.js без версии | `frontend/student/dashboard.html` |
-| 7 | Логика топбара продублирована в HTML каждой страницы | `frontend/**/*.html` |
-| 8 | `admin/settings.html` подключает `student/js/settings.js` | `frontend/admin/settings.html` |
+| 1 | Старый мультистраничный фронтенд заменён SPA без сборки | `frontend/index.html` |
+| 2 | Ресурсы разложены по `css/`, `js/`, `html/`; тесты и `docs/` убраны | `frontend/` |
+| 3 | Старые адреса (`/login`, `/dashboard`, `/teacher/*`) отдают оболочку SPA | `backend/app/main.py` |
+| 4 | Связка SPA с API пока не сделана: данные демо, `localStorage` | `frontend/js/store.js` |
 
 ### Прочее
 
