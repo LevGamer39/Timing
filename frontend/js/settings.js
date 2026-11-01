@@ -2,6 +2,7 @@ import { fragment } from './templates.js';
 import * as store from './store.js';
 import { ACCENTS } from './theme.js';
 import { esc, icon, toast, AVATARS, avatarSvg } from './ui.js';
+import { copyCode } from './clipboard.js';
 
 const ROLE_NAME = { student: 'Ученик', parent: 'Родитель', teacher: 'Учитель', admin: 'Администратор' };
 
@@ -15,6 +16,7 @@ function settingsView({ go, rerender }) {
   const theme = store.get().theme;
   const login = store.get().session.login;
   const av = store.avatarOf();
+  const server = store.isServer();
   const sch = role === 'admin' ? store.school() : null;
   const opt = (v, label, cur, attr) => ("<button type=\"button\" " + (attr) + "=\"" + (v) + "\" aria-pressed=\"" + (cur === v) + "\">" + (label) + "</button>");
   const sub = acc.title || (role === 'parent' ? 'Родитель' : role === 'student' ? 'Ученик · ' + store.student().cls + ' класс' : ROLE_NAME[role]);
@@ -22,7 +24,13 @@ function settingsView({ go, rerender }) {
 
   const left = fragment("settings", "card", [!av, esc(acc.initials), AVATARS.map((a) => ("<button type=\"button\" class=\"av-opt\" data-av=\"" + (a.id) + "\" aria-pressed=\"" + (av === a.id) + "\" aria-label=\"Аватарка " + (a.id) + "\">" + (avatarSvg(a.id, 48)) + "</button>")).join(''), role === 'parent' ? fragment("settings", "card-2", [store.children().map((c) => fragment("settings", "list-row", [c.id, esc(c.initials), esc(c.first), esc(c.cls), c.id === store.student().id ? ("<span class=\"pill\">Выбран</span>") : ("<span class=\"muted small\" style=\"font-weight: 700\">Выбрать</span>")])).join('')]) : '']);
 
-  const right = fragment("settings", "access", [esc(login), icon('logout', 18)]);
+  const right = fragment("settings", "access", [esc(login), icon('logout', 18)])
+    + (server ? fragment("settings", "profile", [esc(acc.first || ''), esc(acc.last || '')]) + fragment("settings", "password", []) : '')
+    + (server ? fragment("settings", "email", [esc(acc.email || 'не задан')]) : '')
+    + (server ? fragment("settings", "notify", [acc.notifyEmail ? 'checked' : '', acc.notifyBrowser ? 'checked' : '', esc(acc.digestTime || '19:00')]) : '')
+    + (server && role === 'student' ? fragment("settings", "join-class", []) : '')
+    + (server && role === 'student' ? fragment("settings", "parent-code", []) : '')
+    + (server && role === 'parent' ? fragment("settings", "parent-link", []) : '');
 
   const admin = sch ? fragment("settings", "zf", [SCALES.map((n) => opt(n, String(n), sch.scale, 'data-scale')).join(''), [2, 3, 4, 5].map((m, i) => {
         const from = i === 0 ? (sch.scale === 5 ? 1 : 0) : bounds[i - 1];
@@ -38,6 +46,90 @@ function settingsView({ go, rerender }) {
       root.querySelectorAll('[data-av]').forEach((b) => b.addEventListener('click', () => { if (!store.setAvatar(b.dataset.av)) return toast(store.SAVE_ERROR); rerender(); toast('Аватарка сохранена'); }));
       root.querySelectorAll('[data-child]').forEach((b) => b.addEventListener('click', () => { if (!store.setChild(b.dataset.child)) return toast(store.SAVE_ERROR); rerender(); toast('Показываю дневник: ' + store.student().first); }));
       root.querySelector('#out').addEventListener('click', () => { store.logout(); go('login'); });
+
+      const nameForm = root.querySelector('#name-f');
+      if (nameForm) nameForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const err = root.querySelector('#pf-err');
+        const first = root.querySelector('#pf-first').value.trim();
+        const last = root.querySelector('#pf-last').value.trim();
+        if (!first || !last) { err.textContent = 'Имя и фамилия не должны быть пустыми.'; err.hidden = false; return; }
+        err.hidden = true;
+        if (!store.updateProfile({ first_name: first, last_name: last })) return toast(store.SAVE_ERROR);
+        rerender(); toast('Имя сохранено');
+      });
+      const codeBtn = root.querySelector('#pl-code');
+      if (codeBtn) codeBtn.addEventListener('click', () => {
+        const err = root.querySelector('#pl-err');
+        err.hidden = true;
+        store.parentLinkCode().then((result) => {
+          if (result.error) { err.textContent = result.error; err.hidden = false; return; }
+          root.querySelector('#pl-slot').innerHTML = '<p class="mono" style="font-size: 22px; font-weight: 800; letter-spacing: 2px; margin: 8px 0">' + esc(result.code) + '</p>' + copyCode(result.code, 'код родителя');
+        });
+      });
+      const linkForm = root.querySelector('#pl-form');
+      if (linkForm) linkForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const err = root.querySelector('#pl-err');
+        const code = root.querySelector('#pl-in').value.trim();
+        if (!/^\d{8}$/.test(code)) { err.textContent = 'Код — 8 цифр.'; err.hidden = false; return; }
+        err.hidden = true;
+        store.linkParent(code).then((message) => {
+          if (message) { err.textContent = message; err.hidden = false; return; }
+          linkForm.reset(); rerender(); toast('Ребёнок привязан');
+        });
+      });
+      const emailForm = root.querySelector('#em-f');
+      if (emailForm) emailForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const err = root.querySelector('#em-err');
+        const value = root.querySelector('#em-in').value.trim();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) { err.textContent = 'Введите корректный email.'; err.hidden = false; return; }
+        err.hidden = true;
+        store.changeEmail(value).then((message) => {
+          if (message) { err.textContent = message; err.hidden = false; return; }
+          emailForm.reset(); toast('Письмо с подтверждением отправлено на ' + value);
+        });
+      });
+      root.querySelector('#nt-save')?.addEventListener('click', () => {
+        const err = root.querySelector('#nt-err');
+        const patch = {
+          notify_email: root.querySelector('#nt-email').checked,
+          notify_browser: root.querySelector('#nt-browser').checked,
+          notify_digest_time: root.querySelector('#nt-time').value || '19:00'
+        };
+        if (!store.updateProfile(patch)) { err.textContent = store.SAVE_ERROR; err.hidden = false; return; }
+        toast('Уведомления сохранены');
+      });
+      const joinForm = root.querySelector('#jc-f');
+      if (joinForm) joinForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const err = root.querySelector('#jc-err');
+        const code = root.querySelector('#jc-in').value.trim().toUpperCase();
+        if (!/^[A-Z0-9]{12}$/.test(code)) { err.textContent = 'Код класса — 12 символов.'; err.hidden = false; return; }
+        err.hidden = true;
+        store.joinClass(code).then((message) => {
+          if (message) { err.textContent = message; err.hidden = false; return; }
+          joinForm.reset(); rerender(); toast('Вы в классе');
+        });
+      });
+      const pwForm = root.querySelector('#pw-f');
+      if (pwForm) pwForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const err = root.querySelector('#pw-err');
+        const cur = root.querySelector('#pw-cur').value;
+        const next = root.querySelector('#pw-new').value;
+        const rep = root.querySelector('#pw-rep').value;
+        const show = (text) => { err.textContent = text; err.hidden = false; };
+        if (!cur) return show('Введите текущий пароль.');
+        if (next.length < 8) return show('Новый пароль должен быть не короче 8 символов.');
+        if (next !== rep) return show('Новый пароль и повтор не совпадают.');
+        err.hidden = true;
+        store.changePassword(cur, next).then((message) => {
+          if (message) return show(message);
+          pwForm.reset(); toast('Пароль изменён');
+        });
+      });
 
       root.querySelectorAll('[data-accent]').forEach((b) => b.addEventListener('click', () => { store.set({ accent: b.dataset.accent }); rerender(); }));
       if (!sch) return;

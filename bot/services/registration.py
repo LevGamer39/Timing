@@ -26,6 +26,8 @@ from texts.messages import (
     REGISTER_NAME_CONFIRM_TEXT,
     REGISTER_NAME_EDIT_TEXT,
     REGISTER_NAME_FAILED_TEXT,
+    REGISTER_PASSWORD_INVALID_TEXT,
+    REGISTER_PASSWORD_TEXT,
     REGISTER_WELCOME_TEXT,
 )
 
@@ -33,6 +35,7 @@ LOGIN = "login"
 INVITE = "invite"
 NAME_CONFIRM = "name_confirm"
 NAME_EDIT = "name_edit"
+PASSWORD = "password"
 
 MAX_LOGIN_LENGTH = 255
 MAX_NAME_LENGTH = 100
@@ -139,6 +142,15 @@ async def handle_text(
         state["invite_code"] = answer
         state["role"] = info.get("role")
         state["class_name"] = info.get("class_name")
+        state["step"] = PASSWORD
+        await respond(event, REGISTER_PASSWORD_TEXT)
+        return True
+
+    if step == PASSWORD:
+        if len(answer) < 8:
+            await respond(event, REGISTER_PASSWORD_INVALID_TEXT)
+            return True
+        state["password"] = answer
         await _ask_name(event, user, state)
         return True
 
@@ -189,6 +201,7 @@ async def _submit(
         payload = await ctx.backend.max_register(
             hashed,
             login=str(state.get("login", "")),
+            password=str(state.get("password", "")),
             invite_code=str(state.get("invite_code", "")),
             first_name=str(state.get("first_name", "")),
             last_name=str(state.get("last_name", "")),

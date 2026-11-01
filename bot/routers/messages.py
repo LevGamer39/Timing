@@ -15,7 +15,7 @@ from core.ui import (
     role_of,
 )
 from keyboards import main_menu
-from services import registration
+from services import registration, link
 from services.ai_chat import answer as ai_answer
 from services.tasks import create_from_text
 from texts import HELP_TEXT
@@ -50,6 +50,10 @@ def build_router(ctx: AppContext) -> Router:
         # Регистрация идёт до require_token: у нового пользователя JWT ещё
         # нет, а логин и код приглашения нужно собрать именно у него.
         user = event_user(event)
+        if user is not None and await link.handle_text(
+            ctx, event, user, text
+        ):
+            return
         if user is not None and await registration.handle_text(
             ctx, event, user, text
         ):

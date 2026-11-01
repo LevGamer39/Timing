@@ -336,12 +336,14 @@ function newTypeSheet(onCreated) {
 
 function addLessonSheet(j, types, done) {
   const today = iso(store.NOW);
-  sheet(fragment("journal", "nl", [today, store.currentPeriod().from, periodEnd(), types.map((t) => ("<option value=\"" + (t.id) + "\">" + (esc(t.name)) + " ×" + (t.w) + "</option>")).join('')]), (el, close) => {
+  sheet(fragment("journal", "nl", [today, store.currentPeriod().from || '', periodEnd(), types.map((t) => ("<option value=\"" + (t.id) + "\">" + (esc(t.name)) + " ×" + (t.w) + "</option>")).join('')]), (el, close) => {
     el.querySelector('#nl').addEventListener('submit', (e) => {
       e.preventDefault();
       const d = el.querySelector('#nd').value;
       const err = el.querySelector('#ne');
-      if (!d || d < store.currentPeriod().from || d > periodEnd()) { err.textContent = 'Выберите дату внутри текущего учебного периода.'; err.hidden = false; return; }
+      const from = store.currentPeriod().from;
+      const to = store.currentPeriod().to;
+      if (!d || (from && d < from) || (to && d > to)) { err.textContent = 'Выберите дату внутри текущего учебного периода.'; err.hidden = false; return; }
       if (j.lessons.some((l) => l.date === d)) { err.textContent = 'Урок с этой датой уже есть.'; err.hidden = false; return; }
       j.lessons.push({ date: d, type: el.querySelector('#ntp').value, hw: '' });
       j.lessons.sort((a, b) => a.date.localeCompare(b.date));

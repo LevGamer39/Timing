@@ -47,9 +47,28 @@ function composeView({ params, go }) {
         if (f.text.value.trim() && !window.confirm('Закрыть письмо? Текст не сохранится.')) e.preventDefault();
       });
 
+      const drawFiles = () => {
+        root.querySelector('#files').innerHTML = files.map((f) => ("<span class=\"pill\">" + (icon('clip', 14)) + (esc(f.name)) + "</span>")).join('');
+      };
       root.querySelector('#file').addEventListener('change', (e) => {
-        [...e.target.files].forEach((x) => files.push(x.name));
-        root.querySelector('#files').innerHTML = files.map((n) => ("<span class=\"pill\">" + (icon('clip', 14)) + (esc(n)) + "</span>")).join('');
+        const picked = [...e.target.files];
+        e.target.value = '';
+        if (!picked.length) return;
+        files.push(...picked.map((x) => ({ name: x.name, token: '', pending: true })));
+        drawFiles();
+        picked.forEach((x, i) => {
+          const item = files[files.length - picked.length + i];
+          store.uploadAttachment(x).then((result) => {
+            item.token = result.token || '';
+            item.name = result.name || x.name;
+            delete item.pending;
+            drawFiles();
+          }).catch((error) => {
+            files.splice(files.indexOf(item), 1);
+            drawFiles();
+            toast(error.message || 'Не удалось загрузить файл');
+          });
+        });
       });
 
       f.addEventListener('submit', (e) => {
@@ -57,6 +76,7 @@ function composeView({ params, go }) {
         const subj = f.subj.value.trim(), text = f.text.value.trim();
         if (!to) { err.textContent = 'Выберите, кому отправить письмо.'; err.hidden = false; return; }
         if (!subj && !text) { err.textContent = 'Напишите тему или текст письма.'; err.hidden = false; return; }
+        if (files.some((f) => f.pending)) { err.textContent = 'Подождите, файлы ещё загружаются.'; err.hidden = false; return; }
         if (!store.send({ to: to.id, subject: subj || '(без темы)', body: text, files: files.slice() })) { err.textContent = store.SAVE_ERROR; err.hidden = false; return; }
         toast('Письмо отправлено');
         go('mail/sent');

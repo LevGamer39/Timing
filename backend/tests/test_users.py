@@ -166,6 +166,7 @@ def _max_body(**overrides) -> MaxRegisterRequest:
     payload = {
         "max_user_id_hashed": HASH,
         "login": "NewStudent",
+        "password": "supersecret123",
         "invite_code": "AAAA111111",
         "first_name": "Иван",
         "last_name": "Иванов",
@@ -197,7 +198,8 @@ def test_max_register_creates_student_in_class(db, klass):
     assert user is not None
     assert user.role == UserRole.student
     assert user.email is None
-    assert user.password_hash is None
+    assert user.password_hash is not None
+    assert verify_password("supersecret123", user.password_hash)
     assert user.max_user_id == HASH
     assert user.is_active and user.is_verified
     assert user.grade == klass.name
@@ -480,11 +482,12 @@ def test_invite_is_consumed_on_verification(client, real_db):
     ).status_code == 400
 
 
-def test_missing_page_returns_404_not_500(client):
-    """Файлов parent/*.html и student/profile.html не существует."""
+def test_missing_page_returns_shell_not_500(client):
+    """Старые адреса отдают оболочку SPA: разбирать их больше не нужно."""
     for path in ("/parent/dashboard", "/student/profile"):
         response = client.get(path)
-        assert response.status_code == 404, path
+        assert response.status_code == 200, path
+        assert "<title>Вектор</title>" in response.text, path
 
 
 def test_existing_page_is_served(client):

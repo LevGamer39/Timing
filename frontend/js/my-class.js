@@ -20,7 +20,9 @@ function myClassView({ rerender }) {
   const todayPlan = store.scheduleOf(cls.key)[weekday(store.NOW)] || [];
   const att = store.attendance(cls.key, today);
   const period = store.currentPeriod();
-  const missedBy = Object.fromEntries(store.absencesBetween(cls.key, period.from, today < period.to ? today : period.to).map((x) => [x.name, x.lessons]));
+  const periodFrom = period.from || '2000-01-01';
+  const periodTo = period.to || today;
+  const missedBy = Object.fromEntries(store.absencesBetween(cls.key, periodFrom, periodTo < today ? periodTo : today).map((x) => [x.name, x.lessons]));
   const history = classTab === 'hist' ? absenceBlock([cls.key]) : null;
   let seed = 17;
   const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };

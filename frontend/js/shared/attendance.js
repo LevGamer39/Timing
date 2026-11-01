@@ -10,6 +10,13 @@ const DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 const dayLabel = (date) => { const d = parse(date); return DAY_SHORT[weekday(d)] + ', ' + dayMonth(d); };
 
+const periodFrom = () => store.currentPeriod().from || (() => {
+  const d = new Date();
+  d.setDate(d.getDate() - 180);
+  return d.toISOString().slice(0, 10);
+})();
+const periodTo = () => store.currentPeriod().to || iso(store.NOW);
+
 const lessonsText = (a) => a.allDay ? 'весь день' : a.lessons.map((l) => l.n + ' · ' + store.SUBJECTS[l.subj].name).join(', ');
 
 const lessonsWord = (n) => n + ' ' + plural(n, 'урок', 'урока', 'уроков');
@@ -18,9 +25,9 @@ function downloadCsv(keys, title) {
   const all = store.classes();
   const p = store.currentPeriod();
   const today = iso(store.NOW);
-  const to = today < p.to ? today : p.to;
+  const to = today < periodTo() ? today : periodTo();
   const rows = [['Класс', 'Дата', 'День недели', 'Ученик', 'Пропущено уроков', 'Какие уроки']];
-  keys.forEach((k) => store.schoolDaysOf(k, p.from, to).forEach((d) => store.absencesOn(k, d).forEach((a) => rows.push([
+  keys.forEach((k) => store.schoolDaysOf(k, periodFrom(), to).forEach((d) => store.absencesOn(k, d).forEach((a) => rows.push([
     all[k].name, d.split('-').reverse().join('.'), DAYS[weekday(parse(d))], a.name, a.lessons.length, a.allDay ? 'весь день' : lessonsText(a)
   ]))));
   // «;» и BOM — иначе русский Excel откроет файл одной колонкой и кракозябрами.
@@ -37,8 +44,8 @@ function absenceBlock(clsKeys, school = null) {
   const all = store.classes();
   const p = store.currentPeriod();
   const today = iso(store.NOW);
-  const to = today < p.to ? today : p.to;
-  const days = [...new Set(clsKeys.flatMap((k) => store.schoolDaysOf(k, p.from, to)))].sort();
+  const to = today < periodTo() ? today : periodTo();
+  const days = [...new Set(clsKeys.flatMap((k) => store.schoolDaysOf(k, periodFrom(), to)))].sort();
   const id = clsKeys.join(',');
   if (!days.includes(picked[id])) picked[id] = days[days.length - 1];
   const day = picked[id];
@@ -56,10 +63,10 @@ function absenceBlock(clsKeys, school = null) {
   }).join('') || ("<p class=\"muted\" style=\"margin: 0; padding: 16px\">Все были на уроках.</p>");
 
   const summary = many
-    ? clsKeys.map((k) => { const s = store.absencesBetween(k, p.from, to); const n = s.reduce((a, x) => a + x.lessons, 0); return { name: all[k].name, n, kids: s.filter((x) => x.lessons).length }; })
+    ? clsKeys.map((k) => { const s = store.absencesBetween(k, periodFrom(), to); const n = s.reduce((a, x) => a + x.lessons, 0); return { name: all[k].name, n, kids: s.filter((x) => x.lessons).length }; })
       .map((x, n) => fragment("shared-attendance", "list-row", [clsKeys[n], esc(x.name), x.n ? lessonsWord(x.n) + ' · ' + x.kids + ' ' + plural(x.kids, 'ученик', 'ученика', 'учеников') : 'без пропусков', icon('next', 18)])).join('')
     : (() => {
-      const s = store.absencesBetween(clsKeys[0], p.from, to);
+      const s = store.absencesBetween(clsKeys[0], periodFrom(), to);
       const missed = s.filter((x) => x.lessons), clean = s.length - missed.length;
       return missed.map((x) => ("<div class=\"list-row ab-row\"><span class=\"grow\" style=\"font-weight: 600\">" + (esc(x.name)) + "</span><span class=\"muted small\">" + (lessonsWord(x.lessons)) + (x.days ? ' · ' + x.days + ' ' + plural(x.days, 'день', 'дня', 'дней') + ' целиком' : '') + "</span></div>")).join('')
         + (clean ? ("<p class=\"muted small\" style=\"margin: 0; padding: 12px 16px\">Без пропусков: " + (clean) + " " + (plural(clean, 'ученик', 'ученика', 'учеников')) + "</p>") : '');

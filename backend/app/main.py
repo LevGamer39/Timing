@@ -7,7 +7,22 @@ from fastapi.staticfiles import StaticFiles
 
 from app import config
 from app.database import create_tables
-from app.routers import users, admin, classes, assignments, tasks, grades, schedule, ai, notifications, yandex_auth
+from app.routers import (
+    users,
+    admin,
+    classes,
+    assignments,
+    tasks,
+    grades,
+    schedule,
+    journal,
+    attendance,
+    messages,
+    school,
+    ai,
+    notifications,
+    yandex_auth,
+)
 from app.routers.notifications import start_scheduler, stop_scheduler
 
 
@@ -37,9 +52,11 @@ CORS_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:8000",
     "http://localhost:8080",
+    "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:8000",
     "http://127.0.0.1:8080",
+    "http://127.0.0.1:5173",
 ]
 if config.APP_URL:
     CORS_ORIGINS.append(config.APP_URL.rstrip("/"))
@@ -59,6 +76,10 @@ app.include_router(assignments.router)
 app.include_router(tasks.router)
 app.include_router(grades.router)
 app.include_router(schedule.router)
+app.include_router(journal.router)
+app.include_router(attendance.router)
+app.include_router(messages.router)
+app.include_router(school.router)
 app.include_router(ai.router)
 app.include_router(notifications.router)
 app.include_router(yandex_auth.router)

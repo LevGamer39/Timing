@@ -25,3 +25,4 @@ class AppContext:
     ai_mode: set[int] = field(default_factory=set)
     notified_unlinked: set[int] = field(default_factory=set)
     registration: dict[int, dict[str, Any]] = field(default_factory=dict)
+    link: dict[int, dict[str, Any]] = field(default_factory=dict)

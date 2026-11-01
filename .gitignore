@@ -197,3 +197,6 @@ graphify-out
 
 # runtime-состояние MAX-бота
 bot/data/*.json
+
+# вложения внутренней почты
+backend/data/uploads/

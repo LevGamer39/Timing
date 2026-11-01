@@ -279,6 +279,8 @@ async def _call_ollama(messages: list[dict]) -> str:
             return response.json()["message"]["content"]
     except httpx.ConnectError as exc:
         raise HTTPException(503, "AI service unavailable") from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(503, "AI service unavailable") from exc
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001

@@ -26,6 +26,7 @@ from app.models import (
     EmailChangeToken,
     EmailVerification,
     InviteCode,
+    MaxLoginCode,
     ParentLinkToken,
     ParentStudent,
     PasswordResetToken,
@@ -158,6 +159,8 @@ class RegisterRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    id: int
+    login: str
     role: UserRole
     first_name: str
     last_name: str
@@ -180,6 +183,7 @@ class ChildSummary(BaseModel):
 
 class ProfileResponse(BaseModel):
     id: int
+    login: str
     email: str | None
     first_name: str
     last_name: str
@@ -687,7 +691,12 @@ def login(
     key = f"login:{form.username.lower()}"
     if _is_rate_limited(key):
         raise HTTPException(429, "Too many login attempts. Try later.")
-    user = db.query(User).filter(User.email == form.username.lower()).first()
+    ident = form.username.strip().lower()
+    user = (
+        db.query(User)
+        .filter((User.login == ident) | (func.lower(User.email) == ident))
+        .first()
+    )
     if not user or not verify_password(form.password, user.password_hash):
         _record_attempt(key)
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -698,6 +707,8 @@ def login(
     _normalize_profile_defaults(user, db)
     return LoginResponse(
         access_token=create_access_token(user.id),
+        id=user.id,
+        login=user.login,
         role=user.role,
         first_name=user.first_name,
         last_name=user.last_name,
@@ -997,6 +1008,8 @@ class MaxLinkRequest(BaseModel):
 class MaxLinkResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    id: int
+    login: str
     role: UserRole
     first_name: str
     last_name: str
@@ -1007,6 +1020,7 @@ class MaxRegisterRequest(BaseModel):
 
     max_user_id_hashed: str
     login: str
+    password: str
     invite_code: str
     first_name: str
     last_name: str
@@ -1041,6 +1055,15 @@ class MaxRegisterRequest(BaseModel):
             raise ValueError("Invite code must not be blank")
         if len(value) > 16:
             raise ValueError("Invite code must be <= 16 characters")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def _password_length(cls, value: str) -> str:
+        if len(value) < MIN_PASSWORD_LENGTH:
+            raise ValueError(
+                f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
+            )
         return value
 
     @field_validator("first_name", "last_name")
@@ -1119,6 +1142,8 @@ def max_link(
     _normalize_profile_defaults(user, db)
     return MaxLinkResponse(
         access_token=create_access_token(user.id),
+        id=user.id,
+        login=user.login,
         role=user.role,
         first_name=user.first_name,
         last_name=user.last_name,
@@ -1176,6 +1201,8 @@ def max_register(
             raise HTTPException(403, "Account is not active")
         return MaxLinkResponse(
             access_token=create_access_token(already.id),
+            id=already.id,
+            login=already.login,
             role=already.role,
             first_name=already.first_name,
             last_name=already.last_name,
@@ -1205,7 +1232,7 @@ def max_register(
     user = User(
         login=body.login,
         email=None,
-        password_hash=None,
+        password_hash=hash_password(body.password),
         first_name=body.first_name,
         last_name=body.last_name,
         role=UserRole.student if class_ is not None else UserRole.teacher,
@@ -1240,6 +1267,127 @@ def max_register(
     db.refresh(user)
     return MaxLinkResponse(
         access_token=create_access_token(user.id),
+        id=user.id,
+        login=user.login,
+        role=user.role,
+        first_name=user.first_name,
+        last_name=user.last_name,
+    )
+
+
+MAX_CODE_TTL = timedelta(minutes=10)
+
+
+class MaxCodeIssueRequest(BaseModel):
+    max_user_id_hashed: str
+
+    @field_validator("max_user_id_hashed")
+    @classmethod
+    def _valid_hash(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not _HASH_RE.match(value):
+            raise ValueError("MAX user hash must be 64 hex characters")
+        return value
+
+
+class MaxCodeLoginRequest(BaseModel):
+    code: str
+
+
+@router.post("/auth/max-code/issue")
+def issue_max_code(
+    body: MaxCodeIssueRequest,
+    x_bot_signature: str | None = Header(default=None, alias="X-Bot-Signature"),
+    db: Session = Depends(get_db),
+):
+    """Бот выдаёт одноразовый код для входа в SPA."""
+    _verify_bot_signature(body.max_user_id_hashed, x_bot_signature)
+    user = (
+        db.query(User)
+        .filter(User.max_user_id == body.max_user_id_hashed)
+        .first()
+    )
+    if not user:
+        raise HTTPException(404, "MAX account is not registered")
+    if not user.is_active:
+        raise HTTPException(403, "Account is not active")
+
+    db.query(MaxLoginCode).filter(
+        MaxLoginCode.user_id == user.id,
+        MaxLoginCode.is_used.is_(False),
+    ).update({"is_used": True}, synchronize_session=False)
+    db.commit()
+
+    code = ""
+    for _ in range(10):
+        candidate = "".join(str(secrets.randbelow(10)) for _ in range(6))
+        taken = (
+            db.query(MaxLoginCode.id)
+            .filter(
+                MaxLoginCode.code == candidate,
+                MaxLoginCode.is_used.is_(False),
+            )
+            .first()
+        )
+        if not taken:
+            code = candidate
+            break
+    if not code:
+        raise HTTPException(503, "Could not create a login code")
+
+    db.add(
+        MaxLoginCode(
+            code=code,
+            user_id=user.id,
+            expires_at=datetime.now(timezone.utc) + MAX_CODE_TTL,
+        )
+    )
+    db.commit()
+    return {"code": code, "expires_in": int(MAX_CODE_TTL.total_seconds())}
+
+
+@router.post("/auth/max-code", response_model=MaxLinkResponse)
+def max_code_login(
+    body: MaxCodeLoginRequest,
+    db: Session = Depends(get_db),
+):
+    """Меняет код из бота на JWT. Код одноразовый и живёт 10 минут."""
+    code = body.code.strip()
+    if not code or len(code) > 8:
+        raise HTTPException(400, "Invalid code")
+
+    key = f"max-code:{code}"
+    if _is_rate_limited(key, limit=5, window=600):
+        raise HTTPException(429, "Too many attempts. Try later.")
+
+    record = (
+        db.query(MaxLoginCode)
+        .filter(
+            MaxLoginCode.code == code,
+            MaxLoginCode.is_used.is_(False),
+        )
+        .order_by(MaxLoginCode.created_at.desc())
+        .first()
+    )
+    expires_at = record.expires_at if record else None
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if not record or expires_at < datetime.now(timezone.utc):
+        _record_attempt(key)
+        raise HTTPException(400, "Code expired or invalid")
+
+    user = db.query(User).filter(User.id == record.user_id).first()
+    if not user or not user.is_active:
+        _record_attempt(key)
+        raise HTTPException(403, "Account is not active")
+
+    record.is_used = True
+    db.commit()
+    _reset_attempts(key)
+    return MaxLinkResponse(
+        access_token=create_access_token(user.id),
+        id=user.id,
+        login=user.login,
         role=user.role,
         first_name=user.first_name,
         last_name=user.last_name,
@@ -1249,7 +1397,6 @@ def max_register(
 # ---------------------------------------------------------------------------
 # Сброс пароля
 # ---------------------------------------------------------------------------
-
 _RESET_MESSAGE = "Если такой email зарегистрирован, письмо отправлено."
 
 

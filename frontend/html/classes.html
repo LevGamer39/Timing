@@ -1,12 +1,32 @@
 <!-- fragment:add -->
 {{0}}<div class="stack" style="margin-top: 8px">
   <h1 class="title-l">{{1}}</h1>
-  <details class="card more"><summary>Как получить доступ</summary><p>Добавьте человека по ФИО и передайте код или распечатанное приглашение. В боте MAX он отправит код и придумает логин. Родитель отправляет коды других детей в тот же аккаунт. Ученику без MAX можно не активировать код: дневник смотрит родитель. В демо бот находится на экране входа.</p></details>
+  <details class="card more"><summary>Как получить доступ</summary><p>Ученик регистрируется в боте «Вектор» по коду класса — и сразу попадает в список. Учителя добавляет администратор: он выдаёт код, а учитель вводит его в боте. Родитель подключается к ребёнку по коду, который ученик выдаёт в боте.</p></details>
   <div class="class-controls"><nav class="ab-tabs" aria-label="Классы">{{4}}</nav>{{5}}</div>
+  {{10}}
   <div class="row roster-heading"><h2 class="h2 grow">{{6}} · {{7}} {{8}}</h2><button class="btn sm" id="add" type="button" aria-label="Добавить ученика в {{3}}">{{2}}Добавить ученика</button><button class="btn ghost sm" id="print" type="button">Печать приглашений</button></div>
   <div class="card roster-list">{{9}}</div>
 </div>
 <!-- /fragment:add -->
+
+<!-- fragment:invite -->
+<section class="card pad stack-sm">
+  <h2 class="h2">Код класса</h2>
+  <p class="hint" style="margin: 0">Ученик вводит этот код в боте «Вектор» при регистрации и сразу попадает в класс.</p>
+  <div class="row" style="gap: 12px; align-items: center"><b class="mono" style="font-size: 20px; letter-spacing: 1px">{{0}}</b>{{1}}</div>
+</section>
+<!-- /fragment:invite -->
+
+<!-- fragment:af -->
+<h2 class="h2">Добавить ученика</h2>
+<form class="stack" id="af" novalidate style="margin-top: 12px">
+  <label class="label" for="as">Ученик</label>
+  <select class="input" id="as">{{0}}</select>
+  <p class="hint">Список — активные ученики школы, которых нет в этом классе.</p>
+  <p class="error" id="ae" role="alert" hidden></p>
+  <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">Добавить</button></div>
+</form>
+<!-- /fragment:af -->
 
 <!-- fragment:add-class -->
 <button class="btn ghost sm" id="add-class" type="button" style="align-self: flex-start">{{0}}Добавить класс</button><div class="class-homeroom"><label class="label" for="ct">Классный руководитель {{1}}</label><select class="input" id="ct"><option value="">— не назначен —</option>{{2}}</select></div>

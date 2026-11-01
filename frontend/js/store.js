@@ -3,6 +3,8 @@ import { WORK_TYPES, JOURNALS } from './teacher-data.js';
 import { CLASSES, TEACHERS, SCHEDULES, SCHOOL_SETTINGS, loginOf } from './admin-data.js';
 import { normalizedScore, configureGrading } from './grading.js';
 import { iso, parse, addDays, mondayOf, weekday, weighted, mark } from './ui.js';
+import * as api from './api.js';
+import * as server from './server.js';
 
 const KEY = 'vector-demo-v1';
 export const SAVE_ERROR = 'Не удалось сохранить. Данные могли измениться в другой вкладке. Повторите действие.';
@@ -60,6 +62,11 @@ function refresh(conflict = false) {
 }
 export function save() {
   if (readOnly) return false;
+  // В серверном режиме данные живут в памяти: localStorage — только демо.
+  if (serverSession) {
+    dataListeners.forEach((render) => render(false, [], false));
+    return true;
+  }
   // Сравнение снимка защищает и от старых версий демо, ещё не записывающих revision.
   if (refresh(true)) return false;
   try {
@@ -83,7 +90,7 @@ export function save() {
 export const get = () => state;
 export function set(patch) {
   if (readOnly) return false;
-  if (refresh(true)) return false;
+  if (!serverSession && refresh(true)) return false;
   if (Object.entries(patch).every(([k, v]) => JSON.stringify(state[k]) === JSON.stringify(v))) return true;
   const session = state.session, before = generation;
   state = Object.assign({}, state, JSON.parse(JSON.stringify(patch)));
@@ -225,23 +232,88 @@ export function requestLoginCode(value, now = Date.now()) {
   pending = { login, code: randomCode(), at: now, tries: 0 };
   return { login: loginName(login), code: pending.code };
 }
-export function verifyLoginCode(login, value, now = Date.now()) {
-  if (!pending) return { error: 'Сначала нажмите «Вход» в демо-боте.' };
-  if (now - pending.at >= CODE_TTL_MIN * 60000 || !accountByLogin(pending.login) || !maxLinked(pending.login)) { pending = null; return { error: 'Код устарел. Запросите новый.', expired: true }; }
-  if (credentialKey(login) !== pending.login || String(value).trim() !== pending.code) {
-    if (++pending.tries >= CODE_TRIES) { pending = null; return { error: 'Слишком много попыток. Запросите новый код.', expired: true }; }
-    return { error: 'Неверный логин или код. Осталось попыток: ' + (CODE_TRIES - pending.tries) + '.' };
+export async function verifyLoginCode(login, value, now = Date.now()) {
+  // Код демо-бота проверяется локально: он создан в этой же вкладке.
+  if (pending) {
+    if (now - pending.at >= CODE_TTL_MIN * 60000 || !accountByLogin(pending.login) || !maxLinked(pending.login)) { pending = null; return { error: 'Код устарел. Запросите новый.', expired: true }; }
+    if (credentialKey(login) !== pending.login || String(value).trim() !== pending.code) {
+      if (++pending.tries >= CODE_TRIES) { pending = null; return { error: 'Слишком много попыток. Запросите новый код.', expired: true }; }
+      return { error: 'Неверный логин или код. Осталось попыток: ' + (CODE_TRIES - pending.tries) + '.' };
+    }
+    const key = pending.login;
+    pending = null;
+    return { login: loginName(key) };
   }
-  const key = pending.login;
-  pending = null;
-  return { login: loginName(key) };
+  // Настоящий код из MAX-бота: обмен на JWT.
+  try {
+    const result = await api.loginMaxCode(String(value).trim());
+    const { profile } = await server.load();
+    adopt(profile.login ? profile : { ...profile, login: result.login });
+    applySchoolScale();
+    return { login: result.login };
+  } catch (error) {
+    return { error: error.status === 0 ? 'Сервер недоступен. Попробуйте позже.' : error.message };
+  }
 }
 async function passwordHash(password, salt) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new Uint8Array(salt), iterations: 100000, hash: 'SHA-256' }, key, 256);
   return Array.from(new Uint8Array(bits), (b) => b.toString(16).padStart(2, '0')).join('');
 }
+// Сессия сервера живёт отдельно от демо-состояния: токен в localStorage,
+// профиль в памяти. Пока токена нет, работают демо-данные.
+let serverSession = null;
+let serverAccount = null;
+
+const adopt = (profile) => {
+  serverSession = {
+    login: profile.login,
+    role: profile.role,
+    childId: profile.role === 'parent'
+      ? String(server.session.children[0]?.id ?? '')
+      : profile.role === 'student' ? String(profile.id) : null
+  };
+  serverAccount = server.accountFor(profile, server.session.children);
+  server.setNotifier(() => dataListeners.forEach((render) => render(false, [])));
+  NOW.setTime(Date.now());
+  resetViewContext();
+  state.session = { login: profile.login, role: profile.role, childId: serverSession.childId };
+};
+
+export const isServer = () => Boolean(serverSession);
+
+const applySchoolScale = () => {
+  const settings = school();
+  configureGrading(settings.scale || 100, boundsFor(settings, settings.scale || 100));
+};
+
+export async function bootstrap() {
+  if (!api.hasToken()) return false;
+  try {
+    const { profile } = await server.load();
+    adopt(profile);
+    NOW.setTime(Date.now());
+    applySchoolScale();
+    return true;
+  } catch {
+    api.setToken('');
+    server.clear();
+    serverSession = null;
+    serverAccount = null;
+    return false;
+  }
+}
+
 export async function passwordLogin(value, password) {
+  try {
+    const result = await api.loginPassword(value, password);
+    const { profile } = await server.load();
+    adopt(profile.login ? profile : { ...profile, login: result.login });
+    applySchoolScale();
+    return { login: result.login };
+  } catch (error) {
+    if (error.status !== 0) return { error: error.message };
+  }
   refresh();
   const key = credentialKey(value), item = state.passwords?.[key];
   if (!item || !accountByLogin(key) || !maxLinked(key) || await passwordHash(password, item.salt) !== item.hash) return { error: 'Неверный логин или пароль. Можно войти через MAX.' };
@@ -251,23 +323,92 @@ export async function passwordLogin(value, password) {
 }
 export function login(name) {
   refresh();
-  const key = credentialKey(name), acc = accountByLogin(key);
+  const key = credentialKey(name);
+  if (serverSession && serverSession.login === key) {
+    resetViewContext();
+    return set({ session: { login: key, role: serverSession.role, childId: serverSession.childId } });
+  }
+  const acc = accountByLogin(key);
   if (!acc) return false;
   resetViewContext();
   return set({ session: { login: key, role: acc.role, childId: acc.role === 'parent' ? acc.children[0] : acc.studentId || null } });
 }
-export const logout = () => { pending = null; refresh(); resetViewContext(); set({ session: null }); state.session = null; };
-export const account = () => state.session && accountByLogin(state.session.login);
-export const role = () => state.session && state.session.role;
-export const student = () => state.session && studentById(state.session.childId);
-export const children = () => (account()?.children || []).map(studentById).filter(Boolean);
+// Регистрация, подтверждение почты и восстановление доступа — только сервер.
+const settle = (promise) => promise.then(() => '').catch((error) => (error && error.message) || 'Не удалось выполнить запрос.');
+export const registerAccount = (body) => settle(api.register(body));
+export const verifyAccount = (code) => settle(api.verifyEmail(code));
+export const resendCode = (email) => settle(api.resendVerification(email));
+export const requestReset = (email) => settle(api.requestPasswordReset(email));
+export const confirmReset = (token, password) => settle(api.confirmPasswordReset(token, password));
+export const changeEmail = (email) => settle(api.requestEmailChange(email));
+export const confirmEmail = (token) => settle(api.confirmEmailChange(token));
+export async function joinClass(code) {
+  if (!serverSession) return 'Код класса работает только на сервере.';
+  try {
+    await api.joinClass(code);
+    const data = await server.load();
+    adopt(data.profile);
+    return '';
+  } catch (error) {
+    return (error && error.message) || 'Не удалось вступить в класс.';
+  }
+}
+
+export function logout() {  pending = null;
+  api.setToken('');
+  server.clear();
+  serverSession = null;
+  serverAccount = null;
+  server.setNotifier(null);
+  refresh();
+  resetViewContext();
+  set({ session: null });
+  state.session = null;
+};
+export const account = () => serverSession ? serverAccount : state.session && accountByLogin(state.session.login);
+export const role = () => serverSession ? serverSession.role : state.session && state.session.role;
+export const student = () => serverSession
+  ? STUDENTS[serverSession.childId] || null
+  : state.session && studentById(state.session.childId);
+export const children = () => serverSession
+  ? server.session.children
+  : (account()?.children || []).map(studentById).filter(Boolean);
 export const setChild = (id) => {
-  if (!children().some((c) => c.id === id)) return;
+  if (!children().some((c) => String(c.id) === String(id))) return;
+  if (serverSession && String(serverSession.childId) !== String(id)) {
+    serverSession = Object.assign({}, serverSession, { childId: String(id) });
+    server.activate(id);
+    resetViewContext();
+    return set({ session: Object.assign({}, state.session, { childId: String(id) }) });
+  }
   if (state.session.childId !== id) resetViewContext();
   return set({ session: Object.assign({}, state.session, { childId: id }) });
 };
 
-const holidayOn = (d) => school().periods[school().periodType].find(([n, from, to]) => /каникул/i.test(n) && iso(d) >= from && iso(d) <= to);
+const holidayOn = (d) => serverSession ? undefined : school().periods[school().periodType].find(([n, from, to]) => /каникул/i.test(n) && iso(d) >= from && iso(d) <= to);
+
+// Привязка родителя: ученик выдаёт код, родитель вводит его у себя.
+export async function parentLinkCode() {
+  if (!serverSession) return { error: 'Код родителя выдаётся только на сервере.' };
+  try {
+    const result = await api.parentLinkToken();
+    return { code: result.code, expires: result.expires_at };
+  } catch (error) {
+    return { error: (error && error.message) || 'Не удалось получить код.' };
+  }
+}
+
+export async function linkParent(code) {
+  if (!serverSession) return 'Привязка работает только на сервере.';
+  try {
+    await api.linkParent(code);
+    const data = await server.load();
+    adopt(data.profile);
+    return '';
+  } catch (error) {
+    return (error && error.message) || 'Не удалось привязать ребёнка.';
+  }
+}
 
 export function gradesOf(sid) {
   const s = studentById(sid);
@@ -289,7 +430,8 @@ export function gradesOf(sid) {
 
 export function week(offset) {
   const s = student();
-  const mon = addDays(mondayOf(NOW), offset * 7);
+  const base = serverSession ? new Date() : NOW;
+  const mon = addDays(mondayOf(base), offset * 7);
   const hw = HOMEWORK[s.id] || [];
   const grades = gradesOf(s.id);
   const absent = ABSENT[s.id] || [];
@@ -303,7 +445,7 @@ export function week(offset) {
     const cls = classKey(s.cls), plan = scheduleOf(cls)[i] || [];
     const att = attendance(cls, date), snapshots = state.attendanceSubjects?.[cls + '|' + date] || {};
     const row = (classes()[cls] || { students: [] }).students.findIndex((x) => x.name === s.name);
-    if (date < iso(NOW)) Object.entries(snapshots).forEach(([key, subj]) => {
+    if (date < iso(base)) Object.entries(snapshots).forEach(([key, subj]) => {
       if (key.startsWith(row + '|') && att[key] && subj) plan[Number(key.split('|')[1]) - 1] = subj;
     });
     if (!plan.some(Boolean)) { days.push({ date, d, off: 'Выходной' }); continue; }
@@ -334,14 +476,19 @@ export function week(offset) {
 export function toggleHw(key, value) {
   const hwDone = Object.assign({}, state.hwDone);
   if (value) hwDone[key] = true; else delete hwDone[key];
+  if (serverSession) {
+    const id = server.taskId(key);
+    if (id) (value ? api.completeTask(id) : api.updateTask(id, { status: 'pending' })).catch(() => {});
+  }
   return set({ hwDone });
 }
 
 export function nextLesson() {
   const { days } = week(0);
-  const nowMin = NOW.getHours() * 60 + NOW.getMinutes();
+  const base = serverSession ? new Date() : NOW;
+  const nowMin = base.getHours() * 60 + base.getMinutes();
   const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-  const today = days.find((d) => d.date === iso(NOW));
+  const today = days.find((d) => d.date === iso(base));
   if (today && today.lessons) {
     const idx = today.lessons.findIndex((l) => toMin(l.end) > nowMin);
     if (idx >= 0) {
@@ -354,9 +501,10 @@ export function nextLesson() {
 }
 
 export function tomorrowHomework() {
+  const base = serverSession ? new Date() : NOW;
   for (let off = 1; off <= 7; off++) {
-    const d = addDays(NOW, off);
-    const w = week(Math.round((mondayOf(d) - mondayOf(NOW)) / (7 * 864e5)));
+    const d = addDays(base, off);
+    const w = week(Math.round((mondayOf(d) - mondayOf(base)) / (7 * 864e5)));
     const day = w.days.find((x) => x.date === iso(d));
     if (day && day.lessons) return { day, items: day.lessons.filter((l) => l.hw) };
     if (day && day.off && day.off !== 'Выходной') return { day, items: [] };
@@ -378,7 +526,7 @@ export function subjects(periodTo = currentPeriod().to, periodFrom = currentPeri
       const name = explicit ? teachers().find((t) => t.id === explicit)?.name : teacherFor(k, cls);
       if (name && !names.includes(name)) names.push(name);
     }));
-    return { key: k, name: SUBJECTS[k].name, teacher: names.join(', ') || 'Учитель не назначен', list, avg: weighted(list) };
+    return { key: k, name: SUBJECTS[k].name, teacher: names.join(', ') || (serverSession ? '' : SUBJECTS[k].teacher) || 'Учитель не назначен', list, avg: weighted(list) };
   });
 }
 
@@ -419,30 +567,61 @@ export function markSeen() {
   return set({ seen });
 }
 
-export const person = (id) => people().find((p) => p.id === id) || state.archivedPeople?.[id] || PEOPLE.find((p) => p.id === id) || { name: id, role: '' };
-export const people = () => PEOPLE.filter((p) => !p.id.startsWith('t-')).concat(teachers().map((t) => {
+export const person = (id) => serverSession
+  ? server.person(id)
+  : people().find((p) => p.id === id) || state.archivedPeople?.[id] || PEOPLE.find((p) => p.id === id) || { name: id, role: '' };
+export const people = () => serverSession ? server.session.people : PEOPLE.filter((p) => !p.id.startsWith('t-')).concat(teachers().map((t) => {
   const homerooms = Object.values(classes()).filter((c) => c.teacher === t.id).map((c) => c.name);
   const subjects = [...new Set(t.load.map(([key]) => SUBJECTS[key]?.name || key))];
   return { id: t.id, name: t.name, role: [homerooms.length ? 'Классный руководитель ' + homerooms.join(', ') : 'Учитель', ...subjects].join(' · ') };
 }));
 const deleted = (m) => !!(state.deletedMail && state.deletedMail[m.id]);
 export function inbox() {
+  if (serverSession) return server.inbox();
   return INBOX[role()].filter((m) => !deleted(m)).map((m) => Object.assign({}, m, { unread: m.unread && !state.readMail[m.id] }));
 }
 export function sent() {
+  if (serverSession) return server.sent();
   const own = (state.sent[role()] || []);
   return own.concat(SENT[role()]).filter((m) => !deleted(m)).sort((a, b) => b.date.localeCompare(a.date));
 }
-export const deleteMail = (id) => set({ deletedMail: Object.assign({}, state.deletedMail, { [id]: true }) });
+export const deleteMail = (id) => serverSession ? server.deleteMail(id) : set({ deletedMail: Object.assign({}, state.deletedMail, { [id]: true }) });
 export const unreadCount = () => inbox().filter((m) => m.unread).length;
-export const markRead = (id) => set({ readMail: Object.assign({}, state.readMail, { [id]: true }) });
+export const markRead = (id) => serverSession ? server.markRead(id) : set({ readMail: Object.assign({}, state.readMail, { [id]: true }) });
 export function send(msg) {
+  if (serverSession) return server.sendMail(msg);
   const list = (state.sent[role()] || []).slice();
   list.unshift(Object.assign({ id: 'my' + Date.now(), date: iso(NOW) + 'T' + NOW.toTimeString().slice(0, 5) }, msg));
   return set({ sent: Object.assign({}, state.sent, { [role()]: list }) });
 }
+export async function uploadAttachment(file) {
+  if (!serverSession) return { name: file.name, token: '' };
+  return api.uploadAttachment(file);
+}
+export function downloadAttachment(fileToken, name) {
+  if (!serverSession || !fileToken) return Promise.reject(new Error('Файл недоступен'));
+  return api.downloadAttachment(fileToken).then((blob) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = name || 'файл';
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    return true;
+  });
+}
 
 export function journal(key, allPeriods = false, normalize = true) {
+  if (serverSession) {
+    const source = server.session.journals[key];
+    if (!source) throw new Error('Неизвестный журнал: ' + key);
+    const result = JSON.parse(JSON.stringify(source));
+    const p = currentPeriod();
+    result.periodKey = p.key;
+    result.periodFrom = p.from;
+    result.periodTo = p.to;
+    result.finals = (result.finalsByPeriod && result.finalsByPeriod[p.key]) || {};
+    return result;
+  }
   const own = state.journals && state.journals[key];
   const j = JOURNALS[key];
   const meta = allJournalKeys().find((k) => k.key === key);
@@ -476,6 +655,12 @@ export function journal(key, allPeriods = false, normalize = true) {
 }
 export function saveJournal(j, retry = true) {
   refresh();
+  if (serverSession) {
+    if (!server.session.journalKeys.some((k) => k.key === j.key)) return false;
+    const full = Object.assign({}, j);
+    full.finalsByPeriod = Object.assign({}, j.finalsByPeriod, { [j.periodKey || currentPeriod().key]: j.finals });
+    return server.saveJournal(full);
+  }
   if (!account() || (role() === 'teacher' && !journalKeys().some((k) => k.key === j.key))) return false;
   const snapshot = journalSnapshots.get(j)?.value;
   const current = journal(j.key, !j.periodKey);
@@ -510,13 +695,17 @@ export function saveJournal(j, retry = true) {
   else if (retry && generation !== before) return saveJournal(edited, false);
   return ok;
 }
-export const journalKeys = () => account() ? allJournalKeys().filter((k) => role() !== 'teacher' || teachers().some((t) => t.id === account()?.teacherId && t.load.some(([s, cs]) => s === k.subjectKey && cs.includes(classKey(k.cls))))) : [];
+export const journalKeys = () => serverSession ? server.session.journalKeys : account() ? allJournalKeys().filter((k) => role() !== 'teacher' || teachers().some((t) => t.id === account()?.teacherId && t.load.some(([s, cs]) => s === k.subjectKey && cs.includes(classKey(k.cls))))) : [];
 
-export function workTypes() { return state.workTypes || WORK_TYPES.map((t) => Object.assign({}, t)); }
-export function setWorkTypes(list) { return set({ workTypes: list }); }
+export function workTypes() {
+  if (serverSession) return server.session.workTypes.length ? server.session.workTypes : WORK_TYPES.map((t) => Object.assign({}, t));
+  return state.workTypes || WORK_TYPES.map((t) => Object.assign({}, t));
+}
+export function setWorkTypes(list) { return serverSession ? server.setWorkTypes(list) : set({ workTypes: list }); }
 export const workTypeUsage = (id) => allJournalKeys().reduce((n, k) => n + journal(k.key, true).lessons.filter((l) => l.type === id).length, 0);
 export function removeWorkType(id) {
   if (id === 'lesson') return false;
+  if (serverSession) return server.removeWorkType(id);
   const journals = { ...state.journals };
   allJournalKeys().forEach((k) => {
     const j = journal(k.key, true, false);
@@ -539,13 +728,44 @@ export function rowAvg(j, r) {
 }
 
 const CLASS_KEYS = { '8А': '8a', '8Б': '8b', '7В': '7v', '4Б': '4b' };
-export const classKey = (name) => CLASS_KEYS[name] || name;
+export const classKey = (name) => CLASS_KEYS[name] || (serverSession ? server.classKey(name) : name);
 const copy = (o) => JSON.parse(JSON.stringify(o));
 
-export const classes = () => copy(state.classes || CLASSES);
+export const classes = () => copy(serverSession ? CLASSES : state.classes || CLASSES);
 export const saveClasses = (c) => set({ classes: c });
-export const teachers = () => copy(state.teachers || TEACHERS);
+export const teachers = () => copy(serverSession ? TEACHERS : state.teachers || TEACHERS);
 export const saveTeachers = (t) => set({ teachers: t });
+
+// --- Задачи ---------------------------------------------------------------
+
+const taskGuard = (fn) => serverSession ? fn() : Promise.reject(new Error('Задачи доступны только на сервере.'));
+export const taskList = () => taskGuard(() => server.taskList());
+export const taskCreate = (body) => taskGuard(() => server.taskCreate(body));
+export const taskUpdate = (id, body) => taskGuard(() => server.taskUpdate(id, body));
+export const taskDelete = (id) => taskGuard(() => server.taskDelete(id));
+export const taskComplete = (id) => taskGuard(() => server.taskComplete(id));
+export const taskSubtasks = (id) => taskGuard(() => server.taskSubtasks(id));
+export const taskAiSubtasks = (id) => taskGuard(() => server.taskAiSubtasks(id));
+
+// --- Управление классами и учителями (сервер) -----------------------------
+
+export const apiCreateClass = (name, teacherId) => server.createClass(name, teacherId);
+export const apiPatchClass = (key, patch) => server.patchClass(key, patch);
+export const apiDeleteClass = (key) => server.deleteClass(key);
+export const apiAddStudent = (key, studentId) => server.addStudentToClass(key, studentId);
+export const apiRemoveStudent = (key, studentId) => server.removeStudentFromClass(key, studentId);
+export const apiTeacherInvite = () => server.createTeacherInvite();
+export const apiInviteCodes = () => server.inviteCodes();
+export const apiDeleteInvite = (id) => server.deleteInviteCode(id);
+export const apiActivateUser = (id, active = true) => server.activateUser(id, active);
+export const apiSetTeacherSubject = (id, subject) => server.setTeacherSubject(id, subject);
+export const apiDeactivateTeacher = (id) => server.deactivateTeacher(id);
+
+export function unassignedStudents(clsKey) {  if (!serverSession) return [];
+  return (server.session.students || [])
+    .filter((s) => s.class_id === null || String(s.class_id) !== String(clsKey))
+    .map((s) => ({ id: String(s.id), name: [s.last_name, s.first_name].filter(Boolean).join(' ') || s.email || 'Ученик', cls: s.class_name || '' }));
+}
 export function addTeacher(value) {
   if (role() !== 'admin') return { error: 'Добавлять учителей может только администратор.' };
   const name = String(value).trim().replace(/\s+/g, ' ');
@@ -571,6 +791,12 @@ export function deleteTeacher(id) {
 export function removeScheduleLesson(cls, day, index) {
   if (role() !== 'admin') return 'Менять расписание может только администратор.';
   if (!classes()[cls] || !Number.isInteger(day) || day < 0 || day > 6 || !Number.isInteger(index) || index < 0) return 'Урок не найден.';
+  if (serverSession) {
+    const plan = scheduleOf(cls);
+    if (!plan[day][index]) return 'Урок уже удалён.';
+    server.removeLesson(cls, day, index);
+    return '';
+  }
   const plan = scheduleOf(cls);
   if (!plan[day][index]) return 'Урок уже удалён.';
   plan[day][index] = null;
@@ -579,7 +805,7 @@ export function removeScheduleLesson(cls, day, index) {
   if (assignments[cls]) delete assignments[cls][day + '|' + index];
   return set({ schedules: { ...state.schedules, [cls]: plan }, schedTeachers: assignments, ...attendanceForSchedule(cls, plan) }) ? '' : SAVE_ERROR;
 }
-export function scheduleOf(key) { const plan = copy(state.schedules?.[key] || SCHEDULES[key] || []); while (plan.length < 7) plan.push([]); return plan; }
+export function scheduleOf(key) { const plan = copy(serverSession ? (SCHEDULES[key] || []) : (state.schedules?.[key] || SCHEDULES[key] || [])); while (plan.length < 7) plan.push([]); return plan; }
 function attendanceForSchedule(cls, plan) {
   const previous = scheduleOf(cls), all = copy(state.attendance || {}), subjects = copy(state.attendanceSubjects || {});
   // «Н» относится к удалённому занятию, а не к следующему предмету на том же номере.
@@ -617,8 +843,15 @@ export function scheduleAssignmentError(subj, cls, teacherId, day, index) {
   }
   return '';
 }
-export const lessonTeacher = (key, d, n) => ((state.schedTeachers || {})[key] || {})[d + '|' + n] || '';
+export const lessonTeacher = (key, d, n) => serverSession
+  ? ((server.session.schedTeachers[key] || {})[d + '|' + n] || '')
+  : ((state.schedTeachers || {})[key] || {})[d + '|' + n] || '';
 export function saveScheduleLesson(key, plan, d, n, teacherId) {
+  if (serverSession) {
+    const time = bells(d)[n];
+    const subject = plan?.[d]?.[n];
+    return server.saveLesson(key, plan, d, n, teacherId, time, subject ? SUBJECTS[subject]?.room || '' : '');
+  }
   const all = Object.assign({}, state.schedTeachers);
   const assignments = Object.assign({}, all[key]);
   if (teacherId) assignments[d + '|' + n] = teacherId; else delete assignments[d + '|' + n];
@@ -633,7 +866,9 @@ export function setLessonTeacher(key, d, n, teacherId) {
   return set({ schedTeachers: all });
 }
 export function school() {
-  const s = copy(state.school || SCHOOL_SETTINGS);
+  const s = serverSession
+    ? Object.assign(copy(SCHOOL_SETTINGS), copy(server.session.school || {}))
+    : copy(state.school || SCHOOL_SETTINGS);
   // Старые сохранения без зимних/весенних каникул — берём полный список периодов по умолчанию.
   Object.keys(SCHOOL_SETTINGS.periods).forEach((k) => {
     if (!s.periods[k] || s.periods[k].length < SCHOOL_SETTINGS.periods[k].length) s.periods[k] = copy(SCHOOL_SETTINGS.periods[k]);
@@ -647,7 +882,9 @@ export function school() {
   return s;
 }
 export const bellSetFor = (day = 0, s = school()) => s.bellSets.find((b) => b.id === s.bellDays[typeof day === 'number' ? day : weekday(typeof day === 'string' ? parse(day) : day)]) || s.bellSets[0];
-export const bells = (day = 0) => bellSetFor(day).bells;
+export const bells = (day = 0) => serverSession && server.session.times?.[day]?.length
+  ? server.session.times[day]
+  : bellSetFor(day).bells;
 export const lessonTimes = (day = 0) => bells(day).map(({ start, end }) => start + '–' + end);
 export function bellTimeIssue(list) {
   for (let i = 0; i < list.length; i++) {
@@ -690,6 +927,7 @@ export function removeLastBell(day = 0) {
   const assignments = copy(state.schedTeachers || {});
   Object.values(assignments).forEach((slots) => Object.keys(slots).forEach((key) => { const [d, n] = key.split('|').map(Number); if (days.includes(d) && n >= next.length) delete slots[key]; }));
   b.bells = next; s.bells = s.bellSets[0].bells;
+  if (serverSession) return server.saveSchool(s) ? '' : SAVE_ERROR;
   return set({ schedTeachers: assignments, school: s }) ? '' : SAVE_ERROR;
 }
 export function boundsFor(s, scale) {
@@ -697,8 +935,36 @@ export function boundsFor(s, scale) {
   if (scale === 5) return [3, 4, 5];
   return [0.4, 0.6, 0.8].map((p) => Math.ceil(scale * p));
 }
-export const avatarOf = (login) => (state.avatars && state.avatars[login || (state.session && state.session.login)]) || '';
-export const setAvatar = (id) => set({ avatars: Object.assign({}, state.avatars, { [state.session.login]: id }) });
+export const avatarOf = (login) => serverSession
+  ? (server.session.profile?.avatar_url || '')
+  : (state.avatars && state.avatars[login || (state.session && state.session.login)]) || '';
+export function setAvatar(id) {
+  if (serverSession) {
+    server.saveProfile({ avatar_url: id || null }).then((profile) => {
+      if (!profile) return;
+      serverAccount = server.accountFor(profile, server.session.children);
+      dataListeners.forEach((render) => render(false, []));
+    });
+    return true;
+  }
+  return set({ avatars: Object.assign({}, state.avatars, { [state.session.login]: id }) });
+}
+// Имя и фамилия: в серверном режиме уходят в PATCH /api/users/me.
+export function updateProfile(fields) {
+  if (serverSession) {
+    server.saveProfile(fields).then((profile) => {
+      if (!profile) return;
+      serverAccount = server.accountFor(profile, server.session.children);
+      dataListeners.forEach((render) => render(false, []));
+    });
+    return true;
+  }
+  return set({ profile: Object.assign({}, state.profile, fields) });
+}
+export function changePassword(current, next) {
+  if (!serverSession) return 'Смена пароля доступна только на сервере.';
+  return server.changePassword(current, next);
+}
 export function saveSchool(s) {
   if (s.bellSets) {
     if (!s.bellSets.length) return bellSetsError(s);
@@ -708,12 +974,63 @@ export function saveSchool(s) {
     const error = bellSetsError(s);
     if (error) return error;
   }
+  if (serverSession) {
+    if (!server.saveSchool(copy(s))) return 'Не удалось сохранить настройки.';
+    configureGrading(s.scale || 100, boundsFor(s, s.scale || 100));
+    return '';
+  }
   if (!set({ school: copy(s) })) return 'Данные изменились в другой вкладке. Повторите действие.';
   configureGrading(s.scale, boundsFor(s, s.scale));
   return '';
 }
-export const attendance = (cls, date) => Object.assign({}, (state.attendance || {})[cls + '|' + date]);
+
+// --- ИИ -------------------------------------------------------------------
+
+export async function askAi(message) {
+  if (!serverSession) return null;
+  try {
+    const result = await api.aiChat(message);
+    return (result && result.reply) || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function aiHistory() {
+  if (!serverSession) return [];
+  try {
+    const list = await api.aiHistory();
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+// --- Уведомления ----------------------------------------------------------
+
+export async function notifications() {
+  if (!serverSession) return [];
+  try {
+    const list = await api.notifications();
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function readNotification(id) {
+  if (!serverSession) return Promise.resolve(false);
+  return api.readNotification(id).then(() => true).catch(() => false);
+}
+
+export function readAllNotifications() {
+  if (!serverSession) return Promise.resolve(false);
+  return api.readAllNotifications().then(() => true).catch(() => false);
+}
+
+export const attendance = (cls, date) => serverSession ? server.attendance(cls, date) : Object.assign({}, (state.attendance || {})[cls + '|' + date]);
 export function setAttendance(cls, date, marks) {
+  if (serverSession) return server.saveAttendance(cls, date, marks);
   const key = cls + '|' + date, plan = scheduleOf(cls)[weekday(parse(date))];
   const old = state.attendanceSubjects?.[key] || {};
   const subjects = Object.fromEntries(Object.keys(marks).map((k) => [k, old[k] || plan[Number(k.split('|')[1]) - 1]]));
@@ -743,7 +1060,7 @@ export function absencesOn(cls, date) {
   if (!schoolDay(cls, d) && !Object.keys(att).length) return [];
   const today = iso(NOW);
   const js = allJournalKeys().filter((k) => k.cls === c.name).map((k) => journal(k.key, true));
-  const seeded = Object.fromEntries(Object.keys(ABSENT).map((id) => [STUDENTS[id].name, ABSENT[id]]));
+  const seeded = serverSession ? {} : Object.fromEntries(Object.keys(ABSENT).map((id) => [STUDENTS[id].name, ABSENT[id]]));
   return c.students.map((s, r) => {
     const missed = new Set(Object.keys(att).filter((k) => k.startsWith(r + '|') && att[k] && (snapshots[k] || plan[Number(k.split('|')[1]) - 1])).map((k) => Number(k.split('|')[1])));
     js.forEach((j) => {
@@ -751,7 +1068,7 @@ export function absencesOn(cls, date) {
       if (jr >= 0 && j.grades[jr + '|' + date] === 'Н') { const n = plan.indexOf(j.subjectKey); if (n >= 0) missed.add(n + 1); }
     });
     if (seeded[s.name]) seeded[s.name].filter(([dt]) => dt === date).forEach(([, subj]) => { const n = plan.indexOf(subj); if (n >= 0) missed.add(n + 1); });
-    else if (date < today) demoMissed(cls, date, s.name, plan).forEach((n) => missed.add(n));
+    else if (!serverSession && date < today) demoMissed(cls, date, s.name, plan).forEach((n) => missed.add(n));
     const lessons = [...missed].sort((a, b) => a - b).map((n) => ({ n, subj: snapshots[r + '|' + n] || plan[n - 1] }));
     return { name: s.name, lessons, allDay: lessons.length > 0 && lessons.length === plan.filter(Boolean).length };
   }).filter((x) => x.lessons.length);
@@ -776,6 +1093,7 @@ export function schoolDaysOf(cls, from, to) {
 export const periodDaysLeft = () => Math.max(0, Math.round((addDays(parse(currentPeriod().to), 1) - parse(iso(NOW))) / 864e5));
 
 export function nextHolidays() {
+  if (serverSession) return null;
   const today = iso(NOW);
   const s = school();
   const h = s.periods[s.periodType].find(([name, from, to]) => /каникул/i.test(name) && to >= today);
@@ -784,11 +1102,17 @@ export function nextHolidays() {
 }
 
 export function teacherFor(subj, cls) {
+  if (serverSession) return server.teacherFor(subj, cls);
   const t = teachers().find((x) => x.load.some(([s, list]) => s === subj && list.includes(cls)));
   return t ? t.name : '';
 }
 
 export function currentPeriod() {
+  if (serverSession) {
+    const d = new Date(NOW);
+    const y = d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
+    return { name: 'Учебный год', from: y + '-09-01', to: (y + 1) + '-05-31', key: 'year' };
+  }
   const s = school(), today = iso(NOW);
   const ps = s.periods[s.periodType].filter(([name]) => !/каникул/i.test(name));
   const p = ps.find(([, from, to]) => from <= today && to >= today) || ps.find(([, from]) => from > today) || ps[ps.length - 1];
@@ -799,8 +1123,8 @@ const PERIOD_WORDS = {
   trimesters: { acc: 'триместр', gen: 'триместра', prep: 'триместре' },
   halves: { acc: 'полугодие', gen: 'полугодия', prep: 'полугодии' }
 };
-export const periodWord = (form = 'acc') => PERIOD_WORDS[school().periodType][form];
-export const studyPeriods = () => school().periods[school().periodType].filter(([n]) => !/каникул/i.test(n)).map(([name, from, to]) => ({ name, from, to, key: school().periodType + '|' + name }));
+export const periodWord = (form = 'acc') => serverSession ? (form === 'acc' ? 'год' : form === 'gen' ? 'года' : 'году') : PERIOD_WORDS[school().periodType][form];
+export const studyPeriods = () => serverSession ? [] : school().periods[school().periodType].filter(([n]) => !/каникул/i.test(n)).map(([name, from, to]) => ({ name, from, to, key: school().periodType + '|' + name }));
 export const finalsComplete = (j) => j.names.length > 0 && j.names.every((_, r) => typeof j.finals[r] === 'number');
 export const homeroom = () => Object.values(classes()).find((c) => teachers().some((t) => t.id === c.teacher && t.id === account()?.teacherId));
 export function todayLessons() {
@@ -815,6 +1139,9 @@ export function todayLessons() {
 }
 
 function allJournalKeys() {
+  if (serverSession) {
+    return server.session.journalKeys.map(({ key, cls, subj, subjectKey }) => ({ key, cls, subj, subjectKey }));
+  }
   const keys = Object.keys(JOURNALS).map((key) => ({ key, cls: JOURNALS[key].cls, subj: JOURNALS[key].subj, subjectKey: key.slice(key.indexOf('-') + 1) }));
   Object.entries(state.journals || {}).forEach(([key, j]) => { if (!keys.some((k) => k.key === key)) keys.push({ key, cls: j.cls, subj: j.subj, subjectKey: j.subjectKey }); });
   if (role() === 'teacher') teachers().filter((t) => t.id === account()?.teacherId).forEach((t) => t.load.forEach(([s, cs]) => cs.forEach((c) => {
@@ -824,6 +1151,7 @@ function allJournalKeys() {
   return keys;
 }
 export function studentById(id) {
+  if (serverSession) return STUDENTS[id] || Object.values(STUDENTS).find((s) => s.id === String(id)) || null;
   const seed = STUDENTS[id];
   for (const c of Object.values(classes())) {
     const s = c.students.find((x) => seed ? x.login === loginOf(seed.name) : x.login === id);

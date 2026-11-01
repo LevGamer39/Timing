@@ -1,10 +1,10 @@
 import * as store from '../store.js';
 
-import { esc } from "../ui.js";
+import { esc, iso } from "../ui.js";
 
 const periodLabel = () => esc(store.currentPeriod().name);
 
-const periodEnd = () => store.currentPeriod().to;
+const periodEnd = () => store.currentPeriod().to || iso(store.NOW);
 
 const ui = { key: '8a-algebra', sel: null, lesson: null };
 

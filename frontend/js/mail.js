@@ -6,7 +6,7 @@ import { query, setQuery } from "./shared/mail.js";
 
 const initials = (name) => name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
-const attachmentsOf = (m) => Array.isArray(m.files) ? m.files : m.file ? [m.file] : [];
+const attachmentsOf = (m) => (Array.isArray(m.files) ? m.files : m.file ? [m.file] : []).map((f) => (typeof f === 'string' ? { name: f, token: '' } : f));
 
 let failedReadId = null;
 store.onContextChange(() => { failedReadId = null; });
@@ -54,7 +54,7 @@ function mailView({ params, path, rerender }) {
   if (letter) {
     const who = store.person(inMsg ? letter.from : letter.to);
     const d = new Date(letter.date);
-    read = fragment("mail", "del", [inMsg ? '' : '/sent', icon('back'), inMsg ? 'Входящие' : 'Отправленные', esc(letter.subject), kind(inMsg ? letter.from : letter.to), esc(initials(who.name)), inMsg ? '' : 'Кому: ', esc(who.name), esc(who.role), dayMonth(d), d.toTimeString().slice(0, 5), esc(letter.body), attachmentsOf(letter).map((file) => fragment("mail", "row", [icon('clip'), esc(file)])).join(''), inMsg ? ("<a class=\"btn\" href=\"#/mail/new/" + (letter.id) + "\">" + (icon('reply', 20)) + "Ответить</a>") : '', icon('trash', 20)]);
+    read = fragment("mail", "del", [inMsg ? '' : '/sent', icon('back'), inMsg ? 'Входящие' : 'Отправленные', esc(letter.subject), kind(inMsg ? letter.from : letter.to), esc(initials(who.name)), inMsg ? '' : 'Кому: ', esc(who.name), esc(who.role), dayMonth(d), d.toTimeString().slice(0, 5), esc(letter.body), attachmentsOf(letter).map((file) => fragment("mail", "row", [icon('clip'), esc(file.name), esc(file.token || '')])).join(''), inMsg ? ("<a class=\"btn\" href=\"#/mail/new/" + (letter.id) + "\">" + (icon('reply', 20)) + "Ответить</a>") : '', icon('trash', 20)]);
   } else {
     read = ("<div class=\"card read-empty\"><div>" + (icon('mail', 40)) + "<p style=\"margin: 12px 0 0; font-weight: 600\">Выберите письмо слева</p></div></div>");
   }
@@ -73,7 +73,12 @@ function mailView({ params, path, rerender }) {
         const n = document.getElementById('q');
         n.focus(); n.setSelectionRange(pos, pos);
       });
-      root.querySelectorAll('[data-open-file]').forEach((b) => b.addEventListener('click', () => toast('В демо файлы не скачиваются')));
+      root.querySelectorAll('[data-open-file]').forEach((b) => b.addEventListener('click', () => {
+        const token = b.dataset.openFile;
+        if (!token) return toast('Файл был приложен без загрузки — скачать его нельзя.');
+        const name = b.closest('.row')?.querySelector('.grow')?.textContent || 'файл';
+        store.downloadAttachment(token, name).catch(() => toast('Не удалось скачать файл'));
+      }));
       const del = root.querySelector('#del');
       if (del) del.addEventListener('click', () => confirmSheet('Удалить письмо?', 'Письмо «' + letter.subject + '» пропадёт из почты.', 'Удалить', () => {
         if (!store.deleteMail(letter.id)) return toast(store.SAVE_ERROR);

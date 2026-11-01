@@ -51,6 +51,7 @@ class FakeBackend:
         hashed: str,
         *,
         login: str,
+        password: str,
         invite_code: str,
         first_name: str,
         last_name: str,
@@ -59,6 +60,7 @@ class FakeBackend:
             {
                 "hashed": hashed,
                 "login": login,
+                "password": password,
                 "invite_code": invite_code,
                 "first_name": first_name,
                 "last_name": last_name,
@@ -140,6 +142,7 @@ def test_register_full_dialog():
         # Несуществующий код приглашения диалог не принимает.
         await message(SimpleNamespace(message=Message("NOPE")))
         await message(SimpleNamespace(message=Message(CLASS_CODE)))
+        await message(SimpleNamespace(message=Message("secret123")))
         await button(Callback("reg:name:edit"))
         await message(SimpleNamespace(message=Message("Анна Мария\nПетрова")))
         await button(Callback("reg:name:ok"))
@@ -150,12 +153,15 @@ def test_register_full_dialog():
     assert answers[1].startswith("Такой логин уже существует")
     assert answers[2] == "Введите код приглашения"
     assert answers[3].startswith("Такого кода приглашения нет")
-    assert "Имя: Иван" in answers[4]
-    assert answers[5].startswith("Отправьте имя и фамилию двумя строками")
+    assert answers[4].startswith("Придумайте пароль")
+    assert "Имя: Иван" in answers[5]
+    assert answers[6].startswith("Отправьте имя и фамилию двумя строками")
     # После ручной правки бот переспрашивает и показывает разобранные поля.
-    assert "Имя: Анна Мария" in answers[6]
-    assert "Фамилия: Петрова" in answers[6]
-    assert answers[7].startswith("Готово, Анна Мария!")
+    assert "Имя: Анна Мария" in answers[7]
+    assert "Фамилия: Петрова" in answers[7]
+    assert answers[8].startswith("Готово, Анна Мария!")
+
+    assert registered[0]["password"] == "secret123"
 
     assert len(registered) == 1
     assert registered[0]["login"] == "MyLogin"
@@ -183,12 +189,13 @@ def test_register_accepts_teacher_code_and_keeps_name_from_max():
         await menu(Callback("menu:register"))
         await message(SimpleNamespace(message=Message("new-teacher")))
         await message(SimpleNamespace(message=Message(TEACHER_CODE)))
+        await message(SimpleNamespace(message=Message("secret123")))
         await button(Callback("reg:name:ok"))
 
     asyncio.run(flow())
 
-    assert "Имя: Иван" in answers[2]
-    assert answers[3].startswith("Готово, Иван!")
+    assert "Имя: Иван" in answers[3]
+    assert answers[4].startswith("Готово, Иван!")
     assert registered[0]["invite_code"] == TEACHER_CODE
     assert registered[0]["first_name"] == "Иван"
     assert registered[0]["last_name"] == "Иванов"

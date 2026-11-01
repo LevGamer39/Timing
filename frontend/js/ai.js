@@ -106,6 +106,12 @@ function aiView({ rerender }) {
   return {
     html: fragment("ai", "screen", [icon('back'), icon('spark', 20), icon('reset', 20), Object.entries(T).map(([k, v]) => ("<button class=\"cat\" type=\"button\" data-topic=\"" + (k) + "\" style=\"min-height: 0\"" + (topic === k ? ' aria-current="true"' : '') + "><b>" + (esc(v.title)) + "</b><span>" + (esc(v.desc)) + "</span></button>")).join(''), isParent ? ' ребёнка' : '', esc(hello), chat.map((m) => ("<div class=\"bubble " + (m.me ? 'me' : 'ai') + "\">" + (esc(m.text)) + "</div>")).join(''), topic ? ("\n      <div class=\"quick\">" + (Object.keys(T[topic].subs).map((k) => ("<button type=\"button\" data-sub=\"" + (esc(k)) + "\">" + (esc(k)) + "</button>")).join('')) + "<button type=\"button\" data-topic=\"\">Другая тема</button></div>") : chat.length ? ("\n      <div class=\"quick only-mobile\">" + (Object.entries(T).map(([k, v]) => ("<button type=\"button\" data-topic=\"" + (k) + "\">" + (esc(v.title)) + "</button>")).join('')) + "</div>") : ("\n      <div class=\"cats\">" + (Object.entries(T).map(([k, v]) => ("<button class=\"cat\" type=\"button\" data-topic=\"" + (k) + "\"><b>" + (esc(v.title)) + "</b><span>" + (esc(v.desc)) + "</span></button>")).join('')) + "</div>"), icon('send', 20), isParent ? ' ребёнка' : '']),    mount(root) {
       const push = (q, a) => { chat.push({ me: true, text: q }, { me: false, text: a }); rerender(); window.scrollTo(0, document.body.scrollHeight); };
+      const askAi = store.isServer() && store.role() === 'student';
+      if (askAi && !chat.length) store.aiHistory().then((list) => {
+        if (!list.length || chat.length) return;
+        setChat(list.filter((m) => m.content).map((m) => ({ me: m.role === 'user', text: m.content })));
+        rerender();
+      });
       root.querySelectorAll('[data-sub]').forEach((b) => b.addEventListener('click', () => push(b.dataset.sub, T[topic].subs[b.dataset.sub]())));
       root.querySelectorAll('[data-topic]').forEach((b) => b.addEventListener('click', () => {
         const k = b.dataset.topic;
@@ -118,7 +124,15 @@ function aiView({ rerender }) {
       root.querySelector('#ask').addEventListener('submit', (e) => {
         e.preventDefault();
         const q = root.querySelector('#q').value.trim();
-        if (q) { setTopic(null); push(q, freeAnswer(q)); }
+        if (!q) return;
+        setTopic(null);
+        if (!askAi) { push(q, freeAnswer(q)); return; }
+        chat.push({ me: true, text: q }, { me: false, text: 'Думаю…' });
+        rerender(); window.scrollTo(0, document.body.scrollHeight);
+        store.askAi(q).then((reply) => {
+          chat[chat.length - 1] = { me: false, text: reply || freeAnswer(q) };
+          rerender(); window.scrollTo(0, document.body.scrollHeight);
+        });
       });
       root.querySelector('#reset').addEventListener('click', () => { setChat([]); setTopic(null); rerender(); });
     }

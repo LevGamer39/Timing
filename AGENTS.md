@@ -13,7 +13,7 @@ VectorVK/
 │   │   ├── config.py            # ЕДИНЫЙ источник конфигурации (парсинг .env)
 │   │   ├── main.py              # Точка входа: API-роутеры + раздача страниц
 │   │   ├── database.py          # Engine (PostgreSQL), сессии, create_tables
-│   │   ├── models.py            # SQLAlchemy ORM, 13 моделей + ограничения
+│   │   ├── models.py            # SQLAlchemy ORM + ограничения
 │   │   ├── dependencies.py      # get_current_user, require_role
 │   │   ├── ai_text.py           # Чистая логика ИИ: парсинг, матчинг задач
 │   │   └── routers/
@@ -23,7 +23,11 @@ VectorVK/
 │   │       ├── assignments.py      # Задания учителя, прогресс
 │   │       ├── tasks.py            # Задачи ученика, подзадачи
 │   │       ├── grades.py           # Оценки, массовая выставка, сводки
-│   │       ├── schedule.py         # Расписание
+│   │       ├── schedule.py         # Расписание класса и ученика
+│   │       ├── journal.py          # Уроки, оценки, «Н», итоговые
+│   │       ├── attendance.py       # Отметки посещаемости
+│   │       ├── messages.py         # Внутренняя почта школы
+│   │       ├── school.py           # Настройки школы (звонки, периоды, шкала)
 │   │       ├── ai.py               # Оркестрация Ollama (логика — в ai_text.py)
 │   │       ├── notifications.py    # SMTP, APScheduler
 │   │       └── yandex_auth.py      # OAuth Яндекса
@@ -157,6 +161,13 @@ parent_task = relationship("Task", back_populates="subtasks", remote_side="[Task
   (фронт). Не пиши `datetime.now()` без `timezone.utc`.
 - `Schedule.weekday`: 0 = понедельник, 6 = воскресенье.
 - `Schedule.start_time` / `Task.ai_suggested_time` — строки `"HH:MM"`, не `TIME`.
+- Журнал и быт школы лежат в отдельных таблицах: `journal_lessons`,
+  `journal_absences`, `journal_finals`, `journal_work_types`;
+  `attendance_marks`; `class_schedule`; `messages` + `mail_files`;
+  `school_settings`. Оценка журнала — обычный `Grade` с
+  `journal_lesson_id`, поэтому она сразу видна ученику.
+- `Message.files` — JSON-список объектов `{token, name, size}`. Сами файлы
+  лежат в `backend/data/uploads/mail/`, доступ — по токену `mail_files`.
 
 ### 3. Роутеры (routers/*.py)
 
@@ -243,9 +254,14 @@ nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend чер
 
 ### 2. Данные
 
-- Единственная точка работы с данными — `js/store.js`; демо-данные — в
-  `js/data.js`, `js/teacher-data.js`, `js/admin-data.js`.
-- Прямой `fetch` в экранах не пиши: серверный слой адаптируется в `store.js`.
+- Единственная точка работы с данными — `js/store.js`; сеть — только через
+  `js/api.js`. Ответы API раскладываются в структуры экранов в `js/server.js`.
+- Демо-данные — в `js/data.js`, `js/teacher-data.js`, `js/admin-data.js`.
+- Без токена (`localStorage['vector-token']`) работает демо-режим; с токеном
+  `store.bootstrap()` поднимает сессию через `/api/users/me`.
+- В серверном режиме журнал, почта, посещаемость и расписание класса живут
+  в `server.session` (память), а не в `vector-demo-v1`: `save()` их не пишет.
+- Прямой `fetch` в экранах не пиши.
 - Демо хранится в `localStorage` под ключом `vector-demo-v1`.
 
 ### 3. Экраны и шаблоны
@@ -288,7 +304,6 @@ nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend чер
 | 11 | Фреймворка миграций нет: `create_all()` не меняет созданные таблицы; часть колонок догоняется в `_apply_schema_updates()` | `backend/app/database.py` |
 | 12 | Планировщик рассчитан на один процесс uvicorn | `backend/app/routers/notifications.py` |
 | 13 | Свой SMTP невозможен: домен на `no-ip.com`, нет контроля над TXT- и PTR-записями | `docker-compose.yml`, DNS |
-| 14 | Привязка существующего веб-аккаунта к MAX не реализована: `link-max` никто не вызывает. Новые пользователи регистрируются прямо в боте (`/api/users/auth/max-register`), а привязать аккаунт, созданный на сайте, нельзя | `backend/app/routers/users.py`, `bot/core/sessions.py` |
 
 Про 12: `docker-compose` запускает один `uvicorn`, поэтому джобы не
 дублируются. При нескольких воркерах каждый поднимет свой APScheduler —
@@ -447,5 +462,6 @@ YANDEX_LINK_CALLBACK=https://vector.myftp.org/api/auth/yandex/confirm-link
 
 ---
 
-**Last Updated**: 2026-10-18 (рефакторинг роутеров: `app/config.py`,
-`app/ai_text.py`, ограничения БД, pytest против PostgreSQL)
+**Last Updated**: 2026-11-01 (журнал, почта с вложениями, посещаемость,
+расписание, настройки школы, уведомления и ИИ подключены к API; админка
+управляет классами и учителями; `/link` привязывает веб-аккаунт к MAX)

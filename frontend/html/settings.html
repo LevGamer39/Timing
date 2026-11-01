@@ -31,12 +31,107 @@
       </button>
 <!-- /fragment:list-row -->
 
+<!-- fragment:profile -->
+
+  <section class="card pad stack-sm">
+    <h2 class="h2">Имя и фамилия</h2>
+    <form class="stack-sm" id="name-f" novalidate>
+      <label class="label" for="pf-first">Имя</label>
+      <input class="input" id="pf-first" maxlength="100" value="{{0}}" autocomplete="given-name">
+      <label class="label" for="pf-last">Фамилия</label>
+      <input class="input" id="pf-last" maxlength="100" value="{{1}}" autocomplete="family-name">
+      <p class="error" id="pf-err" role="alert" hidden></p>
+      <button class="btn sm" type="submit" style="align-self: flex-start">Сохранить имя</button>
+    </form>
+  </section>
+<!-- /fragment:profile -->
+
+<!-- fragment:password -->
+
+  <section class="card pad stack-sm">
+    <h2 class="h2">Пароль</h2>
+    <form class="stack-sm" id="pw-f" novalidate>
+      <label class="label" for="pw-cur">Текущий пароль</label>
+      <input class="input" id="pw-cur" type="password" autocomplete="current-password">
+      <label class="label" for="pw-new">Новый пароль</label>
+      <input class="input" id="pw-new" type="password" minlength="8" autocomplete="new-password">
+      <label class="label" for="pw-rep">Повторите новый</label>
+      <input class="input" id="pw-rep" type="password" minlength="8" autocomplete="new-password">
+      <p class="hint" style="margin: 0">Не короче 8 символов.</p>
+      <p class="error" id="pw-err" role="alert" hidden></p>
+      <button class="btn sm" type="submit" style="align-self: flex-start">Сменить пароль</button>
+    </form>
+  </section>
+<!-- /fragment:password -->
+
+<!-- fragment:parent-code -->
+
+  <section class="card pad stack-sm">
+    <h2 class="h2">Родитель</h2>
+    <p class="hint" style="margin: 0">Код действует 1 час. Родитель вводит его в своём аккаунте в разделе «Привязать ребёнка».</p>
+    <button class="btn sm" type="button" id="pl-code" style="align-self: flex-start">Получить код</button>
+    <div id="pl-slot"></div>
+    <p class="error" id="pl-err" role="alert" hidden></p>
+  </section>
+<!-- /fragment:parent-code -->
+
+<!-- fragment:parent-link -->
+
+  <section class="card pad stack-sm">
+    <h2 class="h2">Привязать ребёнка</h2>
+    <p class="hint" style="margin: 0">Введите 8-значный код из настроек ученика.</p>
+    <form class="stack-sm" id="pl-form" novalidate>
+      <input class="input" id="pl-in" inputmode="numeric" maxlength="8" placeholder="Например, 12345678" aria-label="Код ребёнка" autocomplete="off">
+      <p class="error" id="pl-err" role="alert" hidden></p>
+      <button class="btn sm" type="submit" style="align-self: flex-start">Привязать</button>
+    </form>
+  </section>
+<!-- /fragment:parent-link -->
+
+<!-- /fragment:parent-link -->
+
+<!-- fragment:email -->
+  <section class="card pad stack-sm">
+    <h2 class="h2">Email</h2>
+    <p class="hint" style="margin: 0">Текущий: <b>{{0}}</b></p>
+    <form class="stack-sm" id="em-f" novalidate>
+      <input class="input" id="em-in" type="email" autocomplete="email" placeholder="Новый адрес">
+      <p class="error" id="em-err" role="alert" hidden></p>
+      <button class="btn sm" type="submit" style="align-self: flex-start">Сменить email</button>
+    </form>
+  </section>
+<!-- /fragment:email -->
+
+<!-- fragment:notify -->
+  <section class="card pad stack-sm">
+    <h2 class="h2">Уведомления</h2>
+    <label class="row" style="gap: 10px; min-height: 44px"><input type="checkbox" id="nt-email" {{0}}> Письма на email</label>
+    <label class="row" style="gap: 10px; min-height: 44px"><input type="checkbox" id="nt-browser" {{1}}> Уведомления в браузере</label>
+    <label class="label" for="nt-time">Сводка за день</label>
+    <input class="input" id="nt-time" type="time" value="{{2}}">
+    <p class="error" id="nt-err" role="alert" hidden></p>
+    <button class="btn sm" type="button" id="nt-save" style="align-self: flex-start">Сохранить уведомления</button>
+  </section>
+<!-- /fragment:notify -->
+
+<!-- fragment:join-class -->
+  <section class="card pad stack-sm">
+    <h2 class="h2">Код класса</h2>
+    <p class="hint" style="margin: 0">Введите 12-символьный код от классного руководителя, чтобы попасть в класс.</p>
+    <form class="stack-sm" id="jc-f" novalidate>
+      <input class="input" id="jc-in" maxlength="12" autocomplete="off" placeholder="Например, A1B2C3D4E5F6" style="text-transform: uppercase">
+      <p class="error" id="jc-err" role="alert" hidden></p>
+      <button class="btn sm" type="submit" style="align-self: flex-start">Вступить в класс</button>
+    </form>
+  </section>
+<!-- /fragment:join-class -->
+
 <!-- fragment:access -->
 
   <section class="card pad stack-sm">
     <h2 class="h2">Способы входа</h2><p style="margin: 0">Логин: <b class="mono">{{0}}</b></p>
 
-    <p class="hint">Пароль задаётся и меняется только в боте «Вектор» в MAX.</p>
+    <p class="hint">Пароль задаётся в боте «Вектор» в MAX, а меняется здесь или там же.</p>
   </section>
 
   <section class="card pad row" style="flex-direction: row; gap: 12px">

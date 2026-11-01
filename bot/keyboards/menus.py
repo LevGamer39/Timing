@@ -32,6 +32,7 @@ def main_menu(role: str | None) -> AttachmentButton:
         builder.row(_button("📊 Мои классы", "menu:classes"))
 
     builder.row(_button("❓ Помощь", "menu:help"))
+    builder.row(_button("🌐 Вход на сайт", "menu:code"))
     return builder.as_markup()
 
 

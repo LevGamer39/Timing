@@ -6,6 +6,10 @@
     <div class="field"><label class="label" for="secret">{{2}}</label><input class="input" id="secret" type="{{3}}" {{4}}></div>
     <p class="error" id="login-error" role="alert" hidden></p>
     <button class="btn block" type="submit">Войти</button>
+    <div class="row" style="justify-content: space-between; gap: 8px; margin-top: 4px">
+      <button class="text-action" type="button" id="register-open">Регистрация</button>
+      <button class="text-action" type="button" id="reset-open">Забыли пароль?</button>
+    </div>
     <p class="hint provider-heading" id="provider-heading">Войти через</p>
     <div class="provider-options" role="group" aria-labelledby="provider-heading">
       <button class="provider-btn" type="button" id="max-login" aria-label="Войти через MAX" title="Войти через MAX"><svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" class="provider-max" aria-hidden="true" focusable="false">
@@ -958,3 +962,71 @@
   {{8}}
 </main>
 <!-- /fragment:screen -->
+
+<!-- fragment:reg -->
+<h2 class="h2" style="font-size: 20px">Регистрация</h2>
+<form class="stack" id="reg-f" novalidate style="margin-top: 12px">
+  <label class="label" for="rg-last">Фамилия</label>
+  <input class="input" id="rg-last" maxlength="100" autocomplete="family-name">
+  <label class="label" for="rg-first">Имя</label>
+  <input class="input" id="rg-first" maxlength="100" autocomplete="given-name">
+  <label class="label" for="rg-email">Email</label>
+  <input class="input" id="rg-email" type="email" autocomplete="email" placeholder="name@example.com">
+  <label class="label" for="rg-pass">Пароль</label>
+  <input class="input" id="rg-pass" type="password" minlength="8" autocomplete="new-password">
+  <label class="label" for="rg-role">Кто вы</label>
+  <select class="input" id="rg-role"><option value="student">Ученик</option><option value="teacher">Учитель</option><option value="parent">Родитель</option></select>
+  <div class="field" id="rg-invite-wrap" hidden>
+    <label class="label" for="rg-invite">Код учителя</label>
+    <input class="input" id="rg-invite" maxlength="16" autocomplete="off" placeholder="16 символов">
+  </div>
+  <p class="hint" style="margin: 0">Ученик вступает в класс по коду класса после входа, родитель привязывает ребёнка в настройках.</p>
+  <p class="error" id="rg-err" role="alert" hidden></p>
+  <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">Зарегистрироваться</button></div>
+</form>
+<!-- /fragment:reg -->
+
+<!-- fragment:verify -->
+<h2 class="h2" style="font-size: 20px">Код из письма</h2>
+<p class="hint">Мы отправили код на {{0}}. Введите его, чтобы активировать аккаунт.</p>
+<form class="stack-sm" id="verify-f" novalidate style="margin-top: 8px">
+  <input class="input" id="vf-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" aria-label="Код из письма">
+  <p class="error" id="vf-err" role="alert" hidden></p>
+  <div class="row" style="justify-content: space-between; gap: 8px"><button class="text-action" type="button" id="vf-again">Отправить ещё раз</button><button class="btn sm" type="submit">Подтвердить</button></div>
+</form>
+<!-- /fragment:verify -->
+
+<!-- fragment:reset -->
+<h2 class="h2" style="font-size: 20px">Восстановление пароля</h2>
+<form class="stack-sm" id="reset-f" novalidate style="margin-top: 8px">
+  <label class="label" for="rs-email">Email аккаунта</label>
+  <input class="input" id="rs-email" type="email" autocomplete="email" placeholder="name@example.com">
+  <p class="hint" style="margin: 0">Пришлём ссылку для нового пароля. Она действует 1 час.</p>
+  <p class="error" id="rs-err" role="alert" hidden></p>
+  <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">Отправить ссылку</button></div>
+</form>
+<!-- /fragment:reset -->
+
+<!-- fragment:newpass -->
+<main class="auth">
+  <div class="stack-sm" style="align-items: center; text-align: center">{{0}}<h1 class="title-l">Новый пароль</h1><p class="muted" style="margin: 0">Придумайте пароль не короче 8 символов</p></div>
+  <form class="card pad stack" id="newpass-f" novalidate>
+    <label class="label" for="np-pass">Новый пароль</label>
+    <input class="input" id="np-pass" type="password" minlength="8" autocomplete="new-password">
+    <label class="label" for="np-rep">Повторите пароль</label>
+    <input class="input" id="np-rep" type="password" minlength="8" autocomplete="new-password">
+    <p class="error" id="np-err" role="alert" hidden></p>
+    <button class="btn block" type="submit">Сохранить пароль</button>
+  </form>
+</main>
+<!-- /fragment:newpass -->
+
+<!-- fragment:mailconfirm -->
+<main class="auth">
+  <div class="stack-sm" style="align-items: center; text-align: center">{{0}}<h1 class="title-l">Смена email</h1><p class="muted" style="margin: 0">Подтверждение нового адреса</p></div>
+  <section class="card pad stack-sm">
+    <p id="mc-text" class="muted" style="margin: 0">Подтверждаю…</p>
+    <a class="btn block" href="#/login">Перейти ко входу</a>
+  </section>
+</main>
+<!-- /fragment:mailconfirm -->

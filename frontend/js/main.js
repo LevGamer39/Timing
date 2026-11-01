@@ -3,7 +3,8 @@ import { loadTemplates } from './templates.js';
 import { applyAccent } from './theme.js';
 import { bindCopy } from './clipboard.js';
 import { icon, logo, esc, setBounds, avatarSvg, closeSheets } from './ui.js';
-import { loginView } from './login.js';
+import { notificationButton, openNotifications } from './common.js';
+import { loginView, resetPasswordView, confirmEmailView } from './login.js';
 import './demo-bot.js'; // демо-бот MAX и «Демо-доступ»: без сервера; удалить вместе с demo-bot.*
 import { homeView } from './home.js';
 import { diaryView } from './diary.js';
@@ -24,8 +25,20 @@ import { scheduleView } from './schedule.js';
 import { attendanceView } from './attendance.js';
 
 const app = document.getElementById('app');
+// Письма из бэкенда ведут на /reset-password-new и /settings/change-email/confirm
+// с токеном в query; SPA живёт на хеше, поэтому переводим адрес сразу.
+(() => {
+  const legacy = location.pathname.match(/^\/(reset-password-new|settings\/change-email\/confirm)$/);
+  if (!legacy) return;
+  const token = new URL(location.href).searchParams.get('token') || '';
+  const hash = legacy[1].startsWith('reset') ? '#/reset/' + token : '#/confirm-email/' + token;
+  history.replaceState({}, '', '/#/' + hash.slice(2));
+})();
 let mountedScreen, screenData, screenRights;
 bindCopy(document);
+document.addEventListener('click', (event) => {
+  if (event.target.closest('#notif')) openNotifications();
+});
 const LEARNER = ['student', 'parent'];
 const TEACHER = ['teacher'];
 const ADMIN = ['admin'];
@@ -34,6 +47,8 @@ const STAFF = ['admin', 'teacher'];
 // [путь, экран, раздел меню, экран входа, роли, показывать нижнее меню на мобильном экране]
 const ROUTES = [
   [/^login$/, loginView, null, true],
+  [/^reset\/([\w-]+)$/, resetPasswordView, null, true],
+  [/^confirm-email\/([\w-]+)$/, confirmEmailView, null, true],
   [/^home$/, homeView, 'home', false, LEARNER, true],
   [/^home$/, teacherHomeView, 'home', false, TEACHER, true],
   [/^home$/, adminHomeView, 'home', false, ADMIN, true],
@@ -90,6 +105,7 @@ function topbar(active) {
   <nav class="tabs" aria-label="Разделы"><div class="tabs-in">${menuItems(active, true)}</div></nav>
   <div class="top-act">
     ${learner ? `<a class="btn ai-secondary sm" href="#/ai">${icon('spark', 18)}Спросить ИИ</a>` : ''}
+    ${notificationButton()}
     <a class="icon-btn gear" href="#/settings" aria-label="Настройки"${active === 'settings' ? ' aria-current="page"' : ''}>${icon('gear', 20)}</a>
     <a class="avatar" href="#/settings" aria-label="${store.avatarOf() ? '' : esc(acc.initials) + ' — '}Профиль и настройки"${store.avatarOf() ? ' style="background: none"' : ''}>${store.avatarOf() ? avatarSvg(store.avatarOf(), 44) : esc(acc.initials)}</a>
   </div>
@@ -127,7 +143,7 @@ function render(external = false) {
   const s = store.get();
   const acc = store.account();
 
-  if (!s.session || !acc) { if (path !== 'login') { go('login'); path = 'login'; } }
+  if (!s.session || !acc) { if (!/^(login|reset\/|confirm-email\/)/.test(path)) { go('login'); path = 'login'; } }
   else if (path === 'login') return go('home');
 
   const role = store.role();
@@ -137,7 +153,7 @@ function render(external = false) {
     .find((r) => r.m);
   if (!hit) return go('home');
 
-  const pageNames = { loginView: 'login', homeView: 'home', teacherHomeView: 'teacher-home', adminHomeView: 'admin-home', diaryView: 'diary', gradesView: 'grades', subjectView: 'subject', mailView: 'mail', composeView: 'compose', aiView: 'ai', settingsView: 'settings', journalView: 'journal', analysisView: 'analysis', myClassView: 'my-class', classesView: 'classes', teachersView: 'teachers', scheduleView: 'schedule', attendanceView: 'attendance' };
+  const pageNames = { loginView: 'login', resetPasswordView: 'reset', confirmEmailView: 'confirm-email', homeView: 'home', teacherHomeView: 'teacher-home', adminHomeView: 'admin-home', diaryView: 'diary', gradesView: 'grades', subjectView: 'subject', mailView: 'mail', composeView: 'compose', aiView: 'ai', settingsView: 'settings', journalView: 'journal', analysisView: 'analysis', myClassView: 'my-class', classesView: 'classes', teachersView: 'teachers', scheduleView: 'schedule', attendanceView: 'attendance' };
   document.body.dataset.page = pageNames[hit.view.name];
   document.body.classList.toggle("login-visual", path === "login");
   const create = () => hit.view({ params: hit.m.slice(1), path, go, rerender: render });
@@ -157,6 +173,7 @@ function render(external = false) {
 let lastPath = '';
 try {
   await loadTemplates();
+  await store.bootstrap();
   let queued = false;
   store.onDataChange((_conflict, _changed, external = true) => {
     if (!external) {
@@ -169,7 +186,7 @@ try {
       queued = false;
       applyTheme();
       const changedRights = screenRights !== rights();
-      if (!changedRights && screenData === dataForScreen()) return;
+      if (!changedRights && !store.isServer() && screenData === dataForScreen()) return;
       // Редактор журнала восстанавливает введённое поверх новых данных, пока права действуют.
       const draft = mountedScreen?.captureDraft?.();
       closeSheets();

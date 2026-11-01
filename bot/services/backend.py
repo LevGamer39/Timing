@@ -123,6 +123,24 @@ class Backend:
             headers={"X-Bot-Signature": sign_request(hashed_user_id)},
         )
 
+    async def link_web_account(
+        self, hashed_user_id: str, login: str, password: str
+    ) -> dict[str, Any]:
+        """Привязывает MAX к готовому веб-аккаунту по логину и паролю."""
+        payload = await self._request(
+            "POST",
+            "/api/users/login",
+            data={"username": login, "password": password},
+        )
+        token = str(payload["access_token"])
+        await self._request(
+            "POST",
+            "/api/users/auth/link-max",
+            token=token,
+            params={"max_user_id_hashed": hashed_user_id},
+        )
+        return payload
+
     async def login_available(self, login: str) -> bool:
         """Свободен ли логин при регистрации (регистр не важен)."""
 
@@ -143,6 +161,7 @@ class Backend:
         hashed_user_id: str,
         *,
         login: str,
+        password: str,
         invite_code: str,
         first_name: str,
         last_name: str,
@@ -155,10 +174,21 @@ class Backend:
             json={
                 "max_user_id_hashed": hashed_user_id,
                 "login": login,
+                "password": password,
                 "invite_code": invite_code,
                 "first_name": first_name,
                 "last_name": last_name,
             },
+            headers={"X-Bot-Signature": sign_request(hashed_user_id)},
+        )
+
+    async def issue_max_code(self, hashed_user_id: str) -> dict[str, Any]:
+        """Одноразовый код для входа в SPA (10 минут)."""
+
+        return await self._request(
+            "POST",
+            "/api/users/auth/max-code/issue",
+            json={"max_user_id_hashed": hashed_user_id},
             headers={"X-Bot-Signature": sign_request(hashed_user_id)},
         )
 

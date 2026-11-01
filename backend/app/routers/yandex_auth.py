@@ -122,9 +122,9 @@ def auth_success_script(token: str, user: User) -> HTMLResponse:
     return HTMLResponse(
         "<script>"
         f"(() => {{ const d = {payload};"
-        " localStorage.setItem('token', d.token);"
+        " localStorage.setItem('vector-token', d.token);"
         " localStorage.setItem('user', JSON.stringify(d.user));"
-        " window.location.replace('/dashboard'); })();"
+        " window.location.replace('/#/home'); })();"
         "</script>"
     )
 

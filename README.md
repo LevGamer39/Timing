@@ -193,7 +193,7 @@ VectorVK/
 
 API родителя работает полностью (`/api/grades/child/{id}`,
 `/api/tasks/child/{id}`, `/api/schedule/child/{id}`, `/api/users/me/children`).
-В SPA роль `parent` есть; связка с сервером пока не сделана — данные демо.
+В SPA роль `parent` подключена к API: ребёнок выбирается переключателем.
 
 ---
 
@@ -210,6 +210,10 @@ API родителя работает полностью (`/api/grades/child/{id
 | tasks | `/api/tasks` |
 | grades | `/api/grades` |
 | schedule | `/api/schedule` |
+| journal | `/api/journal` |
+| attendance | `/api/attendance` |
+| messages | `/api/messages` |
+| school | `/api/school` |
 | ai | `/api/ai` |
 | notifications | `/api/notifications` |
 | yandex_auth | `/api/auth/yandex` |
@@ -641,7 +645,7 @@ DNS-хостингом.
 | 1 | Старый мультистраничный фронтенд заменён SPA без сборки | `frontend/index.html` |
 | 2 | Ресурсы разложены по `css/`, `js/`, `html/`; тесты и `docs/` убраны | `frontend/` |
 | 3 | Старые адреса (`/login`, `/dashboard`, `/teacher/*`) отдают оболочку SPA | `backend/app/main.py` |
-| 4 | Связка SPA с API пока не сделана: данные демо, `localStorage` | `frontend/js/store.js` |
+| 4 | SPA подключён к API: вход по паролю/MAX/Яндексу, журнал, почта, посещаемость, расписание | `frontend/js/store.js`, `frontend/js/server.js` |
 
 ### Прочее
 

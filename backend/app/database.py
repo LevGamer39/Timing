@@ -134,10 +134,45 @@ def _apply_schema_updates() -> None:
         # Аккаунт из бота создаётся без email и без пароля.
         "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
         "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL",
+        # Оценка за урок журнала: ссылка на journal_lessons. create_all
+        # таблицу создаёт, но колонку в уже существующей grades — нет.
+        "ALTER TABLE grades ADD COLUMN IF NOT EXISTS "
+        "journal_lesson_id INTEGER REFERENCES journal_lessons(id) "
+        "ON DELETE CASCADE",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_grades_student_lesson "
+        "ON grades (student_id, journal_lesson_id) "
+        "WHERE journal_lesson_id IS NOT NULL",
     )
     with engine.begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+
+
+def _ensure_work_types() -> None:
+    """Наполняет справочник видов работы значениями по умолчанию."""
+    from app.models import JournalWorkType
+
+    defaults = (
+        ("lesson", "Работа на уроке", 1),
+        ("home", "Домашняя работа", 1),
+        ("self", "Самостоятельная", 2),
+        ("test", "Тест", 2),
+        ("kr", "Контрольная", 3),
+    )
+    db = SessionLocal()
+    try:
+        existing = {
+            row[0] for row in db.query(JournalWorkType.code).all()
+        }
+        for code, name, weight in defaults:
+            if code in existing:
+                continue
+            db.add(
+                JournalWorkType(code=code, name=name, weight=weight)
+            )
+        db.commit()
+    finally:
+        db.close()
 
 
 def create_tables() -> None:
@@ -149,3 +184,4 @@ def create_tables() -> None:
     Base.metadata.create_all(bind=engine)
     _apply_schema_updates()
     _ensure_admin_user()
+    _ensure_work_types()
