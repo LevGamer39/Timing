@@ -107,8 +107,10 @@ Windows. Локальная разработка на Windows работает.
 
 **Фронтенд — SPA без сборки.** Роль `parent` реализована в API
 (`/api/grades/child/{id}`, `/api/tasks/child/{id}`, `/api/schedule/child/{id}`,
-`/api/users/me/children`) и в демо-интерфейсе; связка SPA с API пока не
-сделана — источник данных `js/store.js` (демо в `localStorage`).
+`/api/users/me/children`) и в интерфейсе. Связка SPA с API сделана:
+`js/api.js` — сеть, `js/server.js` — раскладка ответов в структуры экранов,
+`js/store.js` — единая точка чтения/записи. Без токена (`vector-token`)
+работает демо-режим на `localStorage`; демо сохранено намеренно.
 
 
 
@@ -279,7 +281,7 @@ nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend чер
 
 | Роль | Меню |
 |---|---|
-| student / parent | главная, дневник, оценки, почта |
+| student / parent | главная, дневник, оценки, задачи, почта |
 | teacher | главная, журнал, мой класс, почта |
 | admin | главная, классы, учителя, расписание, пропуски, почта |
 

@@ -73,7 +73,24 @@
     <button role="tab" type="button" data-tab="att" aria-selected="{{7}}">Сегодня</button>
     <button role="tab" type="button" data-tab="hist" aria-selected="{{8}}">Пропуски</button>
     <button role="tab" type="button" data-tab="avg" aria-selected="{{9}}">Успеваемость</button>
+    <button role="tab" type="button" data-tab="hw" aria-selected="{{10}}">Задания</button>
   </div>
-  {{10}}
+  {{11}}
 </div>
 <!-- /fragment:stack -->
+
+<!-- fragment:hw-form -->
+<h2 class="h2" style="font-size: 20px">Задание классу</h2>
+<form class="stack" id="ah-f" novalidate style="margin-top: 12px">
+  <label class="label" for="ah-title">Что задать</label>
+  <input class="input" id="ah-title" maxlength="200" placeholder="Например, параграф 12, задачи 3–5">
+  <label class="label" for="ah-subject">Предмет</label>
+  <input class="input" id="ah-subject" maxlength="100" value="{{0}}" placeholder="Алгебра">
+  <label class="label" for="ah-deadline">Сдать до</label>
+  <input class="input" id="ah-deadline" type="datetime-local">
+  <label class="label" for="ah-desc">Заметка</label>
+  <textarea class="input" id="ah-desc" rows="3" maxlength="2000" style="resize: vertical"></textarea>
+  <p class="error" id="ah-err" role="alert" hidden></p>
+  <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">Выдать</button></div>
+</form>
+<!-- /fragment:hw-form -->

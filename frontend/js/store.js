@@ -747,6 +747,15 @@ export const taskComplete = (id) => taskGuard(() => server.taskComplete(id));
 export const taskSubtasks = (id) => taskGuard(() => server.taskSubtasks(id));
 export const taskAiSubtasks = (id) => taskGuard(() => server.taskAiSubtasks(id));
 
+// --- Задания класса (учитель) --------------------------------------------
+
+export const assignmentList = () => serverSession ? server.assignmentList() : Promise.reject(new Error('Задания доступны только на сервере.'));
+export const assignmentCreate = (body) => serverSession ? server.assignmentCreate(body) : Promise.reject(new Error('Задания доступны только на сервере.'));
+export const assignmentDelete = (id) => serverSession ? server.assignmentDelete(id) : Promise.reject(new Error('Задания доступны только на сервере.'));
+export const assignmentProgress = (id) => serverSession ? server.assignmentProgress(id) : Promise.reject(new Error('Задания доступны только на сервере.'));
+export const assignmentGrades = (id) => serverSession ? server.assignmentGrades(id) : Promise.reject(new Error('Задания доступны только на сервере.'));
+export const assignmentGrade = (id, subject, items) => serverSession ? server.assignmentGrade(id, subject, items) : Promise.reject(new Error('Задания доступны только на сервере.'));
+
 // --- Управление классами и учителями (сервер) -----------------------------
 
 export const apiCreateClass = (name, teacherId) => server.createClass(name, teacherId);

@@ -193,6 +193,7 @@ export function accountFor(profile, children) {
     initials: initials(profile.first_name, profile.last_name),
     title: profile.role === 'teacher' ? 'Учитель' : profile.role === 'admin' ? 'Администратор школы' : '',
     last: profile.last_name || '',
+    subject: profile.teacher_subject || '',
     email: profile.email || '',
     notifyEmail: profile.notify_email !== false,
     notifyBrowser: profile.notify_browser !== false,
@@ -699,6 +700,15 @@ export const taskDelete = (id) => api.deleteTask(id);
 export const taskComplete = (id) => api.completeTask(id);
 export const taskSubtasks = (id) => api.taskSubtasks(id);
 export const taskAiSubtasks = (id) => api.aiSubtasks(id);
+
+// --- Задания класса -------------------------------------------------------
+
+export const assignmentList = () => api.myAssignments();
+export const assignmentCreate = (body) => api.createAssignment(body);
+export const assignmentDelete = (id) => api.deleteAssignment(Number(id));
+export const assignmentProgress = (id) => api.assignmentProgress(Number(id));
+export const assignmentGrades = (id) => api.assignmentGrades(Number(id));
+export const assignmentGrade = (assignmentId, subject, items) => api.gradeBulk({ assignment_id: Number(assignmentId), subject, items });
 
 // --- Классы и учителя -----------------------------------------------------
 

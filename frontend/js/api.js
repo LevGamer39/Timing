@@ -119,6 +119,7 @@ export const aiAnalyzeLoad = () => request('/api/ai/analyze-load', { method: 'PO
 export const myAssignments = () => request('/api/assignments');
 export const createAssignment = (body) => request('/api/assignments', { method: 'POST', body });
 export const assignmentProgress = (id) => request('/api/assignments/' + id + '/progress');
+export const assignmentGrades = (id) => request('/api/grades/assignment/' + id);
 export const deleteAssignment = (id) => request('/api/assignments/' + id, { method: 'DELETE' });
 export const myClasses = () => request('/api/classes');
 export const classDashboard = (id, params) => {

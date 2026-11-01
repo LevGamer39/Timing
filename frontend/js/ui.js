@@ -124,6 +124,7 @@ const P = {
   spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
   back: '<path d="m15 6-6 6 6 6"/>',
   next: '<path d="m9 6 6 6-6 6"/>',
+  check: '<path d="m5 13 4 4L19 7"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   pen: '<path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
   send: '<path d="M4 12 20 4l-6 16-3-7z"/>',

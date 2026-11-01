@@ -1,10 +1,99 @@
 import { fragment } from './templates.js';
 import * as store from './store.js';
 import { normalizedBounds } from "./grading.js";
-import { esc, zone, fmt, dayMonth, DAYS, weekday, plural, toast, iso, weighted } from "./ui.js";
+import { esc, zone, fmt, dayMonth, DAYS, weekday, plural, toast, iso, weighted, sheet } from "./ui.js";
 import { header } from './common.js';
 import { absenceBlock } from './shared/attendance.js';
 import { periodLabel, classTab, setClassTab } from "./shared/teacher.js";
+
+const deadlineText = (value) => new Date(value).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+
+function mountHomework(cls, root) {
+  const box = root.querySelector('#hw-box');
+  if (!box) return;
+  const render = (items) => {
+    const mine = (items || []).filter((a) => String(a.class_id) === String(cls.key));
+    box.innerHTML = '<div class="row" style="justify-content: space-between; align-items: center">'
+      + '<h2 class="h2" style="font-size: 18px; margin: 0">Задания классу</h2>'
+      + '<button class="btn sm" type="button" id="hw-add">Выдать задание</button></div>'
+      + (mine.length ? mine.map((a) => '<article class="card pad stack-sm" style="gap: 4px">'
+        + '<div class="row" style="gap: 8px"><b class="grow">' + esc(a.title) + '</b><span class="pill">' + (a.submitted_count || 0) + '/' + (a.total_count || 0) + '</span></div>'
+        + '<p class="hint" style="margin: 0">' + esc(a.subject) + ' · до ' + deadlineText(a.deadline) + '</p>'
+        + (a.description ? '<p style="margin: 0; font-size: 14px">' + esc(a.description) + '</p>' : '')
+        + '<div class="row" style="justify-content: flex-end"><button class="text-action" type="button" data-hw-open="' + a.id + '">Кто сдал</button>'
+        + '<button class="text-action" type="button" data-hw-del="' + a.id + '">Удалить</button></div>'
+        + '</article>').join('')
+        : '<div class="card pad"><p class="muted" style="margin: 0">Заданий пока нет. Выдайте первое — оно появится у учеников в дневнике.</p></div>');
+    box.querySelector('#hw-add')?.addEventListener('click', () => createSheet());
+    box.querySelectorAll('[data-hw-del]').forEach((b) => b.addEventListener('click', () => {
+      store.assignmentDelete(b.dataset.hwDel).then((result) => {
+        if (typeof result === 'string') return toast(result);
+        toast('Задание удалено'); reload();
+      }).catch(() => toast(store.SAVE_ERROR));
+    }));
+    box.querySelectorAll('[data-hw-open]').forEach((b) => b.addEventListener('click', () => progressSheet(b.dataset.hwOpen)));
+  };
+
+  const reload = () => store.assignmentList()
+    .then((list) => render(list))
+    .catch(() => { box.innerHTML = '<div class="card pad"><p class="muted" style="margin: 0">Не удалось загрузить задания.</p></div>'; });
+
+  const createSheet = () => {
+    sheet(fragment('my-class', 'hw-form', [esc(store.account()?.subject || '')]), (el, close) => {
+      const err = el.querySelector('#ah-err');
+      const fail = (text) => { err.textContent = text; err.hidden = false; };
+      el.querySelector('#ah-f').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const title = el.querySelector('#ah-title').value.trim();
+        const subject = el.querySelector('#ah-subject').value.trim();
+        const raw = el.querySelector('#ah-deadline').value;
+        if (!title) return fail('Введите задание.');
+        if (!subject) return fail('Укажите предмет.');
+        if (!raw) return fail('Укажите срок сдачи.');
+        store.assignmentCreate({
+          title,
+          subject,
+          description: el.querySelector('#ah-desc').value.trim() || null,
+          deadline: new Date(raw).toISOString(),
+          class_id: Number(cls.key),
+          priority: 'medium'
+        }).then((result) => {
+          if (typeof result === 'string') return fail(result);
+          close(); reload(); toast('Задание выдано');
+        }).catch((error) => fail((error && error.message) || store.SAVE_ERROR));
+      });
+    });
+  };
+
+  const progressSheet = (id) => {
+    Promise.all([store.assignmentProgress(id), store.assignmentGrades(id).catch(() => [])]).then(([data, grades]) => {
+      const existing = new Map((grades || []).map((g) => [String(g.student_id), g.value]));
+      const students = data.students || [];
+      const total = data.total ?? ((data.completed || 0) + (data.started || 0) + (data.not_started || 0) || students.length);
+      sheet('<h2 class="h2" style="font-size: 20px">' + esc(data.title) + '</h2>'
+        + '<p class="hint">' + (data.completed || 0) + ' из ' + total + ' сдали · ' + esc(data.subject) + '</p>'
+        + '<div class="stack-sm">' + (students.length ? students.map((s) => '<div class="row" style="gap: 8px; min-height: 40px">'
+          + '<span class="grow">' + esc(s.student_name) + '</span>'
+          + '<span class="hint" style="min-width: 44px">' + (s.status === 'done' ? 'Сдал' : 'Нет') + '</span>'
+          + '<input class="input" type="number" min="1" max="5" step="1" inputmode="numeric" data-g="' + s.student_id + '" value="' + (existing.get(String(s.student_id)) ?? '') + '" aria-label="Оценка ' + esc(s.student_name) + '" style="width: 64px; padding: 6px 8px">'
+          + '</div>').join('') : '<p class="muted" style="margin: 0">В классе нет учеников.</p>') + '</div>'
+        + (students.length ? '<button class="btn sm block" type="button" id="ah-grades" style="margin-top: 12px">Сохранить оценки</button>' : ''), (el, close) => {
+        el.querySelector('#ah-grades')?.addEventListener('click', () => {
+          const items = [...el.querySelectorAll('[data-g]')]
+            .filter((i) => i.value !== '')
+            .map((i) => ({ student_id: Number(i.dataset.g), value: Number(i.value) }));
+          if (!items.length) return toast('Введите хотя бы одну оценку.');
+          store.assignmentGrade(id, data.subject, items).then((result) => {
+            if (typeof result === 'string') return toast(result);
+            close(); toast('Оценки сохранены');
+          }).catch(() => toast(store.SAVE_ERROR));
+        });
+      });
+    }).catch(() => toast('Не удалось загрузить прогресс'));
+  };
+
+  reload();
+}
 
 function myClassView({ rerender }) {
   const cls = store.homeroom();
@@ -49,11 +138,15 @@ function myClassView({ rerender }) {
 
   const avgTable = fragment("my-class", "card", [rows.map((x) => fragment("my-class", "p-card-2", [esc(x.name), x.absent, zone(x.total), fmt(x.total), x.avgs.map((a, i) => a == null ? '' : ("<span class=\"pill " + (zone(a)) + "-pill\">" + (short[subjKeys[i]] || esc(store.SUBJECTS[subjKeys[i]].name)) + " <b>" + (fmt(a)) + "</b></span>")).join('')])).join(''), esc(cls.name), subjKeys.map((k) => ("<th class=\"num\" title=\"" + (esc(store.SUBJECTS[k].name)) + "\">" + (short[k] || esc(store.SUBJECTS[k].name)) + "</th>")).join(''), rows.map((x) => ("\n        <tr><td style=\"font-weight: 600\">" + (esc(x.name)) + "</td>\n        " + (x.avgs.map((a) => ("<td class=\"num\">" + (a == null ? ("<span class=\"muted\">·</span>") : ("<span class=\"g " + (zone(a)) + "\" style=\"min-width: 52px; height: 28px; line-height: 28px; font-size: 13px\">" + (fmt(a)) + "</span>")) + "</td>")).join('')) + "\n        <td class=\"num\">" + (x.absent ? x.absent : ("<span class=\"muted\">0</span>")) + "</td>\n        <td class=\"num\"><b>" + (fmt(x.total)) + "</b></td></tr>")).join(''), store.periodWord()]);
 
+  const hwBox = classTab === 'hw' ? '<div id="hw-box" class="stack-sm"><div class="card pad"><p class="muted" style="margin: 0">Загружаю…</p></div></div>' : null;
+  const content = !rows.length ? '<div class="card pad empty-state"><p>Учеников пока нет</p><a class="text-action" href="#/classes/' + cls.key + '">Открыть приглашения</a></div>' : classTab === 'att' ? ("<p class=\"muted\" style=\"margin: 0 4px\">Отметьте, кого нет · " + (DAYS[weekday(store.NOW)].toLowerCase()) + ", " + (dayMonth(store.NOW)) + "</p>") + attTable : classTab === 'hist' ? history.html : classTab === 'hw' ? hwBox : avgTable;
+
   return {
-    html: fragment("my-class", "stack", [header(), periodLabel(), esc(cls.name), cls.key, rows.length, absentToday ? ("<span class=\"pill\">Сегодня отсутствуют: " + (absentToday) + "</span>") : '', risk.length ? ("<span class=\"pill\" style=\"background: var(--g2-bg); color: var(--g2)\" title=\"" + (esc(risk.map((x) => x.name).join(', '))) + "\">Выходит «2»: " + (risk.length) + " " + (plural(risk.length, 'ученик', 'ученика', 'учеников')) + "</span>") : '', classTab === 'att', classTab === 'hist', classTab === 'avg', !rows.length ? '<div class="card pad empty-state"><p>Учеников пока нет</p><a class="text-action" href="#/classes/' + cls.key + '">Открыть приглашения</a></div>' : classTab === 'att' ? ("<p class=\"muted\" style=\"margin: 0 4px\">Отметьте, кого нет · " + (DAYS[weekday(store.NOW)].toLowerCase()) + ", " + (dayMonth(store.NOW)) + "</p>") + attTable : classTab === 'hist' ? history.html : avgTable]),
+    html: fragment("my-class", "stack", [header(), periodLabel(), esc(cls.name), cls.key, rows.length, absentToday ? ("<span class=\"pill\">Сегодня отсутствуют: " + (absentToday) + "</span>") : '', risk.length ? ("<span class=\"pill\" style=\"background: var(--g2-bg); color: var(--g2)\" title=\"" + (esc(risk.map((x) => x.name).join(', '))) + "\">Выходит «2»: " + (risk.length) + " " + (plural(risk.length, 'ученик', 'ученика', 'учеников')) + "</span>") : '', classTab === 'att', classTab === 'hist', classTab === 'avg', classTab === 'hw', content]),
     mount(root) {
       root.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { setClassTab(b.dataset.tab); rerender(); }));
-      if (history && rows.length) history.mount(root, rerender);
+      if (classTab === 'hw') mountHomework(cls, root);
+      if (history && rows.length && classTab === 'hist') history.mount(root, rerender);
       const saveAtt = (fn) => { const m = store.attendance(cls.key, today); const message = fn(m); if (!store.setAttendance(cls.key, today, m)) return toast(store.SAVE_ERROR); rerender(); if (message) toast(message); };
       root.querySelectorAll('.att').forEach((b) => b.addEventListener('click', () => saveAtt((m) => {
         const k = b.dataset.r + '|' + b.dataset.n;

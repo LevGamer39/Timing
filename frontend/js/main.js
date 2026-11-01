@@ -14,6 +14,7 @@ import { mailView } from './mail.js';
 import { composeView } from './compose.js';
 import { aiView } from './ai.js';
 import { settingsView } from './settings.js';
+import { tasksView } from './tasks.js';
 import { teacherHomeView } from './teacher-home.js';
 import { journalView } from './journal.js';
 import { analysisView } from './analysis.js';
@@ -55,6 +56,7 @@ const ROUTES = [
   [/^diary(?:\/(-?\d+))?$/, diaryView, 'diary', false, LEARNER, true],
   [/^grades$/, gradesView, 'grades', false, LEARNER, true],
   [/^grades\/(\w+)$/, subjectView, 'grades', false, LEARNER, true],
+  [/^tasks$/, tasksView, 'tasks', false, LEARNER, true],
   [/^ai$/, aiView, null, false, LEARNER, false],
   [/^journal(?:\/([\w-]+)(?:\/([\d-]+))?)?$/, journalView, 'journal', false, TEACHER, true],
   [/^journal\/analysis\/([\w-]+)\/([\d-]+)$/, analysisView, 'journal', false, TEACHER, false],
@@ -71,7 +73,7 @@ const ROUTES = [
 ];
 
 const MENU = {
-  student: [['home', 'Главная', 'home'], ['diary', 'Дневник', 'diary'], ['grades', 'Оценки', 'grades'], ['mail', 'Почта', 'mail']],
+  student: [['home', 'Главная', 'home'], ['diary', 'Дневник', 'diary'], ['grades', 'Оценки', 'grades'], ['tasks', 'Задачи', 'check'], ['mail', 'Почта', 'mail']],
   teacher: [['home', 'Главная', 'home'], ['journal', 'Журнал', 'table'], ['myclass', 'Мой класс', 'users'], ['mail', 'Почта', 'mail']],
   admin: [['home', 'Главная', 'home'], ['classes', 'Классы', 'users'], ['teachers', 'Учителя', 'teacher'], ['schedule', 'Расписание', 'calendar', 'Уроки'], ['attendance', 'Пропуски', 'absent'], ['mail', 'Почта', 'mail']]
 };
@@ -153,7 +155,7 @@ function render(external = false) {
     .find((r) => r.m);
   if (!hit) return go('home');
 
-  const pageNames = { loginView: 'login', resetPasswordView: 'reset', confirmEmailView: 'confirm-email', homeView: 'home', teacherHomeView: 'teacher-home', adminHomeView: 'admin-home', diaryView: 'diary', gradesView: 'grades', subjectView: 'subject', mailView: 'mail', composeView: 'compose', aiView: 'ai', settingsView: 'settings', journalView: 'journal', analysisView: 'analysis', myClassView: 'my-class', classesView: 'classes', teachersView: 'teachers', scheduleView: 'schedule', attendanceView: 'attendance' };
+  const pageNames = { loginView: 'login', resetPasswordView: 'reset', confirmEmailView: 'confirm-email', homeView: 'home', teacherHomeView: 'teacher-home', adminHomeView: 'admin-home', diaryView: 'diary', gradesView: 'grades', subjectView: 'subject', tasksView: 'tasks', mailView: 'mail', composeView: 'compose', aiView: 'ai', settingsView: 'settings', journalView: 'journal', analysisView: 'analysis', myClassView: 'my-class', classesView: 'classes', teachersView: 'teachers', scheduleView: 'schedule', attendanceView: 'attendance' };
   document.body.dataset.page = pageNames[hit.view.name];
   document.body.classList.toggle("login-visual", path === "login");
   const create = () => hit.view({ params: hit.m.slice(1), path, go, rerender: render });

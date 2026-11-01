@@ -22,6 +22,7 @@ class TaskCreate(BaseModel):
     description: str | None = None
     deadline: datetime | None = None
     priority: TaskPriority = TaskPriority.medium
+    parent_task_id: int | None = None
 
     @field_validator("title")
     @classmethod
@@ -194,6 +195,19 @@ def create_personal_task(
         is_personal=True,
         status=TaskStatus.pending,
     )
+    if body.parent_task_id is not None:
+        parent = (
+            db.query(Task)
+            .filter(
+                Task.id == body.parent_task_id,
+                Task.student_id == current_user.id,
+                Task.parent_task_id.is_(None),
+            )
+            .first()
+        )
+        if not parent:
+            raise HTTPException(404, "Parent task not found")
+        task.parent_task_id = parent.id
     db.add(task)
     db.commit()
     db.refresh(task)
