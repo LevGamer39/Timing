@@ -1,0 +1,80 @@
+
+.title-xl { margin: 4px 0 0; font-size: 38px; line-height: 1.04; font-weight: 800; letter-spacing: -0.03em; }
+
+.gn { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1.5px var(--text); }
+
+
+/* Дневник */
+.week-bar { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+
+.day-h { display: flex; align-items: baseline; gap: 8px; margin: 24px 4px 8px; }
+
+
+.ls {
+  position: relative; display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 12px; align-items: start;
+  padding: 16px 16px; border-bottom: 1px solid var(--line); text-decoration: none; color: var(--text);
+}
+
+.ls:last-child { border-bottom: 0; }
+
+.ls-n { padding-top: 4px; font-size: 13px; font-weight: 700; color: var(--muted); }
+
+.ls-b { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.lesson-link { min-height: 44px; justify-content: center; color: inherit; text-decoration: none; }
+
+.ls-sub { font-size: 16px; font-weight: 700; }
+
+.ls-tm { font-size: 13px; color: var(--muted); }
+
+.ls-hw { grid-column: 2 / 4; min-width: 0; }
+
+.ls-g { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 120px; }
+
+.now-tag { color: var(--accent-text); font-weight: 700; }
+
+.spread { display: block; }
+
+.hw-text { font-size: 14px; line-height: 1.4; margin-top: 4px; }
+
+.hw-text b { font-weight: 600; }
+@media (min-width: 1024px) {
+
+  .title-xl { font-size: 44px; }
+
+
+  .diary-head { display: flex; align-items: flex-end; gap: 16px; }
+
+  .diary-head .week-bar { margin-top: 0; }
+
+  /* Дни идут по строкам слева направо: Пн Вт Ср, под ними Чт Пт Сб. Три в ряд, на узком компьютере — два. */
+  .spread { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 24px; align-items: start; margin-top: 16px; }
+
+  .spread section { background: var(--card); border: 1px solid var(--card-border); border-radius: 24px; box-shadow: var(--card-shadow); overflow: hidden; scroll-margin-top: 92px; }
+
+  .spread section#today { box-shadow: 0 0 0 2px var(--accent), var(--card-shadow); }
+
+  .spread .day-h { margin: 0; padding: 16px 24px 8px; align-items: center; }
+
+  .spread .day-h .h2 { font-size: 22px; letter-spacing: -0.01em; }
+
+  /* Карточка узкая: домашка под названием предмета, оценки справа.
+     Селектор с «> section» — сильнее старых правил .spread .ls из других страниц. */
+  .spread > section .ls { grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; padding: 12px 24px; min-height: 0; border-bottom: 0; }
+
+  .spread > section .ls + .ls { border-top: 1px solid var(--line); }
+
+  .spread > section .ls-g { grid-column: 3; grid-row: 1; align-self: center; }
+
+  .spread > section .ls-hw { grid-column: 2 / 4; grid-row: 2; }
+
+  /* Время и кабинет — как на телефоне, 13px; «следующий» чуть крупнее, чтобы урок находился без чтения. */
+  .spread > section .ls-tm { font-size: 13px; }
+
+  .spread > section .now-tag { font-size: 14px; }
+
+  .spread .ls-sub { font-size: 15px; }
+
+  .spread .ls-tm { font-size: 12px; }
+}
+
+.spread section { scroll-margin-top: 8px; }

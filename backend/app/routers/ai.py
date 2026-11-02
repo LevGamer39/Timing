@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app import config
@@ -38,7 +38,6 @@ from app.models import (
     UserRole,
 )
 from app.routers.notifications import create_notification
-from app.routers.users import require_role as _require_role  # noqa: F401
 
 OLLAMA_URL = config.OLLAMA_URL
 OLLAMA_MODEL = config.OLLAMA_MODEL
@@ -133,6 +132,16 @@ INTENT_PROMPT = """Определи действие пользователя и
 
 class ChatRequest(BaseModel):
     message: str
+
+    @field_validator("message")
+    @classmethod
+    def _message_length(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Message must not be blank")
+        if len(value) > 4000:
+            raise ValueError("Message must be <= 4000 characters")
+        return value
 
 
 class ChatResponse(BaseModel):
@@ -269,6 +278,8 @@ async def _call_ollama(messages: list[dict]) -> str:
             response.raise_for_status()
             return response.json()["message"]["content"]
     except httpx.ConnectError as exc:
+        raise HTTPException(503, "AI service unavailable") from exc
+    except httpx.HTTPStatusError as exc:
         raise HTTPException(503, "AI service unavailable") from exc
     except HTTPException:
         raise
@@ -633,13 +644,19 @@ def get_history(
     current_user: User = Depends(require_role(UserRole.student)),
     db: Session = Depends(get_db),
 ):
-    return (
+    """Последние сообщения в хронологическом порядке.
+
+    Раньше сортировка была по возрастанию и ``limit`` отрезал первые 100
+    сообщений, поэтому история со временем переставала обновляться.
+    """
+    rows = (
         db.query(AIMessage)
         .filter(AIMessage.user_id == current_user.id)
-        .order_by(AIMessage.created_at.asc())
+        .order_by(AIMessage.created_at.desc(), AIMessage.id.desc())
         .limit(MAX_HISTORY_ROWS)
         .all()
     )
+    return list(reversed(rows))
 
 
 @router.post("/chat", response_model=ChatResponse)

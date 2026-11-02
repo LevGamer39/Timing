@@ -1,23 +1,32 @@
 """Регистрация, аутентификация, профиль и привязка аккаунтов."""
+import hashlib
+import hmac
+import logging
 import re
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
-from random import randint
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, field_validator
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import config
 from app.database import get_db
 from app.dependencies import get_current_user, require_role
+from app.enrollment import add_missing_assignment_tasks, refresh_student_grade
 from app.models import (
+    Class,
+    ClassMembership,
     EmailChangeToken,
     EmailVerification,
     InviteCode,
+    MaxLoginCode,
     ParentLinkToken,
     ParentStudent,
     PasswordResetToken,
@@ -25,16 +34,85 @@ from app.models import (
     UserRole,
 )
 
+logger = logging.getLogger("vector.users")
+
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# ---------------------------------------------------------------------------
+# Ограничение попыток входа и регистрации (in-memory, один процесс uvicorn)
+# ---------------------------------------------------------------------------
+_RATE_LIMIT_WINDOW = 60
+_RATE_LIMIT_MAX_ATTEMPTS = 10
+_RATE_LIMIT_MAX_KEYS = 10_000
+# Самый длинный интервал, для которого вызывается лимитер. Записи старше
+# него не нужны и удаляются, чтобы словарь не рос бесконечно.
+_RATE_LIMIT_MAX_WINDOW = 3600
+_rate_limit_store: dict[str, list[float]] = {}
+
+
+def _prune_rate_limit(now: float) -> None:
+    """Удаляет устаревшие записи и не даёт словарю расти бесконечно."""
+    window_start = now - _RATE_LIMIT_MAX_WINDOW
+    for key in list(_rate_limit_store):
+        fresh = [
+            moment
+            for moment in _rate_limit_store[key]
+            if moment > window_start
+        ]
+        if fresh:
+            _rate_limit_store[key] = fresh
+        else:
+            del _rate_limit_store[key]
+
+    if len(_rate_limit_store) > _RATE_LIMIT_MAX_KEYS:
+        oldest = sorted(
+            _rate_limit_store,
+            key=lambda name: _rate_limit_store[name][0],
+        )
+        for key in oldest[: len(_rate_limit_store) - _RATE_LIMIT_MAX_KEYS]:
+            del _rate_limit_store[key]
+
+
+def _is_rate_limited(
+    key: str,
+    limit: int = _RATE_LIMIT_MAX_ATTEMPTS,
+    window: int = _RATE_LIMIT_WINDOW,
+) -> bool:
+    now = time.time()
+    _prune_rate_limit(now)
+    window_start = now - window
+    attempts = [
+        moment
+        for moment in _rate_limit_store.get(key, [])
+        if moment > window_start
+    ]
+    return len(attempts) >= limit
+
+
+def _record_attempt(key: str) -> None:
+    _rate_limit_store.setdefault(key, []).append(time.time())
+
+
+def _reset_attempts(key: str) -> None:
+    _rate_limit_store.pop(key, None)
+
+
 MIN_PASSWORD_LENGTH = 8
+MAX_NAME_LENGTH = 100
+MAX_SUBJECT_LENGTH = 100
+MAX_AVATAR_LENGTH = 2_000_000
 EMAIL_VERIFICATION_TTL = timedelta(minutes=15)
 RESET_TOKEN_TTL = timedelta(hours=1)
-PARENT_LINK_TTL = timedelta(hours=24)
+PARENT_LINK_TTL = timedelta(hours=1)
+PARENT_LINK_ATTEMPTS = 5
+PARENT_LINK_WINDOW = 600
+PARENT_CODE_DIGITS = 8
 
 _HHMM_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+# Хеш MAX user_id — HMAC-SHA256 в hex, ровно 64 символа.
+_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 # ---------------------------------------------------------------------------
@@ -65,12 +143,24 @@ class RegisterRequest(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError("Name must not be blank")
+        if len(value) > MAX_NAME_LENGTH:
+            raise ValueError(f"Name must be <= {MAX_NAME_LENGTH} characters")
+        return value
+
+    @field_validator("role")
+    @classmethod
+    def _no_self_service_admin(cls, value: UserRole) -> UserRole:
+        """Администратор создаётся только при развёртывании."""
+        if value == UserRole.admin:
+            raise ValueError("Administrator accounts cannot be registered")
         return value
 
 
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    id: int
+    login: str
     role: UserRole
     first_name: str
     last_name: str
@@ -84,7 +174,7 @@ class ChildSummary(BaseModel):
     id: int
     first_name: str
     last_name: str
-    email: str
+    email: str | None
     grade: str | None
 
     class Config:
@@ -93,7 +183,8 @@ class ChildSummary(BaseModel):
 
 class ProfileResponse(BaseModel):
     id: int
-    email: str
+    login: str
+    email: str | None
     first_name: str
     last_name: str
     role: UserRole
@@ -103,7 +194,6 @@ class ProfileResponse(BaseModel):
     yandex_id: str | None
     notify_email: bool
     notify_browser: bool
-    notify_telegram: bool
     notify_digest_time: str
 
     class Config:
@@ -136,6 +226,29 @@ class ProfileUpdateRequest(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError("Name must not be blank")
+        if len(value) > MAX_NAME_LENGTH:
+            raise ValueError(f"Name must be <= {MAX_NAME_LENGTH} characters")
+        return value
+
+    @field_validator("teacher_subject")
+    @classmethod
+    def _subject_length(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if len(value) > MAX_SUBJECT_LENGTH:
+            raise ValueError(
+                f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
+            )
+        return value or None
+
+    @field_validator("avatar_url")
+    @classmethod
+    def _avatar_length(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if len(value) > MAX_AVATAR_LENGTH:
+            raise ValueError("Avatar is too large")
         return value
 
 
@@ -184,12 +297,20 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+def verify_password(plain: str, hashed: str | None) -> bool:
+    """Проверка пароля. ``None`` — у аккаунта из MAX пароля нет."""
+
+    if not hashed:
+        return False
+    try:
+        return pwd_context.verify(plain, hashed)
+    except ValueError:
+        # Битый хеш в БД не должен превращаться в 500 на входе.
+        return False
 
 
 def create_access_token(user_id: int) -> str:
-    """Выпускает JWT.
+    """Выпускает JWT с полями sub и exp.
 
     ``ACCESS_TOKEN_EXPIRE_MINUTES`` раньше читался через ``os.environ.get``
     и уходил в ``timedelta`` строкой, поэтому любой вход падал с
@@ -212,9 +333,6 @@ def _normalize_profile_defaults(user: User, db: Session | None = None) -> User:
     if user.notify_browser is None:
         user.notify_browser = True
         changed = True
-    if user.notify_telegram is None:
-        user.notify_telegram = False
-        changed = True
     if not user.notify_digest_time:
         user.notify_digest_time = "08:00"
         changed = True
@@ -224,30 +342,47 @@ def _normalize_profile_defaults(user: User, db: Session | None = None) -> User:
     return user
 
 
-def _delete_account_rows(user_id: int, db: Session) -> None:
-    """Удаляет все строки пользователя, чтобы повторная регистрация не
-    нарушила внешние ключи.
+def _random_code(digits: int) -> str:
+    """Криптостойкий числовой код заданной длины.
 
-    Каскады ORM покрывают почти всё, но у таблиц токенов нет связи с
-    ``User``, поэтому их чистим вручную.
+    ``random.randint`` предсказуем: зная несколько выданных кодов, можно
+    восстановить состояние генератора и подобрать следующий.
     """
-    for model in (
-        EmailVerification,
-        PasswordResetToken,
-        EmailChangeToken,
-        ParentLinkToken,
-    ):
-        db.query(model).filter(model.user_id == user_id).delete(
-            synchronize_session=False
+    return "".join(str(secrets.randbelow(10)) for _ in range(digits))
+
+
+def _active_verification_codes(db: Session) -> set[str]:
+    now = datetime.now(timezone.utc)
+    rows = (
+        db.query(EmailVerification.code)
+        .filter(
+            EmailVerification.is_used.is_(False),
+            EmailVerification.expires_at > now,
         )
-    db.query(InviteCode).filter(InviteCode.used_by_id == user_id).update(
-        {"is_used": False, "used_by_id": None, "used_at": None},
-        synchronize_session=False,
+        .all()
     )
+    return {row[0] for row in rows}
 
 
 def _create_verification(user_id: int, db: Session) -> str:
-    code = str(randint(100000, 999999))
+    """Выпускает код, который однозначно указывает на одного пользователя.
+
+    ``/verify-email`` ищет запись только по коду. Если два активных кода
+    совпадут, подтверждение активирует чужой аккаунт, поэтому код
+    проверяется на уникальность среди действующих.
+    """
+    active = _active_verification_codes(db)
+    code = ""
+    for _ in range(20):
+        candidate = _random_code(6)
+        if candidate not in active:
+            code = candidate
+            break
+    if not code:
+        raise HTTPException(
+            503, "Не удалось выпустить код подтверждения. Попробуйте позже."
+        )
+
     db.add(
         EmailVerification(
             user_id=user_id,
@@ -286,19 +421,27 @@ def _build_email_change_html(confirm_link: str, new_email: str) -> str:
 
 @router.post("/register", status_code=201)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    key = f"register:{body.email.lower()}"
+    if _is_rate_limited(key):
+        raise HTTPException(429, "Too many registration attempts. Try later.")
+    _record_attempt(key)
     email = body.email.lower()
 
-    existing = db.query(User).filter(User.email == email).first()
+    existing = (
+        db.query(User)
+        .filter((User.email == email) | (User.login == email))
+        .first()
+    )
     if existing:
-        if existing.is_active:
-            raise HTTPException(400, "Email already registered")
-        # Неподтверждённый остаток можно заменить, но только после удаления
-        # зависимых строк - иначе удаление упадёт по внешнему ключу.
-        _delete_account_rows(existing.id, db)
-        db.delete(existing)
-        db.commit()
+        # Неподтверждённый аккаунт нельзя перезаписывать: иначе атакующий
+        # подменял бы пароль чужой регистрации и забирал её после
+        # подтверждения владельцем почты. Для потерянного кода есть
+        # /resend-verification.
+        raise HTTPException(400, "Email already registered")
 
     invite = None
+    if body.role == UserRole.admin:
+        raise HTTPException(400, "Administrator accounts cannot be registered")
     if body.role == UserRole.teacher:
         if not body.invite_code:
             raise HTTPException(400, "Invite code required for teacher registration")
@@ -315,6 +458,9 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
     user = User(
         email=email,
+        # Заглушка до механизма логинов: колонка NOT NULL, а формат логина
+        # при обычной регистрации ещё не определён.
+        login=email,
         password_hash=hash_password(body.password),
         first_name=body.first_name,
         last_name=body.last_name,
@@ -323,12 +469,12 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         is_verified=False,
         notify_email=True,
         notify_browser=True,
-        notify_telegram=False,
         notify_digest_time="08:00",
         teacher_invite_code=body.invite_code.upper() if invite else None,
     )
     db.add(user)
     db.commit()
+    _reset_attempts(key)
 
     # Письмо отправляем после коммита строки пользователя, чтобы сбой
     # SMTP не оставил полузаписанный аккаунт.
@@ -347,8 +493,101 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     }
 
 
+class InviteCodeInfo(BaseModel):
+    """Ответ на проверку инвайт-кода: существует ли и для какой роли."""
+
+    valid: bool
+    role: UserRole | None = None
+    class_name: str | None = None
+
+
+@router.get("/invite-code", response_model=InviteCodeInfo)
+def invite_code_info(code: str, db: Session = Depends(get_db)) -> InviteCodeInfo:
+    """Проверяет инвайт-код и сообщает роль, для которой он выдан.
+
+    Бот спрашивает это до регистрации: код класса открывает регистрацию
+    ученика (и сразу зачисляет его в класс), одноразовый код из
+    ``invite_codes`` — регистрацию учителя.
+    """
+    normalized = code.strip().upper()
+    if not normalized or len(normalized) > 16:
+        raise HTTPException(400, "Invite code must be 1-16 characters")
+
+    key = f"invite-check:{normalized}"
+    if _is_rate_limited(key):
+        raise HTTPException(429, "Too many attempts. Try later.")
+    _record_attempt(key)
+
+    class_ = db.query(Class).filter(Class.invite_code == normalized).first()
+    if class_ is not None:
+        return InviteCodeInfo(
+            valid=True, role=UserRole.student, class_name=class_.name
+        )
+
+    invite = (
+        db.query(InviteCode)
+        .filter(
+            InviteCode.code == normalized,
+            InviteCode.is_used.is_(False),
+        )
+        .first()
+    )
+    if invite is not None:
+        return InviteCodeInfo(valid=True, role=UserRole.teacher)
+
+    return InviteCodeInfo(valid=False)
+
+
+@router.get("/login-available")
+def login_available(login: str, db: Session = Depends(get_db)) -> dict[str, bool]:
+    """Свободен ли логин. Нужен боту на шаге придумывания логина.
+
+    Сравнение регистронезависимое: ``func.lower`` не даёт завести два
+    аккаунта, различающихся только регистром символов.
+    """
+    login = login.strip().lower()
+    if not login or len(login) > 255:
+        raise HTTPException(400, "Login must be 1-255 characters")
+
+    key = f"login-check:{login}"
+    if _is_rate_limited(key):
+        raise HTTPException(429, "Too many attempts. Try later.")
+    _record_attempt(key)
+
+    exists = (
+        db.query(User.id).filter(func.lower(User.login) == login).first()
+        is not None
+    )
+    return {"available": not exists}
+
+
+def _client_host(request: Request) -> str:
+    """IP клиента для лимитов.
+
+    nginx перезаписывает ``X-Real-IP`` значением ``$remote_addr``, поэтому
+    заголовку можно доверять; напрямую backend наружу не опубликован.
+    """
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/verify-email")
-def verify_email(body: VerifyEmailRequest, db: Session = Depends(get_db)):
+def verify_email(
+    body: VerifyEmailRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Подтверждает email по одноразовому коду.
+
+    Лимит попыток привязан к адресу клиента: без него шестизначный код
+    можно перебрать за время жизни (15 минут).
+    """
+    key = f"verify-email:{_client_host(request)}"
+    if _is_rate_limited(key):
+        raise HTTPException(429, "Too many attempts. Try later.")
+
     record = (
         db.query(EmailVerification)
         .filter(
@@ -359,16 +598,19 @@ def verify_email(body: VerifyEmailRequest, db: Session = Depends(get_db)):
         .first()
     )
     if not record:
+        _record_attempt(key)
         raise HTTPException(400, "Invalid code")
 
     expires_at = record.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at < datetime.now(timezone.utc):
+        _record_attempt(key)
         raise HTTPException(400, "Code expired")
 
     user = db.query(User).filter(User.id == record.user_id).first()
     if not user:
+        _record_attempt(key)
         raise HTTPException(400, "Invalid code")
 
     record.is_used = True
@@ -393,18 +635,36 @@ def verify_email(body: VerifyEmailRequest, db: Session = Depends(get_db)):
         user.teacher_invite_code = None
 
     db.commit()
+    _reset_attempts(key)
     return {"message": "Email verified. You can now log in."}
 
 
 @router.post("/resend-verification")
 def resend_verification(email: EmailStr, db: Session = Depends(get_db)):
+    """Повторно отправляет код подтверждения.
+
+    Ответ не зависит от того, существует ли адрес: иначе эндпоинт
+    превращается в проверку зарегистрированных email. Есть лимит на
+    количество писем, чтобы не спамить чужой ящик.
+    """
+    response = {
+        "message": (
+            "Если такой адрес зарегистрирован и ещё не подтверждён, "
+            "письмо с кодом отправлено."
+        )
+    }
+    key = f"resend-verification:{email.lower()}"
+    if _is_rate_limited(key, limit=3, window=3600):
+        return response
+    _record_attempt(key)
+
     user = (
         db.query(User)
         .filter(User.email == email.lower(), User.is_verified.is_(False))
         .first()
     )
     if not user:
-        raise HTTPException(400, "User not found or already verified")
+        return response
 
     # Гасим прежние коды, чтобы работал только самый свежий.
     db.query(EmailVerification).filter(
@@ -419,10 +679,8 @@ def resend_verification(email: EmailStr, db: Session = Depends(get_db)):
     try:
         send_verification_email(user.email, code)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            503, f"Не удалось отправить письмо с кодом подтверждения: {exc}"
-        )
-    return {"message": "Code sent"}
+        logger.warning("Failed to resend verification email: %s", exc)
+    return response
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -430,15 +688,27 @@ def login(
     form: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.email == form.username.lower()).first()
+    key = f"login:{form.username.lower()}"
+    if _is_rate_limited(key):
+        raise HTTPException(429, "Too many login attempts. Try later.")
+    ident = form.username.strip().lower()
+    user = (
+        db.query(User)
+        .filter((User.login == ident) | (func.lower(User.email) == ident))
+        .first()
+    )
     if not user or not verify_password(form.password, user.password_hash):
+        _record_attempt(key)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Email not verified")
 
+    _reset_attempts(key)
     _normalize_profile_defaults(user, db)
     return LoginResponse(
         access_token=create_access_token(user.id),
+        id=user.id,
+        login=user.login,
         role=user.role,
         first_name=user.first_name,
         last_name=user.last_name,
@@ -516,12 +786,15 @@ def request_email_change(
     db: Session = Depends(get_db),
 ):
     new_email = body.email.lower()
-    if new_email == current_user.email.lower():
+    if current_user.email and new_email == current_user.email.lower():
         raise HTTPException(400, "Новый email совпадает с текущим")
 
     existing = (
         db.query(User)
-        .filter(User.email == new_email, User.id != current_user.id)
+        .filter(
+            (User.email == new_email) | (User.login == new_email),
+            User.id != current_user.id,
+        )
         .first()
     )
     if existing:
@@ -592,8 +865,7 @@ def generate_parent_link_token(
     current_user: User = Depends(require_role(UserRole.student)),
     db: Session = Depends(get_db),
 ):
-    """Ученик показывает шестизначный код, родитель вводит его в своём
-    аккаунте."""
+    """Ученик показывает код родителю, тот вводит его в своём аккаунте."""
     existing = (
         db.query(ParentLinkToken)
         .filter(
@@ -606,11 +878,29 @@ def generate_parent_link_token(
     if existing:
         return {"code": existing.code, "expires_at": existing.expires_at}
 
-    code = str(randint(100000, 999999))
+    now = datetime.now(timezone.utc)
+    active_codes = {
+        row[0]
+        for row in db.query(ParentLinkToken.code)
+        .filter(
+            ParentLinkToken.is_used.is_(False),
+            ParentLinkToken.expires_at > now,
+        )
+        .all()
+    }
+    code = ""
+    for _ in range(20):
+        candidate = _random_code(PARENT_CODE_DIGITS)
+        if candidate not in active_codes:
+            code = candidate
+            break
+    if not code:
+        raise HTTPException(503, "Не удалось выпустить код. Попробуйте позже.")
+
     token = ParentLinkToken(
         student_id=current_user.id,
         code=code,
-        expires_at=datetime.now(timezone.utc) + PARENT_LINK_TTL,
+        expires_at=now + PARENT_LINK_TTL,
     )
     db.add(token)
     db.commit()
@@ -624,6 +914,17 @@ def link_parent(
     db: Session = Depends(get_db),
 ):
     """Родитель отправляет код ученика, чтобы связать аккаунты."""
+    key = f"parent-link:{current_user.id}"
+    if _is_rate_limited(
+        key, limit=PARENT_LINK_ATTEMPTS, window=PARENT_LINK_WINDOW
+    ):
+        raise HTTPException(429, "Too many attempts. Try later.")
+
+    code = code.strip()
+    if len(code) != PARENT_CODE_DIGITS or not code.isdigit():
+        _record_attempt(key)
+        raise HTTPException(400, "Invalid or expired code")
+
     token = (
         db.query(ParentLinkToken)
         .filter(
@@ -634,6 +935,7 @@ def link_parent(
         .first()
     )
     if not token:
+        _record_attempt(key)
         raise HTTPException(400, "Invalid or expired code")
 
     already = (
@@ -649,11 +951,13 @@ def link_parent(
 
     student = db.query(User).filter(User.id == token.student_id).first()
     if not student or student.role != UserRole.student:
+        _record_attempt(key)
         raise HTTPException(400, "Invalid or expired code")
 
     db.add(ParentStudent(parent_id=current_user.id, student_id=student.id))
     token.is_used = True
     db.commit()
+    _reset_attempts(key)
     return {
         "message": "Linked successfully",
         "student_name": f"{student.first_name} {student.last_name}",
@@ -685,9 +989,414 @@ def get_children(
 
 
 # ---------------------------------------------------------------------------
-# Сброс пароля
+# MAX Bridge auth — привязка аккаунта MAX к внутреннему профилю
 # ---------------------------------------------------------------------------
 
+
+class MaxLinkRequest(BaseModel):
+    max_user_id_hashed: str
+
+    @field_validator("max_user_id_hashed")
+    @classmethod
+    def _valid_hash(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not _HASH_RE.match(value):
+            raise ValueError("MAX user hash must be 64 hex characters")
+        return value
+
+
+class MaxLinkResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    id: int
+    login: str
+    role: UserRole
+    first_name: str
+    last_name: str
+
+
+class MaxRegisterRequest(BaseModel):
+    """Регистрация из MAX-бота: логин, инвайт-код и имя из профиля MAX."""
+
+    max_user_id_hashed: str
+    login: str
+    password: str
+    invite_code: str
+    first_name: str
+    last_name: str
+
+    @field_validator("max_user_id_hashed")
+    @classmethod
+    def _valid_hash(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not _HASH_RE.match(value):
+            raise ValueError("MAX user hash must be 64 hex characters")
+        return value
+
+    @field_validator("login")
+    @classmethod
+    def _valid_login(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Login must not be blank")
+        if len(value) > 255:
+            raise ValueError("Login must be <= 255 characters")
+        if any(char.isspace() for char in value):
+            raise ValueError("Login must not contain spaces")
+        # Проверка свободного логина регистронезависимая, поэтому и храним
+        # в нижнем регистре: иначе база пропустила бы "Ivan" и "ivan".
+        return value.lower()
+
+    @field_validator("invite_code")
+    @classmethod
+    def _invite_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Invite code must not be blank")
+        if len(value) > 16:
+            raise ValueError("Invite code must be <= 16 characters")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def _password_length(cls, value: str) -> str:
+        if len(value) < MIN_PASSWORD_LENGTH:
+            raise ValueError(
+                f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
+            )
+        return value
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Name must not be blank")
+        if len(value) > MAX_NAME_LENGTH:
+            raise ValueError(f"Name must be <= {MAX_NAME_LENGTH} characters")
+        return value
+
+
+def _verify_bot_signature(hashed_user_id: str, signature: str | None) -> None:
+    """Проверяет, что /auth/max-link вызвал именно MAX-бот.
+
+    Хеш MAX user_id — это фактически credential: по нему выдаётся JWT.
+    Поэтому одного хеша недостаточно, запрос должен быть подписан
+    HMAC-SHA256 на общем MAX_BOT_TOKEN.
+    """
+
+    secret = config.MAX_BOT_TOKEN
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="MAX bot integration is not configured",
+        )
+    if not _HASH_RE.match(hashed_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="MAX user hash must be 64 hex characters",
+        )
+    expected = hmac.new(
+        secret.encode(),
+        hashed_user_id.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not signature or not hmac.compare_digest(signature, expected):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid bot signature",
+        )
+
+
+@router.post("/auth/max-link", response_model=MaxLinkResponse)
+def max_link(
+    body: MaxLinkRequest,
+    x_bot_signature: str | None = Header(default=None, alias="X-Bot-Signature"),
+    db: Session = Depends(get_db),
+):
+    """
+    Привязывает MAX user_id к существующему аккаунту и выдаёт JWT.
+
+    Используется ботом MAX: пользователь уже аутентифицирован в MAX,
+    бот передаёт хеш max_user_id (SHA-256 с солью), бэкенд ищет
+    пользователя с таким max_user_id в таблице users.
+
+    В упрощённом варианте (первый вход через бота) бот передаёт хеш,
+    бэкенд ищет пользователя по max_user_id (хранит хеш).
+    """
+    _verify_bot_signature(body.max_user_id_hashed, x_bot_signature)
+
+    user = (
+        db.query(User)
+        .filter(User.max_user_id == body.max_user_id_hashed)
+        .first()
+    )
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="MAX user not linked. Please log in via web first.",
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is not active")
+
+    _normalize_profile_defaults(user, db)
+    return MaxLinkResponse(
+        access_token=create_access_token(user.id),
+        id=user.id,
+        login=user.login,
+        role=user.role,
+        first_name=user.first_name,
+        last_name=user.last_name,
+    )
+
+
+@router.post("/auth/link-max", status_code=204)
+def link_max_user(
+    max_user_id_hashed: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Привязать текущий аккаунт к MAX user_id (хеш, вызов после логина через веб)."""
+    hashed = max_user_id_hashed.strip().lower()
+    if not _HASH_RE.match(hashed):
+        raise HTTPException(422, "MAX user hash must be 64 hex characters")
+    existing = (
+        db.query(User).filter(User.max_user_id == hashed).first()
+    )
+    if existing and existing.id != current_user.id:
+        raise HTTPException(400, "MAX user already linked to another account")
+    current_user.max_user_id = hashed
+    db.commit()
+
+
+@router.post(
+    "/auth/max-register",
+    response_model=MaxLinkResponse,
+    status_code=201,
+)
+def max_register(
+    body: MaxRegisterRequest,
+    x_bot_signature: str | None = Header(default=None, alias="X-Bot-Signature"),
+    db: Session = Depends(get_db),
+):
+    """Регистрирует аккаунт из MAX-бота: логин + инвайт-код.
+
+    Email и пароль не запрашиваются (их у такого аккаунта нет). Роль
+    определяет сам код: код класса зачисляет ученика в этот класс,
+    одноразовый код из ``invite_codes`` делает пользователя учителем и
+    гасится. MAX user_id сохраняется сразу, поэтому следующий
+    ``/auth/max-link`` отдаёт JWT без повторной регистрации.
+    """
+    _verify_bot_signature(body.max_user_id_hashed, x_bot_signature)
+
+    already = (
+        db.query(User)
+        .filter(User.max_user_id == body.max_user_id_hashed)
+        .first()
+    )
+    if already:
+        # Повтор после потерянного ответа: аккаунт уже создан, отдаём JWT,
+        # иначе пользователь навсегда застрял бы на «попробуйте ещё раз».
+        if not already.is_active:
+            raise HTTPException(403, "Account is not active")
+        return MaxLinkResponse(
+            access_token=create_access_token(already.id),
+            id=already.id,
+            login=already.login,
+            role=already.role,
+            first_name=already.first_name,
+            last_name=already.last_name,
+        )
+    if (
+        db.query(User.id)
+        .filter(func.lower(User.login) == body.login)
+        .first()
+    ):
+        raise HTTPException(400, "Login already taken")
+
+    code = body.invite_code.upper()
+    class_ = db.query(Class).filter(Class.invite_code == code).first()
+    invite = None
+    if class_ is None:
+        invite = (
+            db.query(InviteCode)
+            .filter(
+                InviteCode.code == code,
+                InviteCode.is_used.is_(False),
+            )
+            .first()
+        )
+    if class_ is None and invite is None:
+        raise HTTPException(400, "Invalid or already used invite code")
+
+    user = User(
+        login=body.login,
+        email=None,
+        password_hash=hash_password(body.password),
+        first_name=body.first_name,
+        last_name=body.last_name,
+        role=UserRole.student if class_ is not None else UserRole.teacher,
+        is_active=True,
+        is_verified=True,
+        max_user_id=body.max_user_id_hashed,
+        # Почты нет, поэтому и письма отправлять некуда.
+        notify_email=False,
+        notify_browser=True,
+        notify_digest_time="08:00",
+    )
+    db.add(user)
+    try:
+        db.flush()
+    except IntegrityError:
+        # Гонка двух регистраций с одним логином или MAX user_id: проверки
+        # выше не атомарны, окончательное слово за уникальными индексами.
+        db.rollback()
+        raise HTTPException(409, "Login or MAX account is already registered")
+
+    if class_ is not None:
+        db.add(ClassMembership(student_id=user.id, class_id=class_.id))
+        db.flush()
+        add_missing_assignment_tasks(user.id, class_.id, db)
+        refresh_student_grade(user.id, db)
+    else:
+        invite.is_used = True
+        invite.used_by_id = user.id
+        invite.used_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(user)
+    return MaxLinkResponse(
+        access_token=create_access_token(user.id),
+        id=user.id,
+        login=user.login,
+        role=user.role,
+        first_name=user.first_name,
+        last_name=user.last_name,
+    )
+
+
+MAX_CODE_TTL = timedelta(minutes=10)
+
+
+class MaxCodeIssueRequest(BaseModel):
+    max_user_id_hashed: str
+
+    @field_validator("max_user_id_hashed")
+    @classmethod
+    def _valid_hash(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not _HASH_RE.match(value):
+            raise ValueError("MAX user hash must be 64 hex characters")
+        return value
+
+
+class MaxCodeLoginRequest(BaseModel):
+    code: str
+
+
+@router.post("/auth/max-code/issue")
+def issue_max_code(
+    body: MaxCodeIssueRequest,
+    x_bot_signature: str | None = Header(default=None, alias="X-Bot-Signature"),
+    db: Session = Depends(get_db),
+):
+    """Бот выдаёт одноразовый код для входа в SPA."""
+    _verify_bot_signature(body.max_user_id_hashed, x_bot_signature)
+    user = (
+        db.query(User)
+        .filter(User.max_user_id == body.max_user_id_hashed)
+        .first()
+    )
+    if not user:
+        raise HTTPException(404, "MAX account is not registered")
+    if not user.is_active:
+        raise HTTPException(403, "Account is not active")
+
+    db.query(MaxLoginCode).filter(
+        MaxLoginCode.user_id == user.id,
+        MaxLoginCode.is_used.is_(False),
+    ).update({"is_used": True}, synchronize_session=False)
+    db.commit()
+
+    code = ""
+    for _ in range(10):
+        candidate = "".join(str(secrets.randbelow(10)) for _ in range(6))
+        taken = (
+            db.query(MaxLoginCode.id)
+            .filter(
+                MaxLoginCode.code == candidate,
+                MaxLoginCode.is_used.is_(False),
+            )
+            .first()
+        )
+        if not taken:
+            code = candidate
+            break
+    if not code:
+        raise HTTPException(503, "Could not create a login code")
+
+    db.add(
+        MaxLoginCode(
+            code=code,
+            user_id=user.id,
+            expires_at=datetime.now(timezone.utc) + MAX_CODE_TTL,
+        )
+    )
+    db.commit()
+    return {"code": code, "expires_in": int(MAX_CODE_TTL.total_seconds())}
+
+
+@router.post("/auth/max-code", response_model=MaxLinkResponse)
+def max_code_login(
+    body: MaxCodeLoginRequest,
+    db: Session = Depends(get_db),
+):
+    """Меняет код из бота на JWT. Код одноразовый и живёт 10 минут."""
+    code = body.code.strip()
+    if not code or len(code) > 8:
+        raise HTTPException(400, "Invalid code")
+
+    key = f"max-code:{code}"
+    if _is_rate_limited(key, limit=5, window=600):
+        raise HTTPException(429, "Too many attempts. Try later.")
+
+    record = (
+        db.query(MaxLoginCode)
+        .filter(
+            MaxLoginCode.code == code,
+            MaxLoginCode.is_used.is_(False),
+        )
+        .order_by(MaxLoginCode.created_at.desc())
+        .first()
+    )
+    expires_at = record.expires_at if record else None
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if not record or expires_at < datetime.now(timezone.utc):
+        _record_attempt(key)
+        raise HTTPException(400, "Code expired or invalid")
+
+    user = db.query(User).filter(User.id == record.user_id).first()
+    if not user or not user.is_active:
+        _record_attempt(key)
+        raise HTTPException(403, "Account is not active")
+
+    record.is_used = True
+    db.commit()
+    _reset_attempts(key)
+    return MaxLinkResponse(
+        access_token=create_access_token(user.id),
+        id=user.id,
+        login=user.login,
+        role=user.role,
+        first_name=user.first_name,
+        last_name=user.last_name,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Сброс пароля
+# ---------------------------------------------------------------------------
 _RESET_MESSAGE = "Если такой email зарегистрирован, письмо отправлено."
 
 
@@ -723,7 +1432,7 @@ def request_password_reset(
     try:
         send_password_reset_email(user.email, reset_link)
     except Exception as exc:  # noqa: BLE001
-        print(f"[MAIL] Failed to send password reset email: {exc}")
+        logger.warning("Failed to send password reset email: %s", exc)
 
     return {"message": _RESET_MESSAGE}
 

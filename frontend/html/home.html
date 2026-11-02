@@ -1,0 +1,73 @@
+<!-- fragment:card -->
+<a class="stack-sm home-next" href="#/diary">
+  <div class="row"><span class="grow small home-lesson-label">{{0}} урок · {{1}}</span><span class="pill accent">{{2}}</span></div>
+  <div class="title-l">{{3}}</div>
+  <div class="muted ls-tm">{{4}} · {{5}}{{6}}</div>
+  {{7}}
+</a>
+<!-- /fragment:card -->
+
+<!-- fragment:only-desk -->
+<section class="o-lesson home-section home-today">
+  <div class="home-column-head"><h2 class="h2"><span class="home-ico">{{1}}</span>Сегодня</h2><a class="small home-text-action" href="#/diary">Весь дневник</a></div>
+  <div class="card lessons home-day">{{0}}</div>
+</section>
+<!-- /fragment:only-desk -->
+
+<!-- fragment:ls -->
+<div class="ls{{0}}">
+  <span class="ls-n">{{1}}</span>
+  <div class="ls-b"><span class="ls-sub">{{2}}</span><span class="ls-tm">{{3}}</span></div>
+  <div class="ls-g">{{4}}{{5}}</div>
+</div>
+<!-- /fragment:ls -->
+
+<!-- fragment:section-h-2 -->
+<section class="o-hw home-section">
+  <div class="home-column-head"><h2 class="h2"><span class="home-ico">{{3}}</span>{{4}}</h2><span class="muted small">{{0}}</span></div>
+  <div class="card lessons home-hw">{{1}}{{2}}</div>
+</section>
+<!-- /fragment:section-h-2 -->
+
+<!-- fragment:list-row -->
+<label class="list-row home-hw-row"><span class="hw"><input type="checkbox" data-hw="{{0}}" {{1}}><span><b>{{2}}</b><br>{{3}}</span></span></label>
+<!-- /fragment:list-row -->
+
+<!-- fragment:section-h-3 -->
+<section class="o-grades home-section">
+  <div class="home-column-head"><h2 class="h2"><span class="home-ico">{{2}}</span>Новые оценки</h2>{{0}}</div>
+  <div class="card lessons home-fresh">{{1}}</div>
+</section>
+<!-- /fragment:section-h-3 -->
+
+<!-- fragment:seen -->
+{{0}}
+<div class="home-card-footer home-grade-actions">
+  <a class="home-text-action" href="#/grades">Все оценки</a>
+  <button class="home-text-action" id="seen" type="button">Отметить просмотренными</button>
+</div>
+<!-- /fragment:seen -->
+
+<!-- fragment:list-row-2 -->
+<a class="list-row" href="#/grades/{{0}}">
+  <span class="dot-new" aria-label="новая"></span>
+  <span class="grow"><b>{{1}}</b><br><span class="muted small">{{2}} · {{3}}</span></span>
+  {{4}}
+</a>
+<!-- /fragment:list-row-2 -->
+
+<!-- fragment:stack -->
+{{0}}
+<div class="stack home-page">
+  <div class="hero">
+    <p class="muted home-date">{{1}}, {{2}}</p>
+    <h1 class="title-l">{{3}}</h1>
+    {{8}}
+  </div>
+  {{4}}
+  <div class="home-grid stack">
+    <div class="home-col">{{5}}</div>
+    <div class="home-col">{{6}}{{7}}</div>
+  </div>
+</div>
+<!-- /fragment:stack -->

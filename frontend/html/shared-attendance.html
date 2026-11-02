@@ -1,0 +1,42 @@
+<!-- fragment:list-row -->
+<button class="list-row ab-row ab-pick" type="button" data-cls="{{0}}"><span class="grow" style="font-weight: 700">{{1}}</span><span class="muted small">{{2}}</span>{{3}}</button>
+<!-- /fragment:list-row -->
+
+<!-- fragment:ab-prev -->
+
+{{7}}
+<div class="ab-grid">
+  <section class="stack-sm">
+    <div class="ab-nav">
+      <button class="btn ghost sm" type="button" id="ab-prev" aria-label="Предыдущий учебный день" {{0}}>Раньше</button>
+      <label class="sr-only" for="ab-day">День</label>
+      <select class="input select-sm grow" id="ab-day">{{1}}</select>
+      <button class="btn ghost sm" type="button" id="ab-next" aria-label="Следующий учебный день" {{2}}>Позже</button>
+    </div>
+    <div class="card lessons">{{3}}</div>
+  </section>
+  <section class="stack-sm">
+    <div class="section-h"><h2 class="h2">{{4}}{{5}}</h2><span class="muted small">по {{6}}</span></div>
+    <div class="card lessons">{{8}}</div>
+    {{9}}
+    <button class="btn ghost sm" type="button" id="ab-csv" style="align-self: flex-start">{{10}}Скачать в Excel</button>
+  </section>
+</div>
+<!-- /fragment:ab-prev -->
+
+<!-- fragment:ab-tabs -->
+<div class="ab-tabs" role="group" aria-label="Класс">
+      <button type="button" data-cls="all" aria-pressed="{{0}}">Все классы</button>
+      {{1}}
+    </div>
+<!-- /fragment:ab-tabs -->
+
+<!-- fragment:row -->
+
+<div class="row"><h2 class="h2 grow" style="font-size: 20px">Скачать пропуски в Excel</h2><button class="icon-btn" type="button" data-close aria-label="Закрыть">{{0}}</button></div>
+<p class="muted small" style="margin: 4px 0 12px">Все пропуски за {{1}}: дата, ученик, какие уроки.</p>
+<div class="stack-sm">
+  <button class="btn block{{2}}" type="button" data-dl="all">{{3}}Все классы школы</button>
+  {{4}}
+</div>
+<!-- /fragment:row -->

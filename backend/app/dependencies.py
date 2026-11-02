@@ -7,22 +7,19 @@
 перекрывал вторую). Сейчас реализация одна, и все роутеры импортируют
 именно её отсюда.
 """
-import os
 from typing import Callable
 
-from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
+from app import config
 from app.database import get_db
 from app.models import User, UserRole
 
-load_dotenv()
-
-SECRET_KEY = os.environ.get("SECRET_KEY")
-ALGORITHM = os.environ.get("ALGORITHM", "HS256")
+SECRET_KEY = config.SECRET_KEY
+ALGORITHM = config.ALGORITHM
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/login")
 
@@ -47,6 +44,9 @@ def get_current_user(
         )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Одноразовые токены (например, OAuth state) не должны открывать API.
+        if payload.get("scope") is not None:
+            raise ValueError("token is not an access token")
         user_id = int(payload["sub"])
     except (JWTError, KeyError, TypeError, ValueError):
         raise _unauthorized()
@@ -67,24 +67,6 @@ def require_role(*roles: UserRole) -> Callable[..., User]:
 
     def dependency(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied",
-            )
-        return current_user
-
-    return dependency
-
-
-def require_self_or_roles(*roles: UserRole) -> Callable[..., User]:
-    """Разрешает указанные роли или самому пользователю читать себя.
-
-    Используется эндпоинтами, где смешаны «свои данные» и данные по роли.
-    """
-    allowed = (*roles, UserRole.admin)
-
-    def dependency(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied",

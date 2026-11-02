@@ -1,0 +1,54 @@
+<!-- fragment:sc -->
+
+{{0}}
+<div class="stack" style="margin-top: 8px">
+  <div class="row" style="flex-wrap: wrap">
+    <h1 class="title-l">Расписание</h1>
+    <label class="sr-only" for="sc">Класс</label>
+    <select class="input select-sm" id="sc">{{1}}</select>
+    <span class="pill">{{2}}</span>
+  </div>
+  <div class="only-mobile stack-sm">
+    <div class="ab-tabs" role="group" aria-label="День недели">{{3}}</div>
+    <div class="card lessons">{{4}}</div>
+  </div>
+  <div class="card dt-box only-desk">
+    <table class="sch" aria-label="Расписание {{5}}">
+      <thead><tr><th class="t">Урок</th>{{6}}</tr></thead>
+      <tbody>{{7}}</tbody>
+    </table>
+  </div>
+  <div class="row schedule-actions"><button class="btn ghost" id="add-lesson-row" type="button">{{8}}Добавить урок</button><button class="btn ghost" id="remove-lesson-row" type="button">Убрать последний урок</button></div>
+  <a class="link-btn" href="#/settings">Изменить время звонков в настройках</a>
+  <details class="card more"><summary>Как работает расписание</summary><p>Клик по ячейке — выбрать предмет; учитель подставится по нагрузке, но можно выбрать другого (такие уроки отмечены ✎). Ученики и родители видят изменения в дневнике сразу. Пустой день подписывается «Выходной».</p></details>
+</div>
+<!-- /fragment:sc -->
+
+<!-- fragment:lf -->
+
+<h2 class="h2" style="font-size: 20px">{{0}}, {{1}} урок · {{2}}</h2>
+<p class="muted small" style="margin: 4px 0 12px">{{3}}</p>
+<form class="stack" id="lf" novalidate>
+  <div class="field"><label class="label" for="ss">Предмет</label>
+    <select class="input" id="ss"><option value="">— Нет урока —</option>
+      <optgroup label="Ведут в {{4}}">{{5}}</optgroup>
+      <optgroup label="Другие предметы">{{6}}</optgroup>
+    </select></div>
+  <div class="field"><label class="label" for="st">Учитель</label>
+    <select class="input" id="st"></select>
+    <span class="hint" id="st-h"></span></div>
+  <p class="error" id="schedule-err" role="alert" hidden></p>
+  <button class="btn ghost sm schedule-delete" id="delete-schedule-lesson" type="button" hidden>Удалить урок</button>
+  <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">Сохранить</button></div>
+</form>
+<!-- /fragment:lf -->
+
+<!-- fragment:bell-action -->
+<h2 class="h2">{{0}}</h2>
+<form class="stack schedule-bell-form" id="bell-action" novalidate>
+  <div class="field"><label class="label" for="schedule-bell-set">Набор звонков</label><select class="input" id="schedule-bell-set">{{1}}</select></div>
+  <p class="hint" id="bell-action-hint"></p>
+  <p class="error" id="bell-action-error" role="alert" hidden></p>
+  <div class="row schedule-actions"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm {{2}}" type="submit">{{0}}</button></div>
+</form>
+<!-- /fragment:bell-action -->

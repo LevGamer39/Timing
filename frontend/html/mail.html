@@ -1,0 +1,65 @@
+<!-- fragment:mrow -->
+
+<a class="mrow{{0}}" href="#/mail/read/{{1}}"{{2}}>
+  <span class="mail-av av-{{3}}" aria-hidden="true">{{4}}</span>
+  <span class="mrow-b">
+    <span class="mrow-1"><span class="mail-who">{{5}}{{6}}</span><span class="mail-date">{{7}}</span></span>
+    <span class="mail-subj">{{8}}{{9}}{{10}}</span>
+    <span class="mail-prev">{{11}}</span>
+  </span>
+</a>
+<!-- /fragment:mrow -->
+
+<!-- fragment:del -->
+
+<header class="top only-mobile letter-top">
+  <a class="icon-btn" href="#/mail{{0}}" aria-label="Назад к почте">{{1}}</a>
+  <h1>{{3}}</h1>
+</header>
+<article class="card pad stack letter">
+  <h2 class="title-l letter-title only-desk">{{3}}</h2>
+  <div class="row letter-meta">
+    <span class="mail-av av-{{4}}" aria-hidden="true">{{5}}</span>
+    <div class="grow">
+      <div style="font-weight: 700">{{6}}{{7}}</div>
+      <div class="muted small">{{8}}</div>
+    </div>
+    <span class="muted small">{{9}}, {{10}}</span>
+  </div>
+  <div class="letter-body">{{11}}</div>
+  {{12}}
+  <div class="row" style="gap: 8px; flex-wrap: wrap">
+    {{13}}
+    <button class="btn ghost" type="button" id="del" style="color: var(--danger)">{{14}}Удалить</button>
+  </div>
+</article>
+<!-- /fragment:del -->
+
+<!-- fragment:row -->
+<div class="row" style="border: 1px solid var(--card-border); border-radius: 16px; padding: 8px 8px 8px 16px">{{0}}<span class="grow" style="font-weight: 600">{{1}}</span><button class="btn ghost sm" type="button" data-open-file="{{2}}">Скачать</button></div>
+<!-- /fragment:row -->
+
+<!-- fragment:q -->
+
+<div class="mail-split{{0}}"{{1}}>
+  <div class="mail-list">
+    {{2}}
+    <div class="row" style="margin-top: 8px">
+      <h1 class="title-l grow">Почта</h1>
+      <a class="btn sm only-desk" href="#/mail/new">{{3}}Написать</a>
+    </div>
+    <div class="field">
+      <label class="sr-only" for="q">Поиск по почте</label>
+      <input class="input" id="q" type="search" placeholder="Поиск по имени, теме или тексту" value="{{4}}">
+    </div>
+    <div class="seg" role="tablist" aria-label="Папки">
+      <button role="tab" type="button" data-tab="mail" aria-selected="{{5}}">Входящие{{6}}</button>
+      <button role="tab" type="button" data-tab="mail/sent" aria-selected="{{7}}">Отправленные</button>
+    </div>
+    <div id="list">{{8}}</div>
+    <div style="height: 56px" class="only-mobile" aria-hidden="true"></div>
+  </div>
+  <div class="mail-read">{{9}}</div>
+</div>
+{{10}}
+<!-- /fragment:q -->

@@ -23,6 +23,8 @@ from app.models import (
 router = APIRouter(prefix="/api/assignments", tags=["assignments"])
 
 MAX_TITLE_LENGTH = 255
+MAX_SUBJECT_LENGTH = 100
+MAX_DESCRIPTION_LENGTH = 10_000
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +60,29 @@ class AssignmentCreate(BaseModel):
             raise ValueError("student_ids must not contain duplicates")
         return value
 
+    @field_validator("subject")
+    @classmethod
+    def _subject_length(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            return None
+        if len(value) > MAX_SUBJECT_LENGTH:
+            raise ValueError(
+                f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
+            )
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def _description_length(cls, value: str | None) -> str | None:
+        if value is not None and len(value) > MAX_DESCRIPTION_LENGTH:
+            raise ValueError(
+                f"Description must be <= {MAX_DESCRIPTION_LENGTH} characters"
+            )
+        return value
+
 
 class AssignmentResponse(BaseModel):
     """``total_count`` / ``submitted_count`` / ``class_name`` вычисляются.
@@ -83,7 +108,7 @@ class AssignmentResponse(BaseModel):
 class AssignmentStudentProgress(BaseModel):
     student_id: int
     student_name: str
-    email: str
+    email: str | None
     status: TaskStatus | None
     grade: float | None
 

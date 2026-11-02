@@ -12,6 +12,8 @@ from app.models import ParentStudent, Task, TaskPriority, TaskStatus, User, User
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 MAX_TITLE_LENGTH = 255
+MAX_SUBJECT_LENGTH = 100
+MAX_DESCRIPTION_LENGTH = 10_000
 
 
 class TaskCreate(BaseModel):
@@ -20,6 +22,7 @@ class TaskCreate(BaseModel):
     description: str | None = None
     deadline: datetime | None = None
     priority: TaskPriority = TaskPriority.medium
+    parent_task_id: int | None = None
 
     @field_validator("title")
     @classmethod
@@ -29,6 +32,29 @@ class TaskCreate(BaseModel):
             raise ValueError("Title must not be blank")
         if len(value) > MAX_TITLE_LENGTH:
             raise ValueError(f"Title must be <= {MAX_TITLE_LENGTH} characters")
+        return value
+
+    @field_validator("subject")
+    @classmethod
+    def _subject_length(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            return None
+        if len(value) > MAX_SUBJECT_LENGTH:
+            raise ValueError(
+                f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
+            )
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def _description_length(cls, value: str | None) -> str | None:
+        if value is not None and len(value) > MAX_DESCRIPTION_LENGTH:
+            raise ValueError(
+                f"Description must be <= {MAX_DESCRIPTION_LENGTH} characters"
+            )
         return value
 
 
@@ -50,6 +76,29 @@ class TaskUpdate(BaseModel):
             raise ValueError("Title must not be blank")
         if len(value) > MAX_TITLE_LENGTH:
             raise ValueError(f"Title must be <= {MAX_TITLE_LENGTH} characters")
+        return value
+
+    @field_validator("subject")
+    @classmethod
+    def _subject_length(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            return None
+        if len(value) > MAX_SUBJECT_LENGTH:
+            raise ValueError(
+                f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
+            )
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def _description_length(cls, value: str | None) -> str | None:
+        if value is not None and len(value) > MAX_DESCRIPTION_LENGTH:
+            raise ValueError(
+                f"Description must be <= {MAX_DESCRIPTION_LENGTH} characters"
+            )
         return value
 
 
@@ -146,6 +195,19 @@ def create_personal_task(
         is_personal=True,
         status=TaskStatus.pending,
     )
+    if body.parent_task_id is not None:
+        parent = (
+            db.query(Task)
+            .filter(
+                Task.id == body.parent_task_id,
+                Task.student_id == current_user.id,
+                Task.parent_task_id.is_(None),
+            )
+            .first()
+        )
+        if not parent:
+            raise HTTPException(404, "Parent task not found")
+        task.parent_task_id = parent.id
     db.add(task)
     db.commit()
     db.refresh(task)

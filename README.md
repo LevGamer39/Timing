@@ -40,8 +40,9 @@
 | **Canvas API** | Кольцо прогресса |
 | **LocalStorage** | JWT-токен и профиль сессии |
 
-> Статику раздаёт сам FastAPI: каталог `frontend/` смонтирован на `/static`,
-> HTML-страницы отдаются через явные роуты в `main.py`.
+> Статику раздаёт сам FastAPI: каталог `frontend/` смонтирован в корень
+> (и в `/static` для совместимости). Фронтенд — SPA на `frontend/index.html`,
+> старые адреса отдают ту же оболочку.
 
 ---
 
@@ -163,20 +164,14 @@ VectorVK/
 │   ├── requirements-dev.txt
 │   └── data/                    # остатки SQLite, см. «Известные проблемы»
 │
-├── frontend/
-│   ├── index.html  login.html  register.html  verify.html
-│   ├── reset-password.html  reset-password-new.html
-│   ├── change-email.html  change-email-confirm.html  change-password.html
-│   ├── settings.html  404.html
-│   ├── css/                     # base, index, login, register, verify, reset-password
-│   ├── js/                      # api.js, auth-guard.js, login.js, register.js,
-│   │                            #   verify.js, mobile-nav.js
-│   ├── student/                 # dashboard, tasks, calendar, progress, ai
-│   ├── teacher/                 # dashboard, classes, class, assignments,
-│   │                            #   assignment-new, profile, settings
-│   ├── admin/                   # dashboard, settings
-│   ├── parent/                  # ⚠ папки нет — см. «Известные проблемы»
-│   └── favicon/
+├── frontend/                    # SPA без сборки: index.html + css/ js/ html/
+│   ├── index.html               # единственная оболочка, навигация по #/...
+│   ├── css/                     # app, palettes + <экран>.css
+│   ├── js/                      # main, store, data, ui, <экран>.js
+│   │   ├── shared/              # общая логика экранов
+│   │   └── vendor/qr/           # генератор QR (MIT)
+│   ├── html/                    # <экран>.html + manifest.json
+│   └── README.md                # документация фронтенда
 │
 ├── nginx/
 │   ├── nginx.conf.template      # Шаблон: домен подставляется через envsubst
@@ -191,14 +186,18 @@ VectorVK/
 
 | Роль | Возможности | Интерфейс |
 |---|---|---|
-| **Ученик** | Задачи, календарь, ИИ-чат, прогресс, оценки, расписание, профиль | `/student/*` ✅ |
-| **Учитель** | Классы, создание заданий, прогресс учеников, выставление оценок | `/teacher/*` ✅ |
-| **Родитель** | Просмотр задач, оценок и расписания ребёнка (только чтение) | `/parent/*` ⚠ роуты есть, страниц нет |
-| **Администратор** | Инвайт-коды, классы, пользователи, сводка по школе | `/admin/*` ✅ |
+| **Ученик** | Задачи и подзадачи, дневник, оценки, почта, ИИ-чат, профиль | SPA: `#/home`, `#/tasks`, `#/diary`, `#/grades`, `#/mail`, `#/ai` |
+| **Учитель** | Журнал и анализ, посещаемость, задания классу с прогрессом и оценками, почта | SPA: `#/journal`, `#/myclass`, `#/mail` |
+| **Родитель** | Просмотр задач, оценок, расписания и пропусков ребёнка (только чтение), привязка по коду | SPA: те же экраны с переключателем ребёнка |
+| **Администратор** | Классы, учителя и коды, расписание, пропуски, настройки школы, почта | SPA: `#/classes`, `#/teachers`, `#/schedule`, `#/attendance` |
+
+Вход общий: логин + пароль, код из MAX-бота или Яндекс ID. Ученик и родитель
+могут зарегистрироваться сами (подтверждение почты), учитель — по одноразовому
+коду из админки. Ученик вступает в класс по 12-символьному коду.
 
 API родителя работает полностью (`/api/grades/child/{id}`,
 `/api/tasks/child/{id}`, `/api/schedule/child/{id}`, `/api/users/me/children`).
-Не хватает только веб-интерфейса.
+В SPA роль `parent` подключена к API: ребёнок выбирается переключателем.
 
 ---
 
@@ -215,6 +214,10 @@ API родителя работает полностью (`/api/grades/child/{id
 | tasks | `/api/tasks` |
 | grades | `/api/grades` |
 | schedule | `/api/schedule` |
+| journal | `/api/journal` |
+| attendance | `/api/attendance` |
+| messages | `/api/messages` |
+| school | `/api/school` |
 | ai | `/api/ai` |
 | notifications | `/api/notifications` |
 | yandex_auth | `/api/auth/yandex` |
@@ -240,14 +243,29 @@ docker exec vector_db psql -U vector -d vectordb `
 cd backend
 pip install -r requirements-dev.txt
 
-$env:TEST_DATABASE_URL="postgresql://vector:<pw>@localhost:5432/vectordb_test"
-pytest
+# берёт DB_* из ../.env и подставляет 127.0.0.1
+python run_tests.py
 ```
 
-193 теста: `test_ai_text`, `test_tasks`, `test_assignments`, `test_grades`,
+`TEST_DATABASE_URL` можно задать и вручную (`$env:...` + `pytest`) — он
+действует только в текущем окне PowerShell. Если переменная осталась от
+прошлой попытки с другим паролем, уберите её:
+`Remove-Item Env:TEST_DATABASE_URL` — `run_tests.py` берёт `.env` только
+когда переменной нет.
+
+239 тестов: `test_ai_text`, `test_tasks`, `test_assignments`, `test_grades`,
 `test_schedule`, `test_classes_admin`, `test_users`, `test_db_constraints`.
 Без переменной `TEST_DATABASE_URL` conftest падает сразу — молча подменить БД
-нельзя.
+нельзя. На Windows используйте `127.0.0.1`, а не `localhost`: Docker Desktop
+слушает IPv4, и подключение по `localhost` может зависнуть; conftest сам
+добавляет `connect_timeout=5`, если его нет в URL.
+
+Тесты бота — отдельно, без сети (бэкенд и MAX подменены):
+
+```powershell
+cd bot
+pytest
+```
 
 ---
 
@@ -415,12 +433,17 @@ nginx (через `envsubst` в `docker-entrypoint.sh`) и в CORS бэкенд�
 | `ENABLE_SCHEDULER` | `true` | Фоновые джобы (выключаются в тестах) |
 | `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` | — | OAuth Яндекса |
 | `YANDEX_LOGIN_CALLBACK` / `YANDEX_LINK_CALLBACK` | из `APP_URL` | Redirect URI Яндекса |
+| `MAX_BOT_TOKEN` | — | Токен MAX-бота; им же подписываются его запросы к API (`X-Bot-Signature`) |
+| `BOT_USER_ID_SALT` | из `MAX_BOT_TOKEN` | Соль хеширования MAX user_id. Смена соли инвалидирует привязки |
 
 ---
 
 ## Система авторизации
 
 - Регистрация → подтверждение email **6-значным кодом, 15 минут**
+- Регистрация из **MAX-бота**: логин + инвайт-код, без email и пароля.
+  Код класса делает пользователя учеником и зачисляет в класс, одноразовый
+  код из `invite_codes` — учителем
 - Учитель регистрируется **только по инвайт-коду** (16 символов, выдаёт админ).
   Код списывается при подтверждении email
 - JWT (`HS256`), время жизни 7 дней, хранится в `localStorage.token`
@@ -634,18 +657,14 @@ DNS-хостингом.
 | Нет ограничений целостности | ✅ модели + миграция 001 |
 | `uvloop` не ставится на Windows | ✅ маркеры платформы |
 
-### Фронтенд (не трогал, по условию задачи)
+### Фронтенд
 
-| # | Проблема | Файл |
+| # | Что сделано | Где |
 |---|---|---|
-| 1 | `const API = 'http://localhost:8000'` — вход из браузера не работал | ✅ `window.location.origin` |
-| 2 | Редирект на несуществующий `/login.html` | ✅ `/login` |
-| 3 | Нет `frontend/parent/` — 4 маршрута отдают 404 | `frontend/parent/` |
-| 4 | Нет `student/profile.html` — 404 | `frontend/student/` |
-| 5 | `frontend/student/js/auth-guard.js` — неиспользуемая копия | `frontend/student/js/auth-guard.js` |
-| 6 | Chart.js и Google Fonts с CDN, Chart.js без версии | `frontend/student/dashboard.html` |
-| 7 | Логика топбара продублирована в HTML каждой страницы | `frontend/**/*.html` |
-| 8 | `admin/settings.html` подключает `student/js/settings.js` | `frontend/admin/settings.html` |
+| 1 | Старый мультистраничный фронтенд заменён SPA без сборки | `frontend/index.html` |
+| 2 | Ресурсы разложены по `css/`, `js/`, `html/`; тесты и `docs/` убраны | `frontend/` |
+| 3 | Старые адреса (`/login`, `/dashboard`, `/teacher/*`) отдают оболочку SPA | `backend/app/main.py` |
+| 4 | SPA подключён к API: вход (пароль/MAX/Яндекс), регистрация, сброс пароля, журнал, почта с вложениями, посещаемость, расписание, настройки школы, уведомления, ИИ, задачи, задания классу | `frontend/js/store.js`, `frontend/js/server.js` |
 
 ### Прочее
 

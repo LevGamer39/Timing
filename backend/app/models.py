@@ -1,6 +1,6 @@
 from sqlalchemy import (
-    CheckConstraint, Column, DateTime, Enum as SAEnum, Float, ForeignKey,
-    Integer, String, Text, UniqueConstraint, Boolean,
+    Boolean, CheckConstraint, Column, Date, DateTime, Enum as SAEnum, Float,
+    ForeignKey, Integer, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.sql import func
@@ -33,31 +33,32 @@ class TaskPriority(str, enum.Enum):
 class NotificationChannel(str, enum.Enum):
     email = "email"
     browser = "browser"
-    telegram = "telegram"
 
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
+    login = Column(String(255), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=True, index=True)
+    # NULL у аккаунтов, зарегистрированных из MAX: пароль не запрашивается,
+    # вход идёт по привязке max_user_id.
+    password_hash = Column(String(255), nullable=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     role = Column(SAEnum(UserRole), nullable=False)
-    avatar_url = Column(String(500), nullable=True)
+    avatar_url = Column(Text, nullable=True)
     grade = Column(String(20), nullable=True)  # для ученика: "10А"
     teacher_subject = Column(String(100), nullable=True)
     teacher_invite_code = Column(String(16), nullable=True)
-    telegram_id = Column(String(100), nullable=True, unique=True)
     is_active = Column(Boolean, default=False)  # активируется после подтверждения email
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     yandex_id = Column(String(100), unique=True, nullable=True, index=True)
+    max_user_id = Column(String(100), unique=True, nullable=True, index=True)  # ID пользователя в MAX
     # Настройки уведомлений
     notify_email = Column(Boolean, default=True)
     notify_browser = Column(Boolean, default=True)
-    notify_telegram = Column(Boolean, default=False)
     notify_digest_time = Column(String(5), default="08:00")  # "HH:MM"
 
     classes_taught = relationship("Class", back_populates="teacher")
@@ -99,6 +100,19 @@ class InviteCode(Base):
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     used_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class MaxLoginCode(Base):
+    """Одноразовый код входа в SPA, который выдаёт MAX-бот."""
+
+    __tablename__ = "max_login_codes"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(8), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class EmailVerification(Base):
@@ -232,6 +246,11 @@ class Grade(Base):
     id = Column(Integer, primary_key=True)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     assignment_id = Column(Integer, ForeignKey("assignments.id"), nullable=True)
+    journal_lesson_id = Column(
+        Integer,
+        ForeignKey("journal_lessons.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     subject = Column(String(100), nullable=False)
     value = Column(Float, nullable=False)  # 1-5 или 100-балльная
     comment = Column(Text, nullable=True)
@@ -240,6 +259,7 @@ class Grade(Base):
 
     student = relationship("User", back_populates="grades", foreign_keys=[student_id])
     assignment = relationship("Assignment", back_populates="grades")
+    journal_lesson = relationship("JournalLesson", back_populates="grades")
 
 
 class Schedule(Base):
@@ -268,6 +288,7 @@ class Notification(Base):
     channel = Column(SAEnum(NotificationChannel), nullable=False)
     is_read = Column(Boolean, default=False)
     is_sent = Column(Boolean, default=False)
+    attempts = Column(Integer, nullable=False, default=0, server_default="0")
     scheduled_at = Column(DateTime(timezone=True), nullable=True)
     sent_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -276,12 +297,16 @@ class Notification(Base):
 
 
 class ParentLinkToken(Base):
-    """6-значный код который ученик показывает родителю для привязки."""
+    """Код, который ученик показывает родителю для привязки.
+
+    Код восьмизначный: шестизначный перебирался за время жизни, тем более
+    что TTL раньше был сутки.
+    """
     __tablename__ = "parent_link_tokens"
 
     id = Column(Integer, primary_key=True)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    code = Column(String(6), nullable=False, index=True)
+    code = Column(String(8), nullable=False, index=True)
     is_used = Column(Boolean, default=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -320,3 +345,198 @@ class AIMessage(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="ai_messages")
+
+
+class JournalWorkType(Base):
+    """Вид работы в журнале: название и вес оценки."""
+
+    __tablename__ = "journal_work_types"
+
+    id = Column(Integer, primary_key=True)
+    code = Column(String(40), unique=True, nullable=False, index=True)
+    name = Column(String(80), nullable=False)
+    weight = Column(Integer, nullable=False, default=1, server_default="1")
+
+
+class JournalLesson(Base):
+    """Урок журнала: дата, вид работы и домашнее задание."""
+
+    __tablename__ = "journal_lessons"
+    __table_args__ = (
+        UniqueConstraint(
+            "class_id", "subject", "date", name="uq_journal_lesson_slot"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    class_id = Column(
+        Integer,
+        ForeignKey("classes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subject = Column(String(100), nullable=False)
+    date = Column(Date, nullable=False, index=True)
+    type_code = Column(String(40), nullable=False, default="lesson")
+    homework = Column(Text, nullable=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    grades = relationship(
+        "Grade", back_populates="journal_lesson", cascade="all, delete-orphan"
+    )
+
+
+class JournalFinal(Base):
+    """Итоговая оценка за период: журнал, колонка «Итог»."""
+
+    __tablename__ = "journal_finals"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "subject", "period", name="uq_journal_final_slot"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    student_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    subject = Column(String(100), nullable=False)
+    period = Column(String(60), nullable=False)
+    value = Column(Float, nullable=False)
+    updated_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class JournalAbsence(Base):
+    """«Н» в журнале: отсутствие на уроке конкретного предмета."""
+
+    __tablename__ = "journal_absences"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "subject", "date", name="uq_journal_absence_slot"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    class_id = Column(
+        Integer,
+        ForeignKey("classes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    student_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    subject = Column(String(100), nullable=False)
+    date = Column(Date, nullable=False, index=True)
+    marked_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AttendanceMark(Base):
+    """Отметка об отсутствии ученика на конкретном уроке."""
+    __tablename__ = "attendance_marks"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "date", "lesson_index", name="uq_attendance_slot"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    class_id = Column(
+        Integer,
+        ForeignKey("classes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    student_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    date = Column(Date, nullable=False, index=True)
+    lesson_index = Column(Integer, nullable=False)  # 1 — первый урок дня
+    subject = Column(String(100), nullable=True)
+    marked_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ClassSchedule(Base):
+    """Расписание класса: правится учителем или администратором."""
+
+    __tablename__ = "class_schedule"
+    __table_args__ = (
+        UniqueConstraint(
+            "class_id", "weekday", "lesson_index",
+            name="uq_class_schedule_slot",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    class_id = Column(
+        Integer,
+        ForeignKey("classes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    weekday = Column(Integer, nullable=False)  # 0=пн, 6=вс
+    lesson_index = Column(Integer, nullable=False)  # 0 — первый урок дня
+    subject = Column(String(100), nullable=False)
+    teacher_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    teacher_name = Column(String(255), nullable=True)
+    start_time = Column(String(5), nullable=False)
+    end_time = Column(String(5), nullable=False)
+    room = Column(String(50), nullable=True)
+
+
+class SchoolSetting(Base):
+    """Настройки школы: звонки, периоды, шкала — JSON одной строкой."""
+
+    __tablename__ = "school_settings"
+
+    id = Column(Integer, primary_key=True)
+    payload = Column(Text, nullable=False, default="{}")
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class Message(Base):
+    """Внутренняя почта школы: письмо от одного пользователя другому."""
+
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True)
+    sender_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    recipient_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    subject = Column(String(255), nullable=False)
+    body = Column(Text, nullable=False)
+    files = Column(Text, nullable=True)  # JSON-массив имён вложений
+    is_read = Column(Boolean, default=False, nullable=False)
+    deleted_by_sender = Column(Boolean, default=False, nullable=False)
+    deleted_by_recipient = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    sender = relationship("User", foreign_keys=[sender_id])
+    recipient = relationship("User", foreign_keys=[recipient_id])
+
+
+class MailFile(Base):
+    """Файл, приложенный к письму. Токен — случайная строка в ссылке."""
+
+    __tablename__ = "mail_files"
+
+    id = Column(Integer, primary_key=True)
+    token = Column(String(64), unique=True, nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    path = Column(String(500), nullable=False)
+    size = Column(Integer, nullable=False, default=0)
+    uploader_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

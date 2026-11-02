@@ -1,6 +1,7 @@
 """HTML-шаблоны писем, отправка по SMTP и планировщик уведомлений."""
 import asyncio
 import html
+import logging
 import re
 import smtplib
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,8 @@ from app.models import (
     TaskStatus,
     User,
 )
+
+logger = logging.getLogger("vector.notifications")
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -250,24 +253,11 @@ def _next_attempt_delay(attempts: int) -> int:
 
 
 def _attempts_made(notification: Notification, now: datetime) -> int:
-    """Восстанавливает число попыток по отметкам отсрочки в строке.
-
-    Колонки ``attempts`` нет (в проекте нет фреймворка миграций), поэтому
-    количество попыток кодируется временем следующей отправки.
-    """
-    if not notification.scheduled_at:
-        return 0
-    scheduled = notification.scheduled_at
-    if scheduled.tzinfo is None:
-        scheduled = scheduled.replace(tzinfo=timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-    waited_minutes = (now - scheduled).total_seconds() / 60
-    best = 0
-    for index, delay in enumerate(RETRY_BACKOFF_MINUTES):
-        if waited_minutes >= delay:
-            best = index + 1
-    return best
+    """Сколько раз письмо уже пытались отправить."""
+    attempts = getattr(notification, "attempts", None)
+    if isinstance(attempts, int):
+        return max(0, attempts)
+    return 0
 
 
 def create_notification(
@@ -344,14 +334,17 @@ async def _job_send_pending_emails() -> None:
             user = (
                 db.query(User).filter(User.id == notification.user_id).first()
             )
-            if not user or not user.notify_email:
+            if not user or not user.notify_email or not user.email:
                 # Отправлять некуда — закрываем, чтобы очередь не копилась.
                 notification.is_sent = True
                 notification.sent_at = now
                 continue
 
             try:
-                send_email(
+                # SMTP синхронный и может висеть до таймаута; в общем цикле
+                # событий это останавливает все остальные запросы.
+                await asyncio.to_thread(
+                    send_email,
                     user.email,
                     notification.title,
                     _notification_html(notification.title, notification.body),
@@ -361,10 +354,14 @@ async def _job_send_pending_emails() -> None:
                 failed += 1
                 attempts = _attempts_made(notification, now)
                 delay = _next_attempt_delay(attempts)
+                notification.attempts = attempts + 1
                 notification.scheduled_at = now + timedelta(minutes=delay)
-                print(
-                    f"[SCHEDULER] email to user {notification.user_id} "
-                    f"failed ({attempts + 1} attempt, retry in {delay}m): {exc}"
+                logger.warning(
+                    "email to user %s failed (attempt %d, retry in %dm): %s",
+                    notification.user_id,
+                    attempts + 1,
+                    delay,
+                    exc,
                 )
                 continue
 
@@ -375,13 +372,15 @@ async def _job_send_pending_emails() -> None:
 
         if pending:
             db.commit()
-            print(
-                f"[SCHEDULER] emails sent={sent} failed={failed} "
-                f"abandoned={abandoned}"
+            logger.info(
+                "emails sent=%d failed=%d abandoned=%d",
+                sent,
+                failed,
+                abandoned,
             )
     except Exception as exc:  # noqa: BLE001
         db.rollback()
-        print(f"[SCHEDULER] send_emails error: {exc}")
+        logger.exception("send_emails error: %s", exc)
     finally:
         db.close()
 
@@ -430,26 +429,27 @@ async def _job_check_overdue() -> None:
             )
 
             user = users.get(task.student_id)
-            if user and user.notify_email:
+            if user and user.notify_email and user.email:
                 try:
-                    send_email(
+                    await asyncio.to_thread(
+                        send_email,
                         user.email,
                         f"Просрочена задача: {task.title} — Vector",
                         _overdue_task_html(task.title, deadline_str),
                     )
                     mailed += 1
                 except Exception as exc:  # noqa: BLE001
-                    print(
-                        f"[SCHEDULER] overdue mail to {user.id} failed: {exc}"
+                    logger.warning(
+                        "overdue mail to user %d failed: %s", user.id, exc
                     )
 
         db.commit()
-        print(
-            f"[SCHEDULER] marked overdue={len(overdue)} mailed={mailed}"
+        logger.info(
+            "marked overdue=%d mailed=%d", len(overdue), mailed
         )
     except Exception as exc:  # noqa: BLE001
         db.rollback()
-        print(f"[SCHEDULER] check_overdue error: {exc}")
+        logger.exception("check_overdue error: %s", exc)
     finally:
         db.close()
 

@@ -105,13 +105,33 @@ services:
     networks:
       - vector_net
 
+  bot:
+    build:
+      context: ./bot
+      dockerfile: dockerfile
+    container_name: vector_bot
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - ollama
+    env_file:
+      - .env
+    environment:
+      - MAX_BOT_URL=http://backend:8000
+      - OLLAMA_URL=http://ollama:11434
+    volumes:
+      - ./bot/data:/app/data
+    networks:
+      - vector_net
+
   db:
     image: postgres:latest
-    command: ["postgres", "-c", "log_statement=all", "-c", "log_destination=stderr"]
     container_name: vector_db
     env_file: ".env"
+    # Только loopback: снаружи БД недоступна, но локальные тесты и psql
+    # могут подключиться к localhost:5432.
     ports:
-      - 5432:5432
+      - 127.0.0.1:5432:5432
     environment:
       POSTGRES_DB: ${DB_NAME:-vectordb}
       POSTGRES_LOG_FILE: /var/log/postgres.log

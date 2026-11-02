@@ -121,6 +121,11 @@ YANDEX_LINK_CALLBACK = _str(
 # ─── Прочее ───────────────────────────────────────────────────────────────────
 DEBUG = _bool("DEBUG", False)
 
+# ─── MAX Bot ──────────────────────────────────────────────────────────────────
+# Токен нужен только для проверки подписи запросов от бота к /auth/max-link.
+# Это тот же MAX_BOT_TOKEN, который использует сервис bot/.
+MAX_BOT_TOKEN = _str("MAX_BOT_TOKEN", "")
+
 # Фоновые джобы: очередь писем и проверка просрочек. Выключаются в тестах и
 # при разовых командах управления. С несколькими воркерами uvicorn каждый
 # поднял бы свои джобы, поэтому держи включённым только на одном процессе —
@@ -137,5 +142,13 @@ if _missing and not DEBUG:
         "[config] WARNING: missing required env vars: "
         + ", ".join(_missing)
         + " (set them, or DEBUG=true to silence)",
+        file=sys.stderr,
+    )
+
+# SECRET_KEY должен быть достаточно длинным для безопасного HS256.
+if SECRET_KEY and len(SECRET_KEY) < 32 and not DEBUG:
+    print(
+        "[config] WARNING: SECRET_KEY shorter than 32 characters "
+        "(HS256 requires a strong secret)",
         file=sys.stderr,
     )

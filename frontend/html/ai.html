@@ -1,0 +1,30 @@
+<!-- fragment:screen -->
+
+<header class="top">
+  <a class="icon-btn" href="#/home" aria-label="Назад">{{0}}</a>
+  <h1 style="font-size: 20px; display: flex; align-items: center; gap: 8px">{{1}}Вектор ИИ</h1>
+  <button class="icon-btn" type="button" id="reset" aria-label="Начать заново">{{2}}</button>
+</header>
+<div class="ai-layout" style="margin-top: 8px">
+  <aside class="ai-side card pad" aria-label="Темы">
+    <h2 class="h2">О чём спросить</h2>
+    {{3}}
+    <p class="hint" style="margin: 4px 0 0">Видит только оценки и расписание{{4}}. Домашку не решает и темы не объясняет.</p>
+  </aside>
+  <section class="ai-main">
+    <div class="chat" style="padding-bottom: 96px">
+      <div class="bubble ai">{{5}}</div>
+      {{6}}
+      {{7}}
+    </div>
+    <form class="composer" id="ask">
+      <div class="composer-in">
+        <label class="sr-only" for="q">Вопрос Вектор ИИ</label>
+        <input id="q" placeholder="Свой вопрос, например: где я проседаю?" autocomplete="off">
+        <button class="icon-btn" type="submit" aria-label="Отправить">{{8}}</button>
+      </div>
+      <p class="hint only-mobile" style="text-align: center; margin: 8px 0 0">Видит только оценки и расписание{{9}}</p>
+    </form>
+  </section>
+</div>
+<!-- /fragment:screen -->

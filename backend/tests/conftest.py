@@ -12,7 +12,7 @@
     docker compose up -d db
     docker exec vector_db psql -U vector -d vectordb \
         -c "CREATE DATABASE vectordb_test;"
-    $env:TEST_DATABASE_URL="postgresql://vector:pw@localhost:5432/vectordb_test"
+    $env:TEST_DATABASE_URL="postgresql://vector:pw@127.0.0.1:5432/vectordb_test"
 
 Схема один раз за сессию пересоздаётся, а каждый тест выполняется внутри
 транзакции, которая затем откатывается.
@@ -27,7 +27,15 @@ if not TEST_DATABASE_URL:
         "  docker compose up -d db\n"
         '  docker exec vector_db psql -U vector -d vectordb '
         '-c "CREATE DATABASE vectordb_test;"\n'
-        '  $env:TEST_DATABASE_URL="postgresql://user:pw@localhost:5432/vectordb_test"'
+        "  cd backend\n"
+        "  python run_tests.py -v\n"
+        "\n"
+        "Or set it manually (only for the current shell):\n"
+        '  $env:TEST_DATABASE_URL="postgresql://vector:<DB_PASS>'
+        '@127.0.0.1:5432/vectordb_test"\n'
+        "  pytest -v\n"
+        "\n"
+        "Use 127.0.0.1, not localhost: Docker listens on IPv4."
     )
 
 if not TEST_DATABASE_URL.startswith("postgresql"):
@@ -35,6 +43,13 @@ if not TEST_DATABASE_URL.startswith("postgresql"):
         "TEST_DATABASE_URL must be a postgresql:// URL; this project does not "
         f"support other engines (got: {TEST_DATABASE_URL.split(':', 1)[0]}://)"
     )
+
+# На Windows подключение к «localhost» иногда уходит в IPv6 (::1) и висит:
+# Docker Desktop слушает IPv4. Таймаут превращает зависание в понятную
+# ошибку, а не в молчаливый простой сьюта.
+if "connect_timeout" not in TEST_DATABASE_URL:
+    separator = "&" if "?" in TEST_DATABASE_URL else "?"
+    TEST_DATABASE_URL += separator + "connect_timeout=5"
 
 # Приложение читает конфигурацию в момент импорта, поэтому тестовый URL
 # должен быть выставлен до того, как app.config импортируется где-либо.
@@ -48,6 +63,8 @@ os.environ.setdefault("SMTP_HOST", "")
 os.environ.setdefault("OLLAMA_URL", "http://localhost:11434")
 os.environ.setdefault("OLLAMA_MODEL", "qwen2.5:7b")
 os.environ.setdefault("APP_URL", "http://localhost:8000")
+# Подпись запросов бота (X-Bot-Signature) для /api/users/auth/max-*.
+os.environ.setdefault("MAX_BOT_TOKEN", "test-bot-token")
 os.environ.setdefault("DEBUG", "true")
 # Фоновые задачи срабатывали бы по таймеру во время прогона сьюта.
 os.environ.setdefault("ENABLE_SCHEDULER", "false")
@@ -207,6 +224,9 @@ def make_user(db):
     def _make(email: str, role: UserRole, **kwargs) -> User:
         user = User(
             email=email,
+            # Колонка users.login объявлена NOT NULL; фабрика подставляет
+            # email, чтобы старые тесты не падали на ограничении.
+            login=kwargs.pop("login", email),
             password_hash=kwargs.pop("password_hash", "x"),
             first_name=kwargs.pop("first_name", "Ivan"),
             last_name=kwargs.pop("last_name", "Ivanov"),

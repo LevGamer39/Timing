@@ -1,9 +1,10 @@
 """Движок БД, фабрика сессий и первичное наполнение."""
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app import config
 from app.models import Base, User, UserRole
+
 
 def _engine_kwargs() -> dict:
     """Параметры движка: PostgreSQL получает пул и таймауты.
@@ -17,7 +18,6 @@ def _engine_kwargs() -> dict:
 
 
 engine = create_engine(config.build_database_url(), **_engine_kwargs())
-
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -70,6 +70,9 @@ def _ensure_admin_user() -> None:
         db.add(
             User(
                 email=config.ADMIN_EMAIL,
+                # Колонка login объявлена NOT NULL, а механизм логинов ещё
+                # не готов: до него админ входит по email.
+                login=config.ADMIN_EMAIL,
                 password_hash=_bootstrap_password_hash(),
                 first_name=config.ADMIN_FIRST_NAME,
                 last_name=config.ADMIN_LAST_NAME,
@@ -78,7 +81,6 @@ def _ensure_admin_user() -> None:
                 is_verified=True,
                 notify_email=True,
                 notify_browser=True,
-                notify_telegram=False,
                 notify_digest_time="08:00",
             )
         )
@@ -102,11 +104,84 @@ def _bootstrap_password_hash() -> str:
     return hash_password(config.ADMIN_PASSWORD)
 
 
+def _apply_schema_updates() -> None:
+    """Идемпотентно догоняет схему до текущих моделей.
+
+    ``create_all`` создаёт только отсутствующие таблицы и не трогает уже
+    существующие. Полноценных миграций в проекте нет, поэтому несколько
+    безопасных DDL-изменений выполняются здесь при старте. Все операции
+    идемпотентны, повторный запуск ничего не ломает.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    statements = (
+        # Счётчик попыток доставки письма: без колонки backoff не рос.
+        "ALTER TABLE notifications "
+        "ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0",
+        # Аватар приходит data URL на несколько килобайт, varchar(500) падал.
+        "ALTER TABLE users ALTER COLUMN avatar_url TYPE TEXT",
+        # Код привязки родителя стал восьмизначным.
+        "ALTER TABLE parent_link_tokens "
+        "ALTER COLUMN code TYPE VARCHAR(8)",
+        # Логин появился ради регистрации из MAX-бота. На старой базе
+        # колонки нет, а модель объявляет её NOT NULL: без бэкфилла любой
+        # запрос к users падал бы с "column users.login does not exist".
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS login VARCHAR(255)",
+        "UPDATE users SET login = COALESCE(email, 'user-' || id) "
+        "WHERE login IS NULL",
+        "ALTER TABLE users ALTER COLUMN login SET NOT NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_login ON users (login)",
+        # Аккаунт из бота создаётся без email и без пароля.
+        "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
+        "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL",
+        # Оценка за урок журнала: ссылка на journal_lessons. create_all
+        # таблицу создаёт, но колонку в уже существующей grades — нет.
+        "ALTER TABLE grades ADD COLUMN IF NOT EXISTS "
+        "journal_lesson_id INTEGER REFERENCES journal_lessons(id) "
+        "ON DELETE CASCADE",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_grades_student_lesson "
+        "ON grades (student_id, journal_lesson_id) "
+        "WHERE journal_lesson_id IS NOT NULL",
+    )
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def _ensure_work_types() -> None:
+    """Наполняет справочник видов работы значениями по умолчанию."""
+    from app.models import JournalWorkType
+
+    defaults = (
+        ("lesson", "Работа на уроке", 1),
+        ("home", "Домашняя работа", 1),
+        ("self", "Самостоятельная", 2),
+        ("test", "Тест", 2),
+        ("kr", "Контрольная", 3),
+    )
+    db = SessionLocal()
+    try:
+        existing = {
+            row[0] for row in db.query(JournalWorkType.code).all()
+        }
+        for code, name, weight in defaults:
+            if code in existing:
+                continue
+            db.add(
+                JournalWorkType(code=code, name=name, weight=weight)
+            )
+        db.commit()
+    finally:
+        db.close()
+
+
 def create_tables() -> None:
     """Создаёт отсутствующие таблицы и гарантирует наличие админа.
 
     ``create_all`` не меняет существующие таблицы и колонки: правки схемы
-    по-прежнему требуют ручного DDL — миграций в проекте нет.
+    догоняются в :func:`_apply_schema_updates` или ручным DDL.
     """
     Base.metadata.create_all(bind=engine)
+    _apply_schema_updates()
     _ensure_admin_user()
+    _ensure_work_types()
