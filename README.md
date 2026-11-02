@@ -248,7 +248,10 @@ python run_tests.py
 ```
 
 `TEST_DATABASE_URL` можно задать и вручную (`$env:...` + `pytest`) — он
-действует только в текущем окне PowerShell.
+действует только в текущем окне PowerShell. Если переменная осталась от
+прошлой попытки с другим паролем, уберите её:
+`Remove-Item Env:TEST_DATABASE_URL` — `run_tests.py` берёт `.env` только
+когда переменной нет.
 
 239 тестов: `test_ai_text`, `test_tasks`, `test_assignments`, `test_grades`,
 `test_schedule`, `test_classes_admin`, `test_users`, `test_db_constraints`.

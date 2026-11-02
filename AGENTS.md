@@ -344,6 +344,9 @@ $env:TEST_DATABASE_URL="postgresql://vector:<pw>@127.0.0.1:5432/vectordb_test"
 pytest
 ```
 
+`run_tests.py` берёт `.env` только когда переменной нет. Если она осталась от
+прошлой попытки с другим паролем — `Remove-Item Env:TEST_DATABASE_URL`.
+
 Без `TEST_DATABASE_URL` conftest **падает сразу** — тихо подменять БД нельзя.
 
 На Windows берите `127.0.0.1`, а не `localhost`: Docker Desktop слушает IPv4,
