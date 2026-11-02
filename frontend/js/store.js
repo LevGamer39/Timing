@@ -47,7 +47,9 @@ function refresh(conflict = false) {
   stored = latest;
   state = load(latest);
   generation++;
-  state.session = session && accountByLogin(session.login) ? session : null;
+  // Серверная сессия живёт в памяти и не проверяется по демо-данным: иначе
+  // запись vector-demo-v1 из другой вкладки выкидывала вошедшего на форму входа.
+  state.session = session && (serverSession || accountByLogin(session.login)) ? session : null;
   if (state.session?.role === 'parent') {
     const ids = account().children;
     if (!ids.includes(state.session.childId)) state.session = { ...state.session, childId: ids[0] };
@@ -248,9 +250,9 @@ export async function verifyLoginCode(login, value, now = Date.now()) {
   try {
     const result = await api.loginMaxCode(String(value).trim());
     const { profile } = await server.load();
-    adopt(profile.login ? profile : { ...profile, login: result.login });
+    adopt(profile.login ? profile : { ...profile, login: result.login || login });
     applySchoolScale();
-    return { login: result.login };
+    return { login: result.login || login };
   } catch (error) {
     return { error: error.status === 0 ? 'Сервер недоступен. Попробуйте позже.' : error.message };
   }
@@ -266,8 +268,10 @@ let serverSession = null;
 let serverAccount = null;
 
 const adopt = (profile) => {
+  // Старые сборки бэкенда не отдают login: сессия всё равно серверная.
+  const login = profile.login || '';
   serverSession = {
-    login: profile.login,
+    login: login,
     role: profile.role,
     childId: profile.role === 'parent'
       ? String(server.session.children[0]?.id ?? '')
@@ -277,7 +281,7 @@ const adopt = (profile) => {
   server.setNotifier(() => dataListeners.forEach((render) => render(false, [])));
   NOW.setTime(Date.now());
   resetViewContext();
-  state.session = { login: profile.login, role: profile.role, childId: serverSession.childId };
+  state.session = { login: login, role: profile.role, childId: serverSession.childId };
 };
 
 export const isServer = () => Boolean(serverSession);
@@ -308,9 +312,9 @@ export async function passwordLogin(value, password) {
   try {
     const result = await api.loginPassword(value, password);
     const { profile } = await server.load();
-    adopt(profile.login ? profile : { ...profile, login: result.login });
+    adopt(profile.login ? profile : { ...profile, login: result.login || value });
     applySchoolScale();
-    return { login: result.login };
+    return { login: result.login || value };
   } catch (error) {
     if (error.status !== 0) return { error: error.message };
   }
@@ -324,9 +328,12 @@ export async function passwordLogin(value, password) {
 export function login(name) {
   refresh();
   const key = credentialKey(name);
-  if (serverSession && serverSession.login === key) {
+  // Логины регистронезависимы, а поле login в ответе может отсутствовать
+  // (старые сборки бэкенда): сервер уже авторизовал — пускаем.
+  const serverLogin = String(serverSession?.login || '').trim().toLowerCase();
+  if (serverSession && (!serverLogin || serverLogin === key)) {
     resetViewContext();
-    return set({ session: { login: key, role: serverSession.role, childId: serverSession.childId } });
+    return set({ session: { login: serverSession.login || key, role: serverSession.role, childId: serverSession.childId } });
   }
   const acc = accountByLogin(key);
   if (!acc) return false;
