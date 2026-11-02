@@ -150,8 +150,12 @@ MAX user_id. Если не задана, соль выводится из `MAX_B
 ```bash
 cd bot
 pip install -r requirements.txt pytest
-python -m pytest tests
+pytest
 ```
+
+`bot/pytest.ini` добавляет корень бота в `pythonpath`, поэтому работают и
+`pytest`, и `python -m pytest tests` — импорты в боте плоские (`core.*`,
+`routers.*`).
 
 Тесты не ходят в сеть: бэкенд подменён заглушкой, события MAX — простыми
 объектами. Проверяются диалог регистрации и разбор имени.

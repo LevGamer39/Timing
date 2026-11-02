@@ -243,14 +243,23 @@ docker exec vector_db psql -U vector -d vectordb `
 cd backend
 pip install -r requirements-dev.txt
 
-$env:TEST_DATABASE_URL="postgresql://vector:<pw>@localhost:5432/vectordb_test"
+$env:TEST_DATABASE_URL="postgresql://vector:<pw>@127.0.0.1:5432/vectordb_test"
 pytest
 ```
 
-193 теста: `test_ai_text`, `test_tasks`, `test_assignments`, `test_grades`,
+239 тестов: `test_ai_text`, `test_tasks`, `test_assignments`, `test_grades`,
 `test_schedule`, `test_classes_admin`, `test_users`, `test_db_constraints`.
 Без переменной `TEST_DATABASE_URL` conftest падает сразу — молча подменить БД
-нельзя.
+нельзя. На Windows используйте `127.0.0.1`, а не `localhost`: Docker Desktop
+слушает IPv4, и подключение по `localhost` может зависнуть; conftest сам
+добавляет `connect_timeout=5`, если его нет в URL.
+
+Тесты бота — отдельно, без сети (бэкенд и MAX подменены):
+
+```powershell
+cd bot
+pytest
+```
 
 ---
 

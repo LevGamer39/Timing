@@ -333,11 +333,15 @@ docker exec vector_db psql -U vector -d vectordb `
 pip install -r requirements-dev.txt
 
 # 4. Прогон
-$env:TEST_DATABASE_URL="postgresql://vector:<pw>@localhost:5432/vectordb_test"
+$env:TEST_DATABASE_URL="postgresql://vector:<pw>@127.0.0.1:5432/vectordb_test"
 pytest
 ```
 
 Без `TEST_DATABASE_URL` conftest **падает сразу** — тихо подменять БД нельзя.
+
+На Windows берите `127.0.0.1`, а не `localhost`: Docker Desktop слушает IPv4,
+а `localhost` сначала пробует IPv6 и подключение зависает без ошибки. Если
+`connect_timeout` не указан, conftest добавляет его сам (5 секунд).
 
 ### Что есть
 
