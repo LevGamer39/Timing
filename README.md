@@ -243,9 +243,12 @@ docker exec vector_db psql -U vector -d vectordb `
 cd backend
 pip install -r requirements-dev.txt
 
-$env:TEST_DATABASE_URL="postgresql://vector:<pw>@127.0.0.1:5432/vectordb_test"
-pytest
+# берёт DB_* из ../.env и подставляет 127.0.0.1
+python run_tests.py
 ```
+
+`TEST_DATABASE_URL` можно задать и вручную (`$env:...` + `pytest`) — он
+действует только в текущем окне PowerShell.
 
 239 тестов: `test_ai_text`, `test_tasks`, `test_assignments`, `test_grades`,
 `test_schedule`, `test_classes_admin`, `test_users`, `test_db_constraints`.

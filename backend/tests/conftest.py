@@ -28,14 +28,14 @@ if not TEST_DATABASE_URL:
         '  docker exec vector_db psql -U vector -d vectordb '
         '-c "CREATE DATABASE vectordb_test;"\n'
         "  cd backend\n"
-        "  .\\run-tests.ps1 -v\n"
+        "  python run_tests.py -v\n"
         "\n"
-        "Либо вручную (переменная действует только в этом окне PowerShell):\n"
+        "Or set it manually (only for the current shell):\n"
         '  $env:TEST_DATABASE_URL="postgresql://vector:<DB_PASS>'
         '@127.0.0.1:5432/vectordb_test"\n'
         "  pytest -v\n"
         "\n"
-        "Берите 127.0.0.1, а не localhost: Docker слушает IPv4."
+        "Use 127.0.0.1, not localhost: Docker listens on IPv4."
     )
 
 if not TEST_DATABASE_URL.startswith("postgresql"):

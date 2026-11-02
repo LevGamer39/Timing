@@ -332,7 +332,14 @@ docker exec vector_db psql -U vector -d vectordb `
 # 3. Зависимости
 pip install -r requirements-dev.txt
 
-# 4. Прогон
+# 4. Прогон: скрипт сам берёт DB_* из ../.env и подставляет 127.0.0.1
+cd backend
+python run_tests.py
+```
+
+Вручную (переменная живёт только в этом окне):
+
+```powershell
 $env:TEST_DATABASE_URL="postgresql://vector:<pw>@127.0.0.1:5432/vectordb_test"
 pytest
 ```
