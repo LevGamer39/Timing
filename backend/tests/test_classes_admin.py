@@ -287,6 +287,12 @@ def test_admin_dashboard_aggregates(db, admin, teacher, enrolled):
     assert dashboard.students_count == 2
 
 
+def test_list_teachers_returns_homeroom_candidates(db, admin, teacher, enrolled):
+    teachers = admin_router.list_teachers(current_user=admin, db=db)
+    assert [t.id for t in teachers] == [teacher.id]
+    assert teachers[0].class_count == 1
+
+
 def test_admin_updates_class_teacher(db, admin, klass, other_teacher):
     updated = admin_router.update_class(
         klass.id,

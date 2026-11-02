@@ -41,6 +41,7 @@
 <h2 class="h2" style="font-size: 20px">Новый класс</h2>
 <form class="stack" id="cf" novalidate style="margin-top: 12px">
   <div class="field"><label class="label" for="cn">Название</label><input class="input" id="cn" maxlength="4" placeholder="Например, 9А" autocomplete="off"><span class="hint">Цифра и буква. Учеников добавите после.</span></div>
+  <div class="field"><label class="label" for="cft">Классный руководитель</label><div class="cf-picker" id="cftp"><input class="input" id="cft" role="combobox" aria-expanded="false" aria-controls="cfts" aria-autocomplete="list" autocomplete="off" placeholder="Начните вводить фамилию"><input type="hidden" id="cftv"><div class="card sug" id="cfts" role="listbox" hidden></div></div><span class="hint">Сотрудник, который станет классным руководителем.</span></div>
   <p class="error" id="ce" role="alert" hidden></p>
   <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">Добавить класс</button></div>
 </form>

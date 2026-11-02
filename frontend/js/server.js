@@ -241,30 +241,28 @@ async function loadStaff(profile) {
   // Классы и учителя нужны на экранах журнала, «моего класса» и админки.
   const classes = profile.role === 'admin' ? await api.adminClasses().catch(() => []) : await api.myClasses().catch(() => []);
   const teachers = profile.role === 'admin' ? await api.adminTeachers().catch(() => []) : [];
-  if (Array.isArray(classes) && classes.length) {
-    Object.keys(CLASSES).forEach((key) => delete CLASSES[key]);
-    classes.forEach((c) => {
-      const key = String(c.id);
-      CLASSES[key] = {
-        key,
-        name: c.name,
-        teacher: profile.role === 'teacher' ? String(profile.id) : String(c.teacher_id || ''),
-        invite: c.invite_code || '',
-        students: []
-      };
-      session.classKeys[c.name] = key;
-    });
-  }
-  if (Array.isArray(teachers) && teachers.length) {
-    TEACHERS.length = 0;
-    teachers.forEach((t) => TEACHERS.push({
-      id: String(t.id),
-      name: [t.last_name, t.first_name].filter(Boolean).join(' ') || t.email || 'Учитель',
-      subject: t.teacher_subject || '',
-      classCount: Number(t.class_count || 0),
-      load: []
-    }));
-  }
+  // В серверной сессии демо-данные не подмешиваются: пустой ответ API значит
+  // «классов/учителей нет», а не «покажи демо».
+  Object.keys(CLASSES).forEach((key) => delete CLASSES[key]);
+  classes.forEach((c) => {
+    const key = String(c.id);
+    CLASSES[key] = {
+      key,
+      name: c.name,
+      teacher: profile.role === 'teacher' ? String(profile.id) : String(c.teacher_id || ''),
+      invite: c.invite_code || '',
+      students: []
+    };
+    session.classKeys[c.name] = key;
+  });
+  TEACHERS.length = 0;
+  teachers.forEach((t) => TEACHERS.push({
+    id: String(t.id),
+    name: [t.last_name, t.first_name].filter(Boolean).join(' ') || t.email || 'Учитель',
+    subject: t.teacher_subject || '',
+    classCount: Number(t.class_count || 0),
+    load: []
+  }));
   if (profile.role === 'teacher') {
     TEACHERS.length = 0;
     TEACHERS.push({
