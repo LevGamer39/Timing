@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vector.myftp.org/static/schemas/student-migration.schema.json",
+  "title": "VectorVK: перенос учеников",
+  "description": "Строгая схема обмена учениками между установками VectorVK. Лишние поля запрещены: импорт отвергает документ, который ей не соответствует. Оценки привязаны к ученику, а не к классу, поэтому история переезжает вместе с профилем.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "students"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Ссылка на эту схему; при импорте не проверяется."
+    },
+    "version": {
+      "const": 1,
+      "description": "Версия формата. Импорт принимает только 1."
+    },
+    "exported_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Когда сделан экспорт (UTC)."
+    },
+    "students": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/student" }
+    }
+  },
+  "$defs": {
+    "student": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["login", "first_name", "last_name"],
+      "properties": {
+        "login": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^\\S+$",
+          "description": "Ключ поиска при импорте; сравнение регистронезависимое."
+        },
+        "first_name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "last_name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "email": { "type": ["string", "null"], "maxLength": 255 },
+        "class_name": {
+          "type": ["string", "null"],
+          "maxLength": 100,
+          "description": "Название класса, например 10Б. Класс должен уже существовать на принимающем сервере."
+        },
+        "grades": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/grade" }
+        },
+        "finals": {
+          "type": "array",
+          "description": "Итоговые оценки журнала.",
+          "items": { "$ref": "#/$defs/final" }
+        }
+      }
+    },
+    "grade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject", "value"],
+      "properties": {
+        "subject": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "value": { "type": "number", "minimum": 1, "maximum": 5 },
+        "comment": { "type": ["string", "null"] },
+        "graded_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Момент выставки (UTC). Без даты повторный импорт сверяет оценку по предмету, баллу и комментарию."
+        }
+      }
+    },
+    "final": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject", "period", "value"],
+      "properties": {
+        "subject": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "period": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "value": { "type": "number", "minimum": 1, "maximum": 5 }
+      }
+    }
+  }
+}

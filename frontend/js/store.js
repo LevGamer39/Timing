@@ -776,6 +776,9 @@ export const apiDeleteInvite = (id) => server.deleteInviteCode(id);
 export const apiActivateUser = (id, active = true) => server.activateUser(id, active);
 export const apiSetTeacherSubject = (id, subject) => server.setTeacherSubject(id, subject);
 export const apiDeactivateTeacher = (id) => server.deactivateTeacher(id);
+// Перенос учеников: JSON-файл по строгой схеме (экспорт/импорт в панели).
+export const apiExportStudents = () => server.exportStudents();
+export const apiImportStudents = (doc) => server.importStudents(doc);
 
 export function unassignedStudents(clsKey) {  if (!serverSession) return [];
   return (server.session.students || [])

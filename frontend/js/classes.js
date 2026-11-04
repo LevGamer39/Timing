@@ -83,7 +83,7 @@ function classesView({ params, go, rerender }) {
     : '';
 
   return {
-    html: fragment("classes", "add", [header(), admin ? 'Классы и ученики' : 'Ученики и приглашения', icon('plus', 18), esc(c.name), allowed.map((x) => ("<a href=\"#/classes/" + (x.key) + "\"" + (x.key === key ? ' aria-current="true"' : '') + ">" + (esc(x.name)) + "</a>")).join(''), controls, esc(c.name), c.students.length, plural(c.students.length, 'ученик', 'ученика', 'учеников'), c.students.map(personHtml).join('') || '<div class="empty-day">Учеников пока нет</div>', inviteCard]),
+    html: fragment("classes", "add", [header(), admin ? 'Классы и ученики' : 'Ученики и приглашения', icon('plus', 18), esc(c.name), allowed.map((x) => ("<a href=\"#/classes/" + (x.key) + "\"" + (x.key === key ? ' aria-current="true"' : '') + ">" + (esc(x.name)) + "</a>")).join(''), controls, esc(c.name), c.students.length, plural(c.students.length, 'ученик', 'ученика', 'учеников'), c.students.map(personHtml).join('') || '<div class="empty-day">Учеников пока нет</div>', inviteCard, admin && server ? fragment("classes", "mig-actions") : '']),
     mount(root) {
       const save = () => { all[key] = c; const ok = store.saveClasses(all); if (!ok) toast(store.SAVE_ERROR); return ok; };
       if (!server) bindInvites(root, rerender);
@@ -96,6 +96,38 @@ function classesView({ params, go, rerender }) {
         });
       });
       bindAddClass(root);
+
+      const migFile = root.querySelector('#mig-file');
+      root.querySelector('#mig-export')?.addEventListener('click', () => {
+        store.apiExportStudents().then((doc) => {
+          if (!doc || !Array.isArray(doc.students)) return toast('Сервер не вернул список учеников');
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }));
+          link.download = 'ученики.json';
+          link.click();
+          URL.revokeObjectURL(link.href);
+          toast('Экспортировано учеников: ' + doc.students.length);
+        }).catch(() => toast('Не удалось выгрузить учеников'));
+      });
+      root.querySelector('#mig-import')?.addEventListener('click', () => migFile?.click());
+      migFile?.addEventListener('change', () => {
+        const file = migFile.files && migFile.files[0];
+        if (!file) return;
+        migFile.value = '';
+        const reader = new FileReader();
+        reader.onload = () => {
+          let doc;
+          try { doc = JSON.parse(String(reader.result)); } catch { return toast('Это не JSON-файл'); }
+          store.apiImportStudents(doc).then((result) => {
+            if (typeof result === 'string') return toast(result);
+            toast('Импорт: добавлено ' + result.created + ', обновлено ' + result.updated + ', оценок ' + result.grades_added);
+            if (result.unknown_classes?.length) toast('Классы не найдены: ' + result.unknown_classes.join(', ') + '. Ученики перенесены без класса.');
+            if (result.warnings?.length) toast(result.warnings[0] + (result.warnings.length > 1 ? ' (+' + (result.warnings.length - 1) + ')' : ''));
+            rerender();
+          });
+        };
+        reader.readAsText(file);
+      });
 
       root.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
         const st = c.students[b.dataset.del];

@@ -9,10 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_role
-from app.enrollment import (
-    add_missing_assignment_tasks,
-    refresh_student_grade,
-)
+from app.enrollment import enroll_student, refresh_student_grade
 from app.models import Class, ClassMembership, InviteCode, User, UserRole
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -252,29 +249,6 @@ def _collect_students(
     return response
 
 
-def _enroll(db: Session, class_id: int, student_id: int) -> None:
-    """Привязывает ученика к классу, создавая membership только при отсутствии.
-
-    Раньше существующая membership переназначалась, и ученик молча пропадал
-    из своего прежнего класса.
-    """
-    existing = (
-        db.query(ClassMembership)
-        .filter(ClassMembership.student_id == student_id)
-        .first()
-    )
-    if existing:
-        if existing.class_id == class_id:
-            return
-        existing.class_id = class_id
-    else:
-        db.add(ClassMembership(student_id=student_id, class_id=class_id))
-
-    db.flush()
-    add_missing_assignment_tasks(student_id, class_id, db)
-    refresh_student_grade(student_id, db)
-
-
 # ---------------------------------------------------------------------------
 # Инвайт-коды
 # ---------------------------------------------------------------------------
@@ -453,7 +427,7 @@ def create_class(
         )
         if not student:
             continue
-        _enroll(db, class_.id, student_id)
+        enroll_student(db, class_.id, student_id)
 
     db.commit()
     db.refresh(class_)
@@ -515,7 +489,7 @@ def add_student_to_class(
     if not student:
         raise HTTPException(404, "Student not found")
 
-    _enroll(db, class_id, body.student_id)
+    enroll_student(db, class_id, body.student_id)
     db.commit()
     return _serialize_classes([class_], db)[0]
 

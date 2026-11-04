@@ -739,6 +739,8 @@ export const deleteInviteCode = (id) => mutation(api.deleteInviteCode(Number(id)
 export const activateUser = (id, active = true) => mutation(api.updateUser(Number(id), { is_active: active }));
 export const setTeacherSubject = (id, subject) => mutation(api.updateUser(Number(id), { teacher_subject: subject }));
 export const deactivateTeacher = (id) => mutation(api.updateUser(Number(id), { is_active: false }));
+export const exportStudents = () => api.exportStudents();
+export const importStudents = (doc) => mutation(api.importStudents(doc));
 
 // --- Сброс ----------------------------------------------------------------
 

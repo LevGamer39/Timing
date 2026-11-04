@@ -19,6 +19,7 @@ VectorVK/
 │   │   └── routers/
 │   │       ├── users.py            # Регистрация, auth, профиль, сброс пароля
 │   │       ├── admin.py            # Пользователи, классы, инвайт-коды
+│   │       ├── migration.py        # Перенос учеников: экспорт/импорт JSON
 │   │       ├── classes.py          # Классы учителя, дашборд, вступление
 │   │       ├── assignments.py      # Задания учителя, прогресс
 │   │       ├── tasks.py            # Задачи ученика, подзадачи
@@ -45,6 +46,7 @@ VectorVK/
 │   │   ├── shared/              # логика нескольких экранов
 │   │   └── vendor/qr/           # генератор QR (MIT)
 │   ├── html/                    # <экран>.html + manifest.json
+│   ├── schemas/                 # JSON Schema переноса учеников (/static/schemas/)
 │   ├── robots.txt
 │   ├── *.cmd                    # запуск/остановка http.server на Windows
 │   └── README.md                # единственная документация фронтенда
@@ -364,6 +366,7 @@ pytest
 | `test_grades.py` | Авторизация, массовая выставка, сводки |
 | `test_schedule.py` | Валидация `HH:MM`, границы `weekday` |
 | `test_classes_admin.py` | Классы, дашборд учителя, админ-панель |
+| `test_admin_migration.py` | Экспорт/импорт учеников JSON: идемпотентность, перенос с сохранением оценок |
 | `test_users.py` | HTTP-флоу регистрация→подтверждение→вход, auth-зависимости |
 | `test_db_constraints.py` | Ограничения БД реально отвергают плохие данные |
 

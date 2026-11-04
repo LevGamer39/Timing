@@ -41,6 +41,30 @@ def refresh_student_grade(student_id: int, db: Session) -> None:
     student.grade = class_.name if class_ else None
 
 
+def enroll_student(db: Session, class_id: int, student_id: int) -> None:
+    """Зачисляет ученика в класс, перенося его из прежнего.
+
+    Раньше при существующей membership она переназначалась молча, и ученик
+    пропадал из старого класса. Оценки и задачи остаются при ученике:
+    ``Grade`` привязана к ``student_id``, а не к классу.
+    """
+    existing = (
+        db.query(ClassMembership)
+        .filter(ClassMembership.student_id == student_id)
+        .first()
+    )
+    if existing:
+        if existing.class_id == class_id:
+            return
+        existing.class_id = class_id
+    else:
+        db.add(ClassMembership(student_id=student_id, class_id=class_id))
+
+    db.flush()
+    add_missing_assignment_tasks(student_id, class_id, db)
+    refresh_student_grade(student_id, db)
+
+
 def add_missing_assignment_tasks(
     student_id: int, class_id: int, db: Session
 ) -> int:

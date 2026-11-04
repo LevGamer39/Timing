@@ -22,6 +22,7 @@ from app.routers import (
     ai,
     notifications,
     yandex_auth,
+    migration,
 )
 from app.routers.notifications import start_scheduler, stop_scheduler
 
@@ -83,6 +84,7 @@ app.include_router(school.router)
 app.include_router(ai.router)
 app.include_router(notifications.router)
 app.include_router(yandex_auth.router)
+app.include_router(migration.router)
 
 def serve(relative_path: str) -> FileResponse:
     """Отдаёт страницу из frontend/.

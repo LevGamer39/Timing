@@ -203,6 +203,10 @@ export const createInviteCode = (body) => request('/api/admin/invite-codes', { m
 export const deleteInviteCode = (id) => request('/api/admin/invite-codes/' + id, { method: 'DELETE' });
 export const updateUser = (id, body) => request('/api/admin/users/' + id, { method: 'PATCH', body });
 
+// Перенос учеников между установками: JSON по схеме /static/schemas/student-migration.schema.json
+export const exportStudents = () => request('/api/admin/migration/students');
+export const importStudents = (doc) => request('/api/admin/migration/students', { method: 'POST', body: doc });
+
 // --- Настройки школы ------------------------------------------------------
 
 export const schoolSettings = () => request('/api/school/settings');

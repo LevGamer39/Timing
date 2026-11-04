@@ -3,6 +3,7 @@
   <h1 class="title-l">{{1}}</h1>
   <details class="card more"><summary>Как получить доступ</summary><p>Ученик регистрируется в боте «Вектор» по коду класса — и сразу попадает в список. Учителя добавляет администратор: он выдаёт код, а учитель вводит его в боте. Родитель подключается к ребёнку по коду, который ученик выдаёт в боте.</p></details>
   <div class="class-controls"><nav class="ab-tabs" aria-label="Классы">{{4}}</nav>{{5}}</div>
+  {{11}}
   {{10}}
   <div class="row roster-heading"><h2 class="h2 grow">{{6}} · {{7}} {{8}}</h2><button class="btn sm" id="add" type="button" aria-label="Добавить ученика в {{3}}">{{2}}Добавить ученика</button><button class="btn ghost sm" id="print" type="button">Печать приглашений</button></div>
   <div class="card roster-list">{{9}}</div>
@@ -31,6 +32,10 @@
 <!-- fragment:add-class -->
 <button class="btn ghost sm" id="add-class" type="button" style="align-self: flex-start">{{0}}Добавить класс</button><div class="class-homeroom"><label class="label" for="ct">Классный руководитель {{1}}</label><select class="input" id="ct"><option value="">— не назначен —</option>{{2}}</select></div>
 <!-- /fragment:add-class -->
+
+<!-- fragment:mig-actions -->
+<div class="row" style="gap: 8px; flex-wrap: wrap"><button class="btn ghost sm" id="mig-export" type="button">Экспорт учеников (JSON)</button><button class="btn ghost sm" id="mig-import" type="button">Импорт учеников (JSON)</button><input hidden id="mig-file" type="file" accept="application/json,.json"></div>
+<!-- /fragment:mig-actions -->
 
 <!-- fragment:person -->
 <article class="roster-entry"><div class="roster-person"><div class="roster-name"><b>{{0}}</b><span class="roster-role">Ученик {{6}}</span></div>{{1}}<button class="icon-btn" data-del="{{3}}" type="button" aria-label="Удалить ученика {{4}}">{{5}}</button></div>{{2}}</article>
