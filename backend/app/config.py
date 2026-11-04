@@ -35,6 +35,18 @@ def _int(name: str, default: int) -> int:
         ) from None
 
 
+def _float(name: str, default: float) -> float:
+    raw = _str(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        raise RuntimeError(
+            f"{name} must be a number, got {raw!r}"
+        ) from None
+
+
 def _bool(name: str, default: bool = False) -> bool:
     raw = _str(name)
     if raw is None:
@@ -107,6 +119,35 @@ SMTP_TIMEOUT = _int("SMTP_TIMEOUT", 15)
 # ─── ИИ ───────────────────────────────────────────────────────────────────────
 OLLAMA_URL = _str("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = _str("OLLAMA_MODEL", "qwen2.5:7b")
+
+# Часовой пояс по умолчанию. Браузер присылает свой, и он важнее: в БД время
+# хранится в UTC, а «завтра 18:00» значит 18:00 там, где сидит ученик.
+TIMEZONE = _str("TIMEZONE", "Europe/Moscow")
+
+# Параметры вызова модели вынесены в окружение: при переезде на более мощное
+# железо меняется только .env, а не код. Ollama без num_ctx обрезает промпт
+# до 2-4k токенов, поэтому значение задаётся явно.
+AI_NUM_CTX = _int("AI_NUM_CTX", 8192)
+AI_TIMEOUT = _int("AI_TIMEOUT", 90)
+AI_TEMPERATURE = _float("AI_TEMPERATURE", 0.3)
+AI_NUM_PREDICT = _int("AI_NUM_PREDICT", 700)
+AI_KEEP_ALIVE = _str("AI_KEEP_ALIVE", "30m")
+
+# Сколько данных попадает в базовый контекст. Всё, что за пределами, модель
+# может добрать инструментами (все оценки по предмету, все задачи).
+AI_CONTEXT_GRADES = _int("AI_CONTEXT_GRADES", 3)
+AI_CONTEXT_TASKS = _int("AI_CONTEXT_TASKS", 30)
+AI_CONTEXT_DAYS = _int("AI_CONTEXT_DAYS", 7)
+
+# Бюджет истории в символах и параметры её сжатия. Сжатие — один запрос
+# к модели и только когда история в бюджет не влезает.
+AI_HISTORY_CHARS = _int("AI_HISTORY_CHARS", 8000)
+AI_COMPACT_KEEP = _int("AI_COMPACT_KEEP", 20)
+AI_SUMMARY_CHARS = _int("AI_SUMMARY_CHARS", 2000)
+AI_CHAT_TITLE_CHARS = _int("AI_CHAT_TITLE_CHARS", 60)
+
+# Дополнительные инструкции в system prompt: правятся без релиза кода.
+AI_PROMPT_EXTRA = _str("AI_PROMPT_EXTRA", "")
 
 # ─── OAuth Яндекса ────────────────────────────────────────────────────────────
 YANDEX_CLIENT_ID = _str("YANDEX_CLIENT_ID", "")

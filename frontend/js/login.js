@@ -94,8 +94,8 @@ function loginView({ go, rerender }) {
         try {
           const result = await (mode === 'max' ? store.verifyLoginCode(key, secret) : store.passwordLogin(key, secret));
           if (result.error) { const error = root.querySelector('#login-error'); error.textContent = result.error; error.hidden = false; }
-          else enter(result.login);
-        } catch { const error = root.querySelector('#login-error'); error.textContent = 'Не удалось войти. Попробуйте ещё раз.'; error.hidden = false; }
+          else enter(result.login || key);
+        } catch (error) { console.error(error); const box = root.querySelector('#login-error'); box.textContent = 'Не удалось войти. Попробуйте ещё раз.'; box.hidden = false; }
         finally { button.disabled = false; }
       });
       loginAddons.forEach((addon) => addon.mount?.(root, { rerender, enter, setLogin: (value) => { loginValue = value; } }));

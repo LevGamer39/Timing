@@ -229,13 +229,13 @@ def create_assignment(
     if not class_:
         raise HTTPException(404, "Class not found")
 
-    subject = (body.subject or current_user.teacher_subject or "").strip()
+    assigned = current_user.teacher_subjects
+    subject = (body.subject or (assigned[0] if assigned else "")).strip()
     if not subject:
         raise HTTPException(400, "Teacher subject is not assigned")
-    assigned_subject = (current_user.teacher_subject or "").strip()
-    if assigned_subject and subject.lower() != assigned_subject.lower():
+    if assigned and subject.lower() not in {item.lower() for item in assigned}:
         raise HTTPException(
-            400, "You can create assignments only for your assigned subject"
+            400, "You can create assignments only for your assigned subjects"
         )
 
     available = {

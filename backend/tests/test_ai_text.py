@@ -1,23 +1,29 @@
 """Юнит-тесты app.ai_text — чистого слоя парсинга и матчинга ИИ."""
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from app.ai_text import (
     MATCH_THRESHOLD,
+    build_plan,
     clean_ai_text,
     default_priority_from_text,
     detect_action,
     extract_json,
     format_deadline,
+    format_plan,
     format_priority,
+    has_date_hint,
+    looks_like_activity,
     match_tasks,
     normalize_text,
     parse_deadline_hint,
     parse_priority,
+    resolve_timezone,
     score_task,
 )
-from app.models import TaskPriority
+from app.models import TaskPriority, TaskStatus
 
 
 class FakeTask:
@@ -53,6 +59,11 @@ def test_clean_ai_text_collapses_blank_runs():
 
 def test_clean_ai_text_handles_none():
     assert clean_ai_text(None) == ""
+
+
+def test_clean_ai_text_strips_markdown():
+    raw = "#### Четверг\n- **09:00** урок\n* пункт"
+    assert clean_ai_text(raw) == "Четверг\n- 09:00 урок\n- пункт"
 
 
 def test_normalize_text_lowercases_and_strips_punctuation():
@@ -261,3 +272,145 @@ def test_detect_action_ignores_plain_chat():
 
 def test_detect_action_requires_numbered_reply():
     assert detect_action("just prose", "разбей") == (None, None)
+
+
+# ---------------------------------------------------------------------------
+# Часовой пояс и наличие даты
+# ---------------------------------------------------------------------------
+
+
+def test_parse_deadline_hint_uses_local_timezone():
+    """18:00 по Москве — это 15:00 UTC, а не 18:00 UTC."""
+    zone = ZoneInfo("Europe/Moscow")
+    result = parse_deadline_hint("завтра", "", zone)
+    local = result.astimezone(zone)
+    assert (local.hour, local.minute) == (18, 0)
+    assert result.utcoffset() == timedelta(0)
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("завтра сдать", True),
+        ("в пятницу", True),
+        ("15.06.2030", True),
+        ("в 09:30", True),
+        ("просто задача", False),
+        ("", False),
+    ],
+)
+def test_has_date_hint(text, expected):
+    assert has_date_hint(text) is expected
+
+
+def test_resolve_timezone_falls_back_to_default():
+    assert resolve_timezone("Not/AZone", "Europe/Moscow").key == "Europe/Moscow"
+
+
+def test_resolve_timezone_never_raises():
+    assert resolve_timezone(None, None) is not None
+
+
+# ---------------------------------------------------------------------------
+# Расписание на неделю
+# ---------------------------------------------------------------------------
+
+
+class FakeSchedule:
+    def __init__(self, weekday, start_time, end_time, subject, room=None):
+        self.weekday = weekday
+        self.start_time = start_time
+        self.end_time = end_time
+        self.subject = subject
+        self.room = room
+
+
+class PlanTask:
+    def __init__(self, id, title, deadline=None, status=TaskStatus.pending):
+        self.id = id
+        self.title = title
+        self.deadline = deadline
+        self.status = status
+        self.subject = "Алгебра"
+        self.priority = TaskPriority.high
+
+
+MONDAY = date(2030, 6, 17)  # понедельник
+
+
+def test_build_plan_groups_lessons_and_tasks_by_day():
+    schedule = [FakeSchedule(0, "09:00", "09:45", "Алгебра")]
+    tasks = [
+        PlanTask(1, "Параграф", datetime(2030, 6, 17, 15, 0, tzinfo=timezone.utc))
+    ]
+    plan = build_plan(schedule, tasks, MONDAY, 2, timezone.utc)
+    assert len(plan["days"]) == 2
+    assert [t.id for t in plan["days"][0]["tasks"]] == [1]
+    assert plan["days"][1]["lessons"] == []
+
+
+def test_build_plan_skips_completed_tasks():
+    tasks = [PlanTask(1, "Готово", status=TaskStatus.done)]
+    plan = build_plan([], tasks, MONDAY, 1, timezone.utc)
+    assert plan["days"][0]["tasks"] == []
+
+
+def test_build_plan_separates_activities_from_study():
+    deadline = datetime(2030, 6, 17, 15, 0, tzinfo=timezone.utc)
+    tasks = [PlanTask(1, "Кружок", deadline), PlanTask(2, "Домашка", deadline)]
+    plan = build_plan([], tasks, MONDAY, 1, timezone.utc, activity_ids={1})
+    day = plan["days"][0]
+    assert [t.id for t in day["activities"]] == [1]
+    assert [t.id for t in day["tasks"]] == [2]
+
+
+def test_build_plan_marks_overload():
+    deadline = datetime(2030, 6, 17, 15, 0, tzinfo=timezone.utc)
+    tasks = [
+        PlanTask(1, "Раз", deadline),
+        PlanTask(2, "Два", deadline),
+        PlanTask(3, "Три", deadline),
+    ]
+    plan = build_plan([], tasks, MONDAY, 1, timezone.utc)
+    day = plan["days"][0]
+    assert day["overloaded"] is True
+    assert "3 дедлайна" in day["reason"]
+
+
+def test_build_plan_keeps_undated_tasks_separate():
+    plan = build_plan([], [PlanTask(1, "Без срока")], MONDAY, 1, timezone.utc)
+    assert [t.id for t in plan["undated"]] == [1]
+
+
+def test_format_plan_mentions_days_and_overload():
+    tasks = [
+        PlanTask(
+            i, f"Задача {i}", datetime(2030, 6, 17, 15, 0, tzinfo=timezone.utc)
+        )
+        for i in range(3)
+    ]
+    text = format_plan(build_plan([], tasks, MONDAY, 1, timezone.utc))
+    assert "Задания:" in text
+    assert "перегруз" in text
+    assert "3 дедлайна" in text
+
+
+def test_format_plan_handles_empty_plan():
+    assert format_plan({"days": [], "undated": []}) == (
+        "На эти дни уроков и задач нет."
+    )
+
+
+@pytest.mark.parametrize(
+    "title,expected",
+    [
+        ("Кружок по физике", True),
+        ("Секция баскетбола", True),
+        ("Занятие с репетитором", True),
+        ("Прочитать параграф 12", False),
+        ("Лабораторная по химии", False),
+        (None, False),
+    ],
+)
+def test_looks_like_activity(title, expected):
+    assert looks_like_activity(title) is expected

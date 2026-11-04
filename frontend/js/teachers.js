@@ -6,6 +6,20 @@ import { copyCode } from './clipboard.js';
 
 import { subjName, accessHtml, bindInvites } from "./shared/admin.js";
 
+// Предметы учителя хранятся названиями; старые ключи (algebra) тоже понимаем.
+const subjectChoices = (selected) => {
+  const list = [];
+  Object.keys(store.SUBJECTS).forEach((k) => {
+    const value = subjName(k);
+    if (list.some((o) => o.value.toLowerCase() === value.toLowerCase())) return;
+    list.push({ key: k, value, label: value + (/4$/.test(k) ? ' (нач. школа)' : '') });
+  });
+  (selected || []).forEach((s) => { if (!list.some((o) => o.value === s || o.key === s)) list.push({ key: s, value: subjName(s), label: subjName(s) }); });
+  return list;
+};
+const isPicked = (option, selected) => selected.includes(option.value) || selected.includes(option.key);
+const subjectList = (t) => (t.subjects && t.subjects.length ? t.subjects : (t.subject ? [t.subject] : []));
+
 function teachersView({ rerender }) {
   const server = store.isServer();
   const list = store.teachers();
@@ -13,18 +27,33 @@ function teachersView({ rerender }) {
   const classTeacher = (id) => Object.values(cls).filter((c) => c.teacher === id).map((c) => c.name).join(', ');
   const clsName = (k) => (cls[k] ? cls[k].name : k);
 
-  const subjectSheet = (t) => sheet(fragment("teachers", "sub", [esc(t.name), Object.keys(store.SUBJECTS).map((k) => ("<option value=\"" + (k) + "\"" + ((t.subject || '') === k ? ' selected' : '') + ">" + (esc(subjName(k))) + (/4$/.test(k) ? ' (нач. школа)' : '') + "</option>")).join('')]), (el, close) => el.querySelector('#sf').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const value = el.querySelector('#ss').value;
-    store.apiSetTeacherSubject(t.id, value).then((result) => {
-      if (typeof result === 'string') { el.querySelector('#se').textContent = result; el.querySelector('#se').hidden = false; return; }
-      close(); rerender(); toast('Предмет сохранён');
+  const subjectSheet = (t) => {
+    const selected = subjectList(t).map(subjName);
+    const choices = subjectChoices(selected);
+    const label = () => choices.filter((o) => isPicked(o, selected)).map((o) => o.value).join(', ') || 'Выберите предметы';
+    return sheet(fragment("teachers", "sub", [esc(t.name), esc(label()), icon('down', 18), choices.map((o) => ("<label class=\"msel-opt\"><input type=\"checkbox\" value=\"" + (esc(o.value)) + "\"" + (isPicked(o, selected) ? ' checked' : '') + "><span>" + (esc(o.label)) + "</span></label>")).join('')]), (el, close) => {
+      const box = el.querySelector('#ss');
+      const draw = () => { el.querySelector('#ssv').textContent = label(); };
+      el.addEventListener('click', (e) => { if (!box.contains(e.target)) box.open = false; });
+      box.querySelectorAll('input').forEach((i) => i.addEventListener('change', () => {
+        const value = i.value;
+        if (i.checked) { if (!selected.includes(value)) selected.push(value); }
+        else { const at = selected.indexOf(value); if (at >= 0) selected.splice(at, 1); }
+        draw();
+      }));
+      el.querySelector('#sf').addEventListener('submit', (e) => {
+        e.preventDefault();
+        store.apiSetTeacherSubjects(t.id, selected).then((result) => {
+          if (typeof result === 'string') { el.querySelector('#se').textContent = result; el.querySelector('#se').hidden = false; return; }
+          close(); rerender(); toast('Предметы сохранены');
+        });
+      });
     });
-  }));
+  };
 
   const loadSheet = (t) => {
     if (server) {
-      sheet(fragment("teachers", "ld-server", [esc(t.name), icon('close', 18), esc(t.subject ? subjName(t.subject) : 'предмет не указан'), t.classCount || 0]), (el) => {
+      sheet(fragment("teachers", "ld-server", [esc(t.name), icon('close', 18), esc(subjectList(t).map(subjName).join(', ') || 'предметы не указаны'), t.classCount || 0]), (el) => {
         el.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => { el.closest('.overlay')?.remove(); rerender(); }));
       });
       return;
@@ -50,9 +79,10 @@ function teachersView({ rerender }) {
 
   const person = (t, i) => {
     if (server) {
+      const subjects = subjectList(t);
       return fragment("teachers", "person-server", [
         esc(t.name),
-        t.subject ? '<span class="hint">' + esc(subjName(t.subject)) + '</span>' : '<span class="hint">Предмет не указан</span>',
+        subjects.length ? '<span class="hint">' + esc(subjects.map(subjName).join(', ')) + '</span>' : '<span class="hint">Предметы не указаны</span>',
         (t.classCount ? '<span class="pill">Классов: ' + t.classCount + '</span>' : '') + (classTeacher(t.id) ? '<span class="pill">Классное руководство · ' + esc(classTeacher(t.id)) + '</span>' : ''),
         '', i, esc(t.name)
       ]);

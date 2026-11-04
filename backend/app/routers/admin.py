@@ -11,13 +11,16 @@ from app.database import get_db
 from app.dependencies import require_role
 from app.enrollment import (
     add_missing_assignment_tasks,
+    enroll_student,
     refresh_student_grade,
+    set_teacher_subjects,
 )
 from app.models import Class, ClassMembership, InviteCode, User, UserRole
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 MAX_NAME_LENGTH = 100
+MAX_SUBJECT_LENGTH = 100
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +44,7 @@ class AdminTeacherResponse(BaseModel):
     first_name: str
     last_name: str
     email: str | None
-    teacher_subject: str | None
+    teacher_subjects: list[str]
     class_count: int
 
 
@@ -116,7 +119,25 @@ class AdminClassStudentAdd(BaseModel):
 class AdminUserUpdate(BaseModel):
     is_active: bool | None = None
     grade: str | None = None
-    teacher_subject: str | None = None
+    teacher_subjects: list[str] | None = None
+
+    @field_validator("teacher_subjects")
+    @classmethod
+    def _subjects(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        cleaned: list[str] = []
+        for raw in value:
+            subject = (raw or "").strip()
+            if not subject:
+                continue
+            if len(subject) > MAX_SUBJECT_LENGTH:
+                raise ValueError(
+                    f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
+                )
+            if subject.lower() not in {item.lower() for item in cleaned}:
+                cleaned.append(subject)
+        return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +215,7 @@ def _collect_teachers(db: Session) -> list[AdminTeacherResponse]:
             first_name=teacher.first_name,
             last_name=teacher.last_name,
             email=teacher.email,
-            teacher_subject=teacher.teacher_subject,
+            teacher_subjects=teacher.teacher_subjects,
             class_count=counts.get(teacher.id, 0),
         )
         for teacher in teachers
@@ -250,29 +271,6 @@ def _collect_students(
             )
         )
     return response
-
-
-def _enroll(db: Session, class_id: int, student_id: int) -> None:
-    """Привязывает ученика к классу, создавая membership только при отсутствии.
-
-    Раньше существующая membership переназначалась, и ученик молча пропадал
-    из своего прежнего класса.
-    """
-    existing = (
-        db.query(ClassMembership)
-        .filter(ClassMembership.student_id == student_id)
-        .first()
-    )
-    if existing:
-        if existing.class_id == class_id:
-            return
-        existing.class_id = class_id
-    else:
-        db.add(ClassMembership(student_id=student_id, class_id=class_id))
-
-    db.flush()
-    add_missing_assignment_tasks(student_id, class_id, db)
-    refresh_student_grade(student_id, db)
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +349,7 @@ def update_student_account(
     current_user: User = Depends(require_role(UserRole.admin)),
     db: Session = Depends(get_db),
 ):
-    """Активация учётной записи и правка предмета/класса.
+    """Активация учётной записи и правка предметов/класса.
 
     Раньше учителя возвращались как ``AdminStudentResponse`` с
     ``class_name="Учитель"``, а в ``grade`` лежал предмет. Теперь учителя
@@ -375,8 +373,8 @@ def update_student_account(
             user.is_verified = True
     if body.grade is not None and user.role == UserRole.student:
         user.grade = body.grade
-    if body.teacher_subject is not None and user.role == UserRole.teacher:
-        user.teacher_subject = body.teacher_subject.strip() or None
+    if body.teacher_subjects is not None and user.role == UserRole.teacher:
+        set_teacher_subjects(user, body.teacher_subjects, db)
 
     db.commit()
     db.refresh(user)
@@ -391,7 +389,11 @@ def update_student_account(
             grade=None,
             is_active=bool(user.is_active),
             class_id=None,
-            class_name=f"Учитель · предметов: {counts.get(user.id, 0)}",
+            class_name=(
+                "Учитель · предметов: "
+                f"{len(user.teacher_subjects)} · классов: "
+                f"{counts.get(user.id, 0)}"
+            ),
         )
 
     lookup = _student_class_lookup(db)
@@ -453,7 +455,7 @@ def create_class(
         )
         if not student:
             continue
-        _enroll(db, class_.id, student_id)
+        enroll_student(db, class_.id, student_id)
 
     db.commit()
     db.refresh(class_)
@@ -515,7 +517,7 @@ def add_student_to_class(
     if not student:
         raise HTTPException(404, "Student not found")
 
-    _enroll(db, class_id, body.student_id)
+    enroll_student(db, class_id, body.student_id)
     db.commit()
     return _serialize_classes([class_], db)[0]
 

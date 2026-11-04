@@ -193,7 +193,8 @@ export function accountFor(profile, children) {
     initials: initials(profile.first_name, profile.last_name),
     title: profile.role === 'teacher' ? 'Учитель' : profile.role === 'admin' ? 'Администратор школы' : '',
     last: profile.last_name || '',
-    subject: profile.teacher_subject || '',
+    subject: (profile.teacher_subjects || [])[0] || '',
+    subjects: profile.teacher_subjects || [],
     email: profile.email || '',
     notifyEmail: profile.notify_email !== false,
     notifyBrowser: profile.notify_browser !== false,
@@ -241,35 +242,36 @@ async function loadStaff(profile) {
   // Классы и учителя нужны на экранах журнала, «моего класса» и админки.
   const classes = profile.role === 'admin' ? await api.adminClasses().catch(() => []) : await api.myClasses().catch(() => []);
   const teachers = profile.role === 'admin' ? await api.adminTeachers().catch(() => []) : [];
-  if (Array.isArray(classes) && classes.length) {
-    Object.keys(CLASSES).forEach((key) => delete CLASSES[key]);
-    classes.forEach((c) => {
-      const key = String(c.id);
-      CLASSES[key] = {
-        key,
-        name: c.name,
-        teacher: profile.role === 'teacher' ? String(profile.id) : String(c.teacher_id || ''),
-        invite: c.invite_code || '',
-        students: []
-      };
-      session.classKeys[c.name] = key;
-    });
-  }
-  if (Array.isArray(teachers) && teachers.length) {
-    TEACHERS.length = 0;
-    teachers.forEach((t) => TEACHERS.push({
-      id: String(t.id),
-      name: [t.last_name, t.first_name].filter(Boolean).join(' ') || t.email || 'Учитель',
-      subject: t.teacher_subject || '',
-      classCount: Number(t.class_count || 0),
-      load: []
-    }));
-  }
+  // В серверной сессии демо-данные не подмешиваются: пустой ответ API значит
+  // «классов/учителей нет», а не «покажи демо».
+  Object.keys(CLASSES).forEach((key) => delete CLASSES[key]);
+  classes.forEach((c) => {
+    const key = String(c.id);
+    CLASSES[key] = {
+      key,
+      name: c.name,
+      teacher: profile.role === 'teacher' ? String(profile.id) : String(c.teacher_id || ''),
+      invite: c.invite_code || '',
+      students: []
+    };
+    session.classKeys[c.name] = key;
+  });
+  TEACHERS.length = 0;
+  teachers.forEach((t) => TEACHERS.push({
+    id: String(t.id),
+    name: [t.last_name, t.first_name].filter(Boolean).join(' ') || t.email || 'Учитель',
+    subject: (t.teacher_subjects || [])[0] || '',
+    subjects: t.teacher_subjects || [],
+    classCount: Number(t.class_count || 0),
+    load: []
+  }));
   if (profile.role === 'teacher') {
     TEACHERS.length = 0;
     TEACHERS.push({
       id: String(profile.id),
       name: fullName(profile.first_name, profile.last_name) || profile.login,
+      subject: (profile.teacher_subjects || [])[0] || '',
+      subjects: profile.teacher_subjects || [],
       load: []
     });
   }
@@ -351,16 +353,17 @@ async function loadJournals() {
     const names = (data.students || []).map((s) => s.name);
     const grades = {};
     const comments = {};
+    const lessonKey = (date, slot) => date + (Number(slot) ? '#' + Number(slot) : '');
     (data.marks || []).forEach((mark) => {
       const r = roster.indexOf(String(mark.student_id));
       if (r < 0) return;
-      const date = dateOf(mark.date);
-      grades[r + '|' + date] = score(mark.value);
-      if (mark.comment) comments[r + '|' + date] = mark.comment;
+      const key = lessonKey(dateOf(mark.date), mark.slot);
+      grades[r + '|' + key] = score(mark.value);
+      if (mark.comment) comments[r + '|' + key] = mark.comment;
     });
     (data.absences || []).forEach((absence) => {
       const r = roster.indexOf(String(absence.student_id));
-      if (r >= 0) grades[r + '|' + dateOf(absence.date)] = 'Н';
+      if (r >= 0) grades[r + '|' + lessonKey(dateOf(absence.date), absence.slot)] = 'Н';
     });
     const finalsByPeriod = {};
     (data.finals || []).forEach((final) => {
@@ -377,12 +380,14 @@ async function loadJournals() {
       names,
       lessons: (data.lessons || []).map((lesson) => ({
         date: dateOf(lesson.date),
+        slot: Number(lesson.slot) || 0,
         type: lesson.type,
         hw: lesson.homework || ''
       })),
       grades,
       comments,
-      finalsByPeriod
+      finalsByPeriod,
+      classLoad: data.class_load || {}
     };
     session.journalKeys.push({
       key,
@@ -466,20 +471,24 @@ function journalPayload(j) {
   const roster = session.journalStudents[j.key] || [];
   const lessons = (j.lessons || []).map((lesson) => ({
     date: lesson.date,
+    slot: Number(lesson.slot) || 0,
     type: lesson.type || 'lesson',
     homework: lesson.hw || ''
   }));
   const marks = [];
   const absences = [];
   Object.entries(j.grades || {}).forEach(([key, value]) => {
-    const [r, date] = key.split('|');
+    const [r, cell] = key.split('|');
+    const [date, slot] = cell ? cell.split('#') : [];
     const student = roster[Number(r)];
     if (!student || !date) return;
-    if (value === 'Н') absences.push({ student_id: Number(student), date });
+    const lessonSlot = Number(slot) || 0;
+    if (value === 'Н') absences.push({ student_id: Number(student), date, slot: lessonSlot });
     else if (typeof value === 'number') {
       marks.push({
         student_id: Number(student),
         date,
+        slot: lessonSlot,
         value,
         comment: j.comments?.[key] || null
       });
@@ -739,8 +748,10 @@ export const createTeacherInvite = () => mutation(api.createInviteCode());
 export const inviteCodes = () => api.inviteCodes().catch(() => []);
 export const deleteInviteCode = (id) => mutation(api.deleteInviteCode(Number(id)));
 export const activateUser = (id, active = true) => mutation(api.updateUser(Number(id), { is_active: active }));
-export const setTeacherSubject = (id, subject) => mutation(api.updateUser(Number(id), { teacher_subject: subject }));
+export const setTeacherSubjects = (id, subjects) => mutation(api.updateUser(Number(id), { teacher_subjects: subjects }));
 export const deactivateTeacher = (id) => mutation(api.updateUser(Number(id), { is_active: false }));
+export const exportStudents = () => api.exportStudents();
+export const importStudents = (doc) => mutation(api.importStudents(doc));
 
 // --- Сброс ----------------------------------------------------------------
 

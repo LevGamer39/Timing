@@ -3,7 +3,7 @@ import * as store from './store.js';
 import { esc, icon, toast, sheet, plural } from "./ui.js";
 import { header, confirmSheet } from './common.js';
 
-import { accessHtml, bindInvites } from "./shared/admin.js";
+import { accessHtml, bindInvites, subjName } from "./shared/admin.js";
 import { showClassInvitations } from './invite-print.js';
 import { copyCode } from './clipboard.js';
 
@@ -17,23 +17,49 @@ function classesView({ params, go, rerender }) {
     const er = el.querySelector('#ce');
     if (!/^\d{1,2}[А-ЯЁ]$/.test(name)) { er.textContent = 'Введите номер и букву, например 9А.'; er.hidden = false; return; }
     if (Object.values(all).some((x) => x.name === name)) { er.textContent = 'Такой класс уже есть.'; er.hidden = false; return; }
+    const teacherId = el.querySelector('#cftv').value;
+    if (!teacherId) { er.textContent = store.teachers().length ? 'Выберите классного руководителя.' : 'Сначала добавьте хотя бы одного учителя.'; er.hidden = false; return; }
     if (!server) {
       const k = name.toLowerCase().replace(/[а-яё]/, (ch) => ({ а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e' })[ch] || 'x' + ch.charCodeAt(0));
-      all[k] = { key: k, name, teacher: '', students: [] };
+      all[k] = { key: k, name, teacher: teacherId, students: [] };
       if (!store.saveClasses(all)) return toast(store.SAVE_ERROR);
       close(); toast('Класс ' + name + ' добавлен'); go('classes/' + k);
       return;
     }
-    const teacher = store.teachers()[0];
-    if (!teacher) { er.textContent = 'Сначала добавьте хотя бы одного учителя.'; er.hidden = false; return; }
-    store.apiCreateClass(name, teacher.id).then((result) => {
+    store.apiCreateClass(name, teacherId).then((result) => {
       if (typeof result === 'string') { er.textContent = result; er.hidden = false; return; }
       close(); rerender(); toast('Класс ' + name + ' добавлен');
     });
   };
 
   const bindAddClass = (root) => {
-    root.querySelector('#add-class')?.addEventListener('click', () => sheet(fragment("classes", "cf", []), (el, close) => el.querySelector('#cf').addEventListener('submit', (e) => { e.preventDefault(); addClass(el, close); })));
+    root.querySelector('#add-class')?.addEventListener('click', () => sheet(fragment("classes", "cf", []), (el, close) => {
+      const input = el.querySelector('#cft'), value = el.querySelector('#cftv'), list = el.querySelector('#cfts'), picker = el.querySelector('#cftp'), teachers = store.teachers();
+      const show = (open) => {
+        list.hidden = !open;
+        picker.classList.toggle('open', open);
+        input.setAttribute('aria-expanded', String(open));
+      };
+      const draw = (query) => {
+        const needle = query.trim().toLowerCase();
+        const hits = teachers.filter((t) => !needle || t.name.toLowerCase().includes(needle));
+        show(!!hits.length);
+        list.innerHTML = hits.map((t) => {
+          const subs = (t.subjects && t.subjects.length ? t.subjects : (t.subject ? [t.subject] : [])).map(subjName).join(', ');
+          return '<button type="button" role="option" data-id="' + esc(t.id) + '"><b>' + esc(t.name) + '</b>' + (subs ? '<span class="muted small">' + esc(subs) + '</span>' : '') + '</button>';
+        }).join('');
+        list.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+          const t = teachers.find((x) => x.id === b.dataset.id);
+          value.value = t.id; input.value = t.name;
+          show(false);
+        }));
+      };
+      list.addEventListener('mousedown', (e) => e.preventDefault());
+      input.addEventListener('focus', () => draw(''));
+      input.addEventListener('input', () => { value.value = ''; draw(input.value); });
+      input.addEventListener('blur', () => show(false));
+      el.querySelector('#cf').addEventListener('submit', (e) => { e.preventDefault(); addClass(el, close); });
+    }));
   };
 
   const c = allowed.find((x) => x.key === params[0]) || allowed[0];
@@ -60,7 +86,7 @@ function classesView({ params, go, rerender }) {
     : '';
 
   return {
-    html: fragment("classes", "add", [header(), admin ? 'Классы и ученики' : 'Ученики и приглашения', icon('plus', 18), esc(c.name), allowed.map((x) => ("<a href=\"#/classes/" + (x.key) + "\"" + (x.key === key ? ' aria-current="true"' : '') + ">" + (esc(x.name)) + "</a>")).join(''), controls, esc(c.name), c.students.length, plural(c.students.length, 'ученик', 'ученика', 'учеников'), c.students.map(personHtml).join('') || '<div class="empty-day">Учеников пока нет</div>', inviteCard]),
+    html: fragment("classes", "add", [header(), admin ? 'Классы и ученики' : 'Ученики и приглашения', icon('plus', 18), esc(c.name), allowed.map((x) => ("<a href=\"#/classes/" + (x.key) + "\"" + (x.key === key ? ' aria-current="true"' : '') + ">" + (esc(x.name)) + "</a>")).join(''), controls, esc(c.name), c.students.length, plural(c.students.length, 'ученик', 'ученика', 'учеников'), c.students.map(personHtml).join('') || '<div class="empty-day">Учеников пока нет</div>', inviteCard, admin && server ? fragment("classes", "mig-actions") : '']),
     mount(root) {
       const save = () => { all[key] = c; const ok = store.saveClasses(all); if (!ok) toast(store.SAVE_ERROR); return ok; };
       if (!server) bindInvites(root, rerender);
@@ -73,6 +99,38 @@ function classesView({ params, go, rerender }) {
         });
       });
       bindAddClass(root);
+
+      const migFile = root.querySelector('#mig-file');
+      root.querySelector('#mig-export')?.addEventListener('click', () => {
+        store.apiExportStudents().then((doc) => {
+          if (!doc || !Array.isArray(doc.students)) return toast('Сервер не вернул список учеников');
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }));
+          link.download = 'ученики.json';
+          link.click();
+          URL.revokeObjectURL(link.href);
+          toast('Экспортировано учеников: ' + doc.students.length);
+        }).catch(() => toast('Не удалось выгрузить учеников'));
+      });
+      root.querySelector('#mig-import')?.addEventListener('click', () => migFile?.click());
+      migFile?.addEventListener('change', () => {
+        const file = migFile.files && migFile.files[0];
+        if (!file) return;
+        migFile.value = '';
+        const reader = new FileReader();
+        reader.onload = () => {
+          let doc;
+          try { doc = JSON.parse(String(reader.result)); } catch { return toast('Это не JSON-файл'); }
+          store.apiImportStudents(doc).then((result) => {
+            if (typeof result === 'string') return toast(result);
+            toast('Импорт: добавлено ' + result.created + ', обновлено ' + result.updated + ', оценок ' + result.grades_added);
+            if (result.unknown_classes?.length) toast('Классы не найдены: ' + result.unknown_classes.join(', ') + '. Ученики перенесены без класса.');
+            if (result.warnings?.length) toast(result.warnings[0] + (result.warnings.length > 1 ? ' (+' + (result.warnings.length - 1) + ')' : ''));
+            rerender();
+          });
+        };
+        reader.readAsText(file);
+      });
 
       root.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
         const st = c.students[b.dataset.del];

@@ -14,6 +14,8 @@ function composeView({ params, go }) {
       const box = root.querySelector('#to-box');
       const f = root.querySelector('#f');
       const err = root.querySelector('#err');
+      let pickerHits = [];
+      let pickerActive = -1;
 
       const drawTo = () => {
         root.querySelector('#to-hint').hidden = !!to;
@@ -30,15 +32,48 @@ function composeView({ params, go }) {
             to = store.person(b.dataset.pid); close(); drawTo(); root.querySelector('#subj').focus();
           })));
         });
+        // Combobox как в админке (classes.js): открыт по фокусу, фильтрует с
+        // первого символа, закрывается по blur и Escape.
+        const picker = box.querySelector('#tob');
         const inp = box.querySelector('#to');
-        const sug = box.querySelector('#sug');
-        inp.addEventListener('input', () => {
-          const q = inp.value.trim().toLowerCase();
-          const hits = q.length < 2 ? [] : store.people().filter((p) => p.name.toLowerCase().includes(q) || p.role.toLowerCase().includes(q)).slice(0, 6);
-          sug.hidden = !hits.length;
-          inp.setAttribute('aria-expanded', String(!!hits.length));
-          sug.innerHTML = hits.map((p) => ("<button type=\"button\" role=\"option\" data-id=\"" + (p.id) + "\"><b>" + (esc(p.name)) + "</b><span class=\"muted small\">" + (esc(p.role)) + "</span></button>")).join('');
-          sug.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { to = store.person(b.dataset.id); drawTo(); root.querySelector('#subj').focus(); }));
+        const list = box.querySelector('#sug');
+        const show = (open) => {
+          list.hidden = !open;
+          picker.classList.toggle('open', open);
+          inp.setAttribute('aria-expanded', String(open));
+          if (!open) { pickerActive = -1; inp.removeAttribute('aria-activedescendant'); }
+        };
+        const pick = (index) => {
+          const person = pickerHits[index];
+          if (!person) return;
+          to = store.person(person.id); drawTo(); root.querySelector('#subj').focus();
+        };
+        const draw = (query) => {
+          const needle = query.trim().toLowerCase();
+          pickerHits = store.people()
+            .filter((p) => !needle || p.name.toLowerCase().includes(needle) || p.role.toLowerCase().includes(needle))
+            .slice(0, 6);
+          pickerActive = -1;
+          inp.removeAttribute('aria-activedescendant');
+          show(!!pickerHits.length);
+          list.innerHTML = pickerHits.map((p, i) => ("<button type=\"button\" role=\"option\" id=\"opt-" + i + "\" aria-selected=\"false\"><b>" + (esc(p.name)) + "</b><span class=\"muted small\">" + (esc(p.role)) + "</span></button>")).join('');
+          list.querySelectorAll('button').forEach((b, i) => b.addEventListener('click', () => pick(i)));
+        };
+        list.addEventListener('mousedown', (e) => e.preventDefault());
+        inp.addEventListener('focus', () => draw(''));
+        inp.addEventListener('input', () => draw(inp.value));
+        inp.addEventListener('blur', () => show(false));
+        inp.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') { show(false); return; }
+          if (list.hidden || !pickerHits.length) return;
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            pickerActive = (pickerActive + (e.key === 'ArrowDown' ? 1 : -1) + pickerHits.length) % pickerHits.length;
+            inp.setAttribute('aria-activedescendant', 'opt-' + pickerActive);
+            list.querySelectorAll('button').forEach((b, i) => { b.setAttribute('aria-selected', String(i === pickerActive)); b.classList.toggle('active', i === pickerActive); });
+            return;
+          }
+          if (e.key === 'Enter' && pickerActive >= 0) { e.preventDefault(); pick(pickerActive); }
         });
       };
       drawTo();

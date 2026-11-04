@@ -31,6 +31,12 @@ export const setToken = (value) => {
 
 export const hasToken = () => Boolean(token());
 
+// Пояс устройства: «завтра 18:00» должно означать местное время, а не UTC.
+// Если браузер его не отдал, бэкенд возьмёт TIMEZONE из .env.
+export const timezone = () => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; }
+};
+
 async function request(path, { method = 'GET', body, form, auth = true } = {}) {
   const headers = {};
   if (auth && token()) headers.Authorization = 'Bearer ' + token();
@@ -203,6 +209,10 @@ export const createInviteCode = (body) => request('/api/admin/invite-codes', { m
 export const deleteInviteCode = (id) => request('/api/admin/invite-codes/' + id, { method: 'DELETE' });
 export const updateUser = (id, body) => request('/api/admin/users/' + id, { method: 'PATCH', body });
 
+// Перенос учеников между установками: JSON по схеме /static/schemas/student-migration.schema.json
+export const exportStudents = () => request('/api/admin/migration/students');
+export const importStudents = (doc) => request('/api/admin/migration/students', { method: 'POST', body: doc });
+
 // --- Настройки школы ------------------------------------------------------
 
 export const schoolSettings = () => request('/api/school/settings');
@@ -211,6 +221,17 @@ export const saveSchoolSettings = (payload) => request('/api/school/settings', {
 // --- ИИ -------------------------------------------------------------------
 
 export const aiPrompts = () => request('/api/ai/quick-prompts');
-export const aiHistory = () => request('/api/ai/history');
-export const aiChat = (message) => request('/api/ai/chat', { method: 'POST', body: { message } });
+export const aiChats = () => request('/api/ai/chats');
+export const aiDeleteChat = (id) => request('/api/ai/chats/' + id, { method: 'DELETE' });
+export const aiHistory = (chatId) => request('/api/ai/history' + (chatId ? '?chat_id=' + chatId : ''));
+export const aiChat = (message, options = {}) => request('/api/ai/chat', {
+  method: 'POST',
+  body: {
+    message,
+    chat_id: options.chatId ?? null,
+    new_chat: Boolean(options.newChat),
+    timezone: timezone(),
+  },
+});
+export const aiAction = (body) => request('/api/ai/actions', { method: 'POST', body: { ...body, timezone: timezone() } });
 export const aiClearHistory = () => request('/api/ai/history', { method: 'DELETE' });

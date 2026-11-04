@@ -140,10 +140,18 @@ def list_people(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Все активные пользователи школы — для выбора получателя."""
+    """Пользователи школы — для выбора получателя.
+
+    Учётка без подтверждённой почты (``is_active=False, is_verified=False``)
+    остаётся человеком школы: админский список учителей её тоже показывает.
+    Заблокированные админом (``is_verified=True``) скрыты.
+    """
     users = (
         db.query(User)
-        .filter(User.is_active.is_(True), User.id != current_user.id)
+        .filter(
+            or_(User.is_active.is_(True), User.is_verified.is_(False)),
+            User.id != current_user.id,
+        )
         .order_by(User.role, User.last_name, User.first_name)
         .all()
     )
@@ -252,7 +260,10 @@ def send_message(
 ):
     recipient = (
         db.query(User)
-        .filter(User.id == body.recipient_id, User.is_active.is_(True))
+        .filter(
+            User.id == body.recipient_id,
+            or_(User.is_active.is_(True), User.is_verified.is_(False)),
+        )
         .first()
     )
     if not recipient:

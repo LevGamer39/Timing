@@ -13,9 +13,28 @@ from app.models import (
     ClassMembership,
     Task,
     TaskStatus,
+    TeacherSubject,
     User,
     UserRole,
 )
+
+
+def set_teacher_subjects(
+    user: User, subjects: list[str], db: Session
+) -> None:
+    """Заменяет список предметов учителя: trim, без пустых и дублей."""
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for raw in subjects:
+        value = (raw or "").strip()
+        key = value.lower()
+        if value and key not in seen:
+            seen.add(key)
+            wanted.append(value)
+    user.subject_links = []
+    db.flush()
+    user.subject_links = [TeacherSubject(subject=value) for value in wanted]
+    db.flush()
 
 
 def refresh_student_grade(student_id: int, db: Session) -> None:
@@ -39,6 +58,30 @@ def refresh_student_grade(student_id: int, db: Session) -> None:
 
     class_ = db.query(Class).filter(Class.id == membership.class_id).first()
     student.grade = class_.name if class_ else None
+
+
+def enroll_student(db: Session, class_id: int, student_id: int) -> None:
+    """Зачисляет ученика в класс, перенося его из прежнего.
+
+    Раньше при существующей membership она переназначалась молча, и ученик
+    пропадал из старого класса. Оценки и задачи остаются при ученике:
+    ``Grade`` привязана к ``student_id``, а не к классу.
+    """
+    existing = (
+        db.query(ClassMembership)
+        .filter(ClassMembership.student_id == student_id)
+        .first()
+    )
+    if existing:
+        if existing.class_id == class_id:
+            return
+        existing.class_id = class_id
+    else:
+        db.add(ClassMembership(student_id=student_id, class_id=class_id))
+
+    db.flush()
+    add_missing_assignment_tasks(student_id, class_id, db)
+    refresh_student_grade(student_id, db)
 
 
 def add_missing_assignment_tasks(
