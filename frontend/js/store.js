@@ -308,6 +308,20 @@ export async function bootstrap() {
   }
 }
 
+// Перечитать данные с сервера, не разлогинивая при сбое сети: нужен после
+// того, как ИИ создал или изменил задачи.
+export async function refreshData() {
+  if (!serverSession) return false;
+  try {
+    const { profile } = await server.load();
+    adopt(profile);
+    applySchoolScale();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function passwordLogin(value, password) {
   try {
     const result = await api.loginPassword(value, password);
@@ -417,6 +431,10 @@ export async function linkParent(code) {
   }
 }
 
+// Ключ колонки: у одной даты бывает несколько уроков (две алгебры подряд).
+// slot 0 не меняет ключ — старые данные и демо остаются совместимыми.
+export const lessonKey = (l) => l.date + (Number(l.slot) ? '#' + Number(l.slot) : '');
+
 export function gradesOf(sid) {
   const s = studentById(sid);
   if (!s) return [];
@@ -427,9 +445,10 @@ export function gradesOf(sid) {
     const r = j.names.indexOf(s.name);
     if (r < 0) return;
     j.lessons.forEach((l) => {
-      const value = j.grades[r + '|' + l.date];
+      const key = lessonKey(l);
+      const value = j.grades[r + '|' + key];
       const t = typeOf(l.type);
-      if (typeof value === 'number') list.push({ id: sid + '|' + j.key + '|' + l.date, date: l.date, subj: j.subjectKey, value, w: t.w, type: t.name, comment: j.comments[r + '|' + l.date] || '' });
+      if (typeof value === 'number') list.push({ id: sid + '|' + j.key + '|' + key, date: l.date, subj: j.subjectKey, value, w: t.w, type: t.name, comment: j.comments[r + '|' + key] || '' });
     });
   });
   return list.sort((a, b) => a.date.localeCompare(b.date));
@@ -472,7 +491,7 @@ export function week(offset) {
         n: n + 1, subj, name: SUBJECTS[subj].name, room: SUBJECTS[subj].room, time: lessonTimes(i)[n] || '', start: bells(i)[n]?.start || '', end: bells(i)[n]?.end || '',
         hw: first ? (jl ? jl.hw : j?.deletedDates?.includes(date) ? '' : h ? h[2] : '') : '', hwKey: key, done: !!state.hwDone[key],
         grades: first ? grades.filter((g) => g.date === date && g.subj === subj) : [],
-        absent: (first && (j?.grades[jr + '|' + date] === 'Н' || absent.some((a) => a[0] === date && a[1] === subj))) || (!!att[row + '|' + (n + 1)] && (!snapshots[row + '|' + (n + 1)] || snapshots[row + '|' + (n + 1)] === subj))
+        absent: (first && (jr >= 0 && j?.lessons.some((l) => l.date === date && j.grades[jr + '|' + lessonKey(l)] === 'Н') || absent.some((a) => a[0] === date && a[1] === subj))) || (!!att[row + '|' + (n + 1)] && (!snapshots[row + '|' + (n + 1)] || snapshots[row + '|' + (n + 1)] === subj))
       };
     }).filter(Boolean);
     days.push({ date, d, lessons });
@@ -547,7 +566,9 @@ export function classStats(g) {
   const jKey = { algebra: '8a-algebra', geometry: '8a-geometry' }[g.subj];
   if (key === '8a' && jKey) {
     const j = journal(jKey, true);
-    if (j.lessons.some((l) => l.date === g.date)) values = j.names.map((_, r) => j.grades[r + '|' + g.date]).filter((v) => typeof v === 'number');
+    const cells = j.lessons.filter((l) => l.date === g.date).map(lessonKey);
+    if (cells.length) values = j.names.map((_, r) => cells.map((c) => j.grades[r + '|' + c]).filter((v) => typeof v === 'number')).flat();
+    if (values && !values.length) values = null;
   }
   if (!values) {
     let seed = [...g.id].reduce((a, ch) => a + ch.charCodeAt(0), 0);
@@ -635,7 +656,7 @@ export function journal(key, allPeriods = false, normalize = true) {
   if (!meta) throw new Error('Неизвестный журнал: ' + key);
   const result = own ? JSON.parse(JSON.stringify(own)) : j ? {
     key, cls: j.cls, subj: j.subj, names: j.names.slice(),
-    lessons: j.dates.map((d, i) => ({ date: d, type: j.types[i], hw: j.hw[i] || '' })),
+    lessons: j.dates.map((d, i) => ({ date: d, slot: 0, type: j.types[i], hw: j.hw[i] || '' })),
     grades: Object.fromEntries(j.rows.flatMap((row, r) => row.map((v, c) => [r + '|' + j.dates[c], v]).filter(([, v]) => v !== ''))),
     comments: Object.fromEntries(Object.entries(j.comments).map(([k, v]) => { const [r, c] = k.split('|'); return [r + '|' + j.dates[c], v]; })),
     finals: {}
@@ -690,9 +711,11 @@ export function saveJournal(j, retry = true) {
   j = current;
   const full = journal(j.key, true, false);
   const outside = (date) => j.periodKey && (date < j.periodFrom || date > j.periodTo);
-  const merge = (old, cur) => Object.assign(Object.fromEntries(Object.entries(old).filter(([k]) => outside(k.split('|')[1]))), cur);
-  const deletedDates = [...new Set([...(full.deletedDates || []), ...full.lessons.filter((l) => !outside(l.date) && !j.lessons.some((x) => x.date === l.date)).map((l) => l.date)])].filter((d) => !j.lessons.some((l) => l.date === d));
-  const result = { ...j, deletedDates, lessons: [...full.lessons.filter((l) => outside(l.date)), ...j.lessons].sort((a, b) => a.date.localeCompare(b.date)), grades: merge(full.grades, j.grades), comments: merge(full.comments, j.comments), finalsByPeriod: { ...full.finalsByPeriod, [j.periodKey || currentPeriod().key]: j.finals } };
+  const merge = (old, cur) => Object.assign(Object.fromEntries(Object.entries(old).filter(([k]) => outside(k.split('|')[1].split('#')[0]))), cur);
+  // shortcut: в демо «удалённые даты» хранятся без slot, при двух уроках дня
+  // пропадёт подсказка ДЗ за весь день. На серверный режим не влияет.
+  const deletedDates = [...new Set([...(full.deletedDates || []), ...full.lessons.filter((l) => !outside(l.date) && !j.lessons.some((x) => lessonKey(x) === lessonKey(l))).map((l) => l.date)])].filter((d) => !j.lessons.some((l) => l.date === d));
+  const result = { ...j, deletedDates, lessons: [...full.lessons.filter((l) => outside(l.date)), ...j.lessons].sort((a, b) => a.date.localeCompare(b.date) || (Number(a.slot) || 0) - (Number(b.slot) || 0)), grades: merge(full.grades, j.grades), comments: merge(full.comments, j.comments), finalsByPeriod: { ...full.finalsByPeriod, [j.periodKey || currentPeriod().key]: j.finals } };
   // Смена шкалы округляет только показ; нетронутые исходные баллы не теряют точность.
   Object.keys(result.grades).forEach((k) => { if (result.grades[k] === normalizedScore(full.grades[k])) result.grades[k] = full.grades[k]; });
   delete result.periodKey; delete result.periodFrom; delete result.periodTo;
@@ -728,7 +751,7 @@ export const typeOf = (id) => workTypes().find((t) => t.id === id) || { id, name
 export function rowAvg(j, r) {
   let s = 0, w = 0;
   j.lessons.forEach((l) => {
-    const v = j.grades[r + '|' + l.date];
+    const v = j.grades[r + '|' + lessonKey(l)];
     if (typeof v === 'number') { const k = typeOf(l.type).w; s += v * k; w += k; }
   });
   return w ? s / w : null;
@@ -774,7 +797,7 @@ export const apiTeacherInvite = () => server.createTeacherInvite();
 export const apiInviteCodes = () => server.inviteCodes();
 export const apiDeleteInvite = (id) => server.deleteInviteCode(id);
 export const apiActivateUser = (id, active = true) => server.activateUser(id, active);
-export const apiSetTeacherSubject = (id, subject) => server.setTeacherSubject(id, subject);
+export const apiSetTeacherSubjects = (id, subjects) => server.setTeacherSubjects(id, subjects);
 export const apiDeactivateTeacher = (id) => server.deactivateTeacher(id);
 // Перенос учеников: JSON-файл по строгой схеме (экспорт/импорт в панели).
 export const apiExportStudents = () => server.exportStudents();
@@ -1005,20 +1028,39 @@ export function saveSchool(s) {
 
 // --- ИИ -------------------------------------------------------------------
 
-export async function askAi(message) {
+export async function askAi(message, options) {
   if (!serverSession) return null;
   try {
-    const result = await api.aiChat(message);
-    return (result && result.reply) || null;
+    return await api.aiChat(message, options);
   } catch {
     return null;
   }
 }
 
-export async function aiHistory() {
+export async function aiChats() {
   if (!serverSession) return [];
   try {
-    const list = await api.aiHistory();
+    const list = await api.aiChats();
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function aiDeleteChat(id) {
+  if (!serverSession) return Promise.resolve(false);
+  return api.aiDeleteChat(id).then(() => true).catch(() => false);
+}
+
+export function aiAction(body) {
+  if (!serverSession) return Promise.resolve(null);
+  return api.aiAction(body).catch(() => null);
+}
+
+export async function aiHistory(chatId) {
+  if (!serverSession) return [];
+  try {
+    const list = await api.aiHistory(chatId);
     return Array.isArray(list) ? list : [];
   } catch {
     return [];
@@ -1084,7 +1126,7 @@ export function absencesOn(cls, date) {
     const missed = new Set(Object.keys(att).filter((k) => k.startsWith(r + '|') && att[k] && (snapshots[k] || plan[Number(k.split('|')[1]) - 1])).map((k) => Number(k.split('|')[1])));
     js.forEach((j) => {
       const jr = j.names.indexOf(s.name);
-      if (jr >= 0 && j.grades[jr + '|' + date] === 'Н') { const n = plan.indexOf(j.subjectKey); if (n >= 0) missed.add(n + 1); }
+      if (jr >= 0 && j.lessons.some((l) => l.date === date && j.grades[jr + '|' + lessonKey(l)] === 'Н')) { const n = plan.indexOf(j.subjectKey); if (n >= 0) missed.add(n + 1); }
     });
     if (seeded[s.name]) seeded[s.name].filter(([dt]) => dt === date).forEach(([, subj]) => { const n = plan.indexOf(subj); if (n >= 0) missed.add(n + 1); });
     else if (!serverSession && date < today) demoMissed(cls, date, s.name, plan).forEach((n) => missed.add(n));

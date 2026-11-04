@@ -119,6 +119,24 @@ def test_create_falls_back_to_teacher_subject(db, teacher, member):
     assert created.subject == "Math"
 
 
+def test_create_accepts_any_of_teacher_subjects(db, teacher, member):
+    """Учитель ведёт несколько предметов — задание можно выдать по любому."""
+    from app.models import TeacherSubject
+
+    db.add(TeacherSubject(user_id=teacher.id, subject="Literature"))
+    db.commit()
+    db.refresh(teacher)
+
+    created = assign_router.create_assignment(
+        AssignmentCreate(
+            title="Essay", subject="Literature", deadline=NOW,
+            class_id=member.id,
+        ),
+        current_user=teacher, db=db,
+    )
+    assert created.subject == "Literature"
+
+
 # ---------------------------------------------------------------------------
 # Вычисляемые поля
 # ---------------------------------------------------------------------------

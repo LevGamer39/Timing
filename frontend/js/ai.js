@@ -1,8 +1,12 @@
 import { fragment } from './templates.js';
 import * as store from './store.js';
 import { score } from './grading.js';
-import { esc, icon, fmt, mark, goalText, plural, dayMonth, iso, DAYS, weekday } from './ui.js';
-import { chat, topic, setChat, setTopic } from "./shared/ai.js";
+import { esc, icon, fmt, mark, goalText, plural, dayMonth, iso, DAYS, weekday, toast } from './ui.js';
+import { chat, topic, chats, chatId, setChat, setTopic, setChats, setChatId } from "./shared/ai.js";
+
+// Какой чат уже запрошен: при пустой истории повторный запрос после rerender
+// зациклил бы экран.
+let loadedChat = null;
 
 function summary() {
   const subs = store.subjects().filter((s) => s.avg != null);
@@ -94,9 +98,26 @@ function freeAnswer(q) {
 const genitive = (n) => /[гкхжшчщ]а$/.test(n) ? n.slice(0, -1) + 'и' : /а$/.test(n) ? n.slice(0, -1) + 'ы'
   : /[яь]$/.test(n) ? n.slice(0, -1) + 'и' : /й$/.test(n) ? n.slice(0, -1) + 'я' : n + 'а';
 
+function messageHtml(m, index) {
+  const bubble = '<div class="bubble ' + (m.me ? 'me' : 'ai') + '">' + esc(m.text) + '</div>';
+  if (!m.pending) return bubble;
+  const label = m.pending.operation === 'delete' ? 'Удалить' : 'Добавить';
+  return bubble + '<button class="confirm" type="button" data-confirm="' + index + '">' + label + '</button>';
+}
+
+function chatStrip(isAi) {
+  if (!isAi) return '';
+  return '<div class="chats" aria-label="Мои чаты">' +
+    '<button type="button" class="chat-chip new" data-new>+ Новый чат</button>' +
+    chats.map((c) => '<button type="button" class="chat-chip"' + (c.id === chatId ? ' aria-current="true"' : '') + ' data-chat="' + c.id + '">' + esc(c.title) + '</button>').join('') +
+    (chatId ? '<button type="button" class="chat-chip del" data-del="' + chatId + '" aria-label="Удалить чат">×</button>' : '') +
+    '</div>';
+}
+
 function aiView({ rerender }) {
   const T = topics();
   const isParent = store.role() === 'parent';
+  const isAi = store.isServer() && store.role() === 'student';
   const s = store.student();
 
   const hello = isParent
@@ -104,14 +125,27 @@ function aiView({ rerender }) {
     : 'Привет, ' + s.first + '! Помогаю разобраться с оценками и с Вектором. Домашку за тебя не решаю. С чего начнём?';
 
   return {
-    html: fragment("ai", "screen", [icon('back'), icon('spark', 20), icon('reset', 20), Object.entries(T).map(([k, v]) => ("<button class=\"cat\" type=\"button\" data-topic=\"" + (k) + "\" style=\"min-height: 0\"" + (topic === k ? ' aria-current="true"' : '') + "><b>" + (esc(v.title)) + "</b><span>" + (esc(v.desc)) + "</span></button>")).join(''), isParent ? ' ребёнка' : '', esc(hello), chat.map((m) => ("<div class=\"bubble " + (m.me ? 'me' : 'ai') + "\">" + (esc(m.text)) + "</div>")).join(''), topic ? ("\n      <div class=\"quick\">" + (Object.keys(T[topic].subs).map((k) => ("<button type=\"button\" data-sub=\"" + (esc(k)) + "\">" + (esc(k)) + "</button>")).join('')) + "<button type=\"button\" data-topic=\"\">Другая тема</button></div>") : chat.length ? ("\n      <div class=\"quick only-mobile\">" + (Object.entries(T).map(([k, v]) => ("<button type=\"button\" data-topic=\"" + (k) + "\">" + (esc(v.title)) + "</button>")).join('')) + "</div>") : ("\n      <div class=\"cats\">" + (Object.entries(T).map(([k, v]) => ("<button class=\"cat\" type=\"button\" data-topic=\"" + (k) + "\"><b>" + (esc(v.title)) + "</b><span>" + (esc(v.desc)) + "</span></button>")).join('')) + "</div>"), icon('send', 20), isParent ? ' ребёнка' : '']),    mount(root) {
+    html: fragment("ai", "screen", [icon('back'), icon('spark', 20), icon('reset', 20), Object.entries(T).map(([k, v]) => ("<button class=\"cat\" type=\"button\" data-topic=\"" + (k) + "\" style=\"min-height: 0\"" + (topic === k ? ' aria-current="true"' : '') + "><b>" + (esc(v.title)) + "</b><span>" + (esc(v.desc)) + "</span></button>")).join(''), isParent ? ' ребёнка' : '', esc(hello), chat.map((m, i) => messageHtml(m, i)).join(''), topic ? ("\n      <div class=\"quick\">" + (Object.keys(T[topic].subs).map((k) => ("<button type=\"button\" data-sub=\"" + (esc(k)) + "\">" + (esc(k)) + "</button>")).join('')) + "<button type=\"button\" data-topic=\"\">Другая тема</button></div>") : chat.length ? ("\n      <div class=\"quick only-mobile\">" + (Object.entries(T).map(([k, v]) => ("<button type=\"button\" data-topic=\"" + (k) + "\">" + (esc(v.title)) + "</button>")).join('')) + "</div>") : ("\n      <div class=\"cats\">" + (Object.entries(T).map(([k, v]) => ("<button class=\"cat\" type=\"button\" data-topic=\"" + (k) + "\"><b>" + (esc(v.title)) + "</b><span>" + (esc(v.desc)) + "</span></button>")).join('')) + "</div>"), icon('send', 20), isParent ? ' ребёнка' : '', chatStrip(isAi)]),    mount(root) {
       const push = (q, a) => { chat.push({ me: true, text: q }, { me: false, text: a }); rerender(); window.scrollTo(0, document.body.scrollHeight); };
-      const askAi = store.isServer() && store.role() === 'student';
-      if (askAi && !chat.length) store.aiHistory().then((list) => {
-        if (!list.length || chat.length) return;
+      const openChat = (id) => store.aiHistory(id).then((list) => {
+        loadedChat = id;
+        setChatId(id);
         setChat(list.filter((m) => m.content).map((m) => ({ me: m.role === 'user', text: m.content })));
         rerender();
       });
+
+      if (isAi) {
+        if (!chats.length) {
+          store.aiChats().then((list) => {
+            setChats(list);
+            if (list.length && !chatId) { openChat(list[0].id); return; }
+            rerender();
+          });
+        } else if (chatId && !chat.length && loadedChat !== chatId) {
+          openChat(chatId);
+        }
+      }
+
       root.querySelectorAll('[data-sub]').forEach((b) => b.addEventListener('click', () => push(b.dataset.sub, T[topic].subs[b.dataset.sub]())));
       root.querySelectorAll('[data-topic]').forEach((b) => b.addEventListener('click', () => {
         const k = b.dataset.topic;
@@ -121,20 +155,73 @@ function aiView({ rerender }) {
         rerender();
         window.scrollTo(0, document.body.scrollHeight);
       }));
+      root.querySelectorAll('[data-chat]').forEach((b) => b.addEventListener('click', () => {
+        const id = Number(b.dataset.chat);
+        if (id === chatId) return;
+        openChat(id);
+      }));
+      root.querySelectorAll('[data-new]').forEach((b) => b.addEventListener('click', () => {
+        setChatId(null);
+        setChat([]);
+        loadedChat = null;
+        rerender();
+      }));
+      root.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
+        const id = Number(b.dataset.del);
+        if (!window.confirm('Удалить чат?')) return;
+        store.aiDeleteChat(id).then((ok) => {
+          if (!ok) { toast('Не удалось удалить чат.'); return; }
+          setChats(chats.filter((c) => c.id !== id));
+          if (chatId === id) { setChatId(null); setChat([]); loadedChat = null; }
+          rerender();
+        });
+      }));
+      root.querySelectorAll('[data-confirm]').forEach((b) => b.addEventListener('click', () => {
+        const message = chat[Number(b.dataset.confirm)];
+        if (!message || !message.pending) return;
+        b.disabled = true;
+        store.aiAction(Object.assign({}, message.pending, { chat_id: chatId })).then((result) => {
+          message.pending = null;
+          chat.push({ me: false, text: result ? result.reply : 'Не удалось выполнить действие.' });
+          if (result && /^task_/.test(result.action || '')) store.refreshData().then(() => rerender());
+          rerender();
+          window.scrollTo(0, document.body.scrollHeight);
+        });
+      }));
       root.querySelector('#ask').addEventListener('submit', (e) => {
         e.preventDefault();
         const q = root.querySelector('#q').value.trim();
         if (!q) return;
         setTopic(null);
-        if (!askAi) { push(q, freeAnswer(q)); return; }
+        if (!isAi) { push(q, freeAnswer(q)); return; }
+        const newChat = !chatId;
         chat.push({ me: true, text: q }, { me: false, text: 'Думаю…' });
         rerender(); window.scrollTo(0, document.body.scrollHeight);
-        store.askAi(q).then((reply) => {
-          chat[chat.length - 1] = { me: false, text: reply || freeAnswer(q) };
+        store.askAi(q, { chatId, newChat }).then((result) => {
+          if (!result) {
+            chat[chat.length - 1] = { me: false, text: 'Сервис ИИ недоступен' };
+            chat.push({ me: false, text: freeAnswer(q) });
+            rerender(); window.scrollTo(0, document.body.scrollHeight);
+            return;
+          }
+          if (result.chat_id) {
+            if (newChat) setChats([{ id: result.chat_id, title: result.title || q.slice(0, 60) }].concat(chats.filter((c) => c.id !== result.chat_id)));
+            setChatId(result.chat_id);
+            loadedChat = result.chat_id;
+          }
+          const pending = result.data && result.data.pending ? result.data.pending : null;
+          chat[chat.length - 1] = { me: false, text: result.reply || '…', pending };
+          if (result.action && /^task_/.test(result.action)) { store.refreshData().then(() => rerender()); window.scrollTo(0, document.body.scrollHeight); return; }
           rerender(); window.scrollTo(0, document.body.scrollHeight);
         });
       });
-      root.querySelector('#reset').addEventListener('click', () => { setChat([]); setTopic(null); rerender(); });
+      root.querySelector('#reset').addEventListener('click', () => {
+        setChat([]);
+        setTopic(null);
+        setChatId(null);
+        loadedChat = null;
+        rerender();
+      });
     }
   };
 }

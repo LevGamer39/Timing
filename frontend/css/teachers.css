@@ -65,3 +65,34 @@
   .teacher-person .roster-name { padding-right: 56px; }
   .teacher-delete { position: absolute; top: 16px; right: 16px; }
 }
+
+/* CheckedComboBox: несколько предметов у учителя */
+.msel { position: relative; }
+
+.msel summary {
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer; list-style: none;
+}
+
+.msel summary::-webkit-details-marker { display: none; }
+
+.msel summary svg { flex: none; margin-left: auto; color: var(--muted); transition: transform .15s; }
+
+.msel[open] summary svg { transform: rotate(180deg); }
+
+.msel-val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.msel-list {
+  display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0 0;
+  max-height: 260px; overflow: auto;
+}
+
+.msel-opt {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px;
+  border-radius: 999px; background: var(--soft); cursor: pointer;
+  font-size: 14px; font-weight: 600;
+}
+
+.msel-opt input { accent-color: var(--accent); width: 18px; height: 18px; margin: 0; }
+
+.msel-opt:has(input:checked) { background: var(--accent-soft); color: var(--accent-text); }

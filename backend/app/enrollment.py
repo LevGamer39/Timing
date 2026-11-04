@@ -13,9 +13,28 @@ from app.models import (
     ClassMembership,
     Task,
     TaskStatus,
+    TeacherSubject,
     User,
     UserRole,
 )
+
+
+def set_teacher_subjects(
+    user: User, subjects: list[str], db: Session
+) -> None:
+    """Заменяет список предметов учителя: trim, без пустых и дублей."""
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for raw in subjects:
+        value = (raw or "").strip()
+        key = value.lower()
+        if value and key not in seen:
+            seen.add(key)
+            wanted.append(value)
+    user.subject_links = []
+    db.flush()
+    user.subject_links = [TeacherSubject(subject=value) for value in wanted]
+    db.flush()
 
 
 def refresh_student_grade(student_id: int, db: Session) -> None:

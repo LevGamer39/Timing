@@ -52,6 +52,7 @@
   <textarea class="input" id="lh" style="min-height: 96px" placeholder="Что задано к следующему уроку">{{3}}</textarea>
   <span class="hint">Ученики и родители увидят его в дневнике</span></div>
 <p class="hint" style="margin: 0">Оценено {{4}} из {{5}}</p>
+{{6}}
 <button class="btn ghost sm" type="button" id="del-lesson" style="color: var(--danger)">Удалить урок</button>
 <!-- /fragment:lt -->
 
@@ -119,6 +120,7 @@
 <form class="stack" id="nl" style="margin-top: 12px" novalidate>
   <div class="field"><label class="label" for="nd">Дата</label><input class="input" id="nd" type="date" value="{{0}}" min="{{1}}" max="{{2}}"></div>
   <div class="field"><label class="label" for="ntp">Тип работы</label><select class="input" id="ntp">{{3}}</select></div>
+  <div id="nw">{{4}}</div>
   <p class="error" id="ne" role="alert" hidden></p>
   <div class="row" style="justify-content: flex-end; gap: 8px">
     <button class="btn ghost sm" type="button" data-close>Отмена</button>

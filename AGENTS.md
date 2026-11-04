@@ -29,7 +29,7 @@ VectorVK/
 │   │       ├── attendance.py       # Отметки посещаемости
 │   │       ├── messages.py         # Внутренняя почта школы
 │   │       ├── school.py           # Настройки школы (звонки, периоды, шкала)
-│   │       ├── ai.py               # Оркестрация Ollama (логика — в ai_text.py)
+│   │       ├── ai.py               # ИИ: инструменты Ollama, чаты, сжатие истории
 │   │       ├── notifications.py    # SMTP, APScheduler
 │   │       └── yandex_auth.py      # OAuth Яндекса
 │   ├── tests/                   # pytest, требует PostgreSQL
@@ -170,8 +170,17 @@ parent_task = relationship("Task", back_populates="subtasks", remote_side="[Task
   `attendance_marks`; `class_schedule`; `messages` + `mail_files`;
   `school_settings`. Оценка журнала — обычный `Grade` с
   `journal_lesson_id`, поэтому она сразу видна ученику.
+- У учителя несколько предметов: строки `teacher_subjects` (названия, не
+  ключи фронта), свойство `User.teacher_subjects`. Колонки
+  `users.teacher_subject` больше нет — не возвращай её.
+- В `journal_lessons` и `journal_absences` дату дополняет `slot`: у одного
+  предмета бывает несколько уроков в день. Уникальность —
+  `(class_id, subject, date, slot)` и `(student_id, subject, date, slot)`.
 - `Message.files` — JSON-список объектов `{token, name, size}`. Сами файлы
   лежат в `backend/data/uploads/mail/`, доступ — по токену `mail_files`.
+- ИИ-чаты: `ai_chats` + `ai_messages.chat_id`. `AIChat.summary` и
+  `summary_upto_id` — сжатая старая часть диалога; всё, что новее этого id,
+  уходит модели как есть. История одного чата не растёт в промпте бесконечно.
 
 ### 3. Роутеры (routers/*.py)
 
@@ -201,7 +210,8 @@ def complete_task(task_id: int, db: Session = Depends(get_db),
   отсутствующие таблицы. Несколько идемпотентных DDL-правок
   (`notifications.attempts`, `users.avatar_url` → `TEXT`,
   `parent_link_tokens.code` → `VARCHAR(8)`, `users.login` с бэкфиллом из
-  `email`, `email`/`password_hash` → nullable) применяются в
+  `email`, `email`/`password_hash` → nullable, `ai_messages.chat_id` с
+  переносом старой переписки в чат «История») применяются в
   `_apply_schema_updates()` при старте; всё остальное по-прежнему требует
   ручного `ALTER TABLE` — предупреди об этом явно.
 - `create_tables()` объявлена в `database.py` один раз (с `_ensure_admin_user()`).
@@ -360,7 +370,8 @@ pytest
 | Файл | Что покрывает |
 |---|---|
 | `tests/conftest.py` | Фикстуры: `engine` (session), `db` (откат транзакции), `client` (TestClient), `real_db` (реальные коммиты), фабрики |
-| `test_ai_text.py` | Чистые хелперы ИИ, матчинг задач |
+| `test_ai_text.py` | Чистые хелперы ИИ, матчинг задач, план на неделю, часовые пояса |
+| `test_ai.py` | Чаты и их владелец, история, сжатие, инструменты, подтверждения, фантомные действия |
 | `test_tasks.py` | Владение, запрет правки заданий учителя, каскады |
 | `test_assignments.py` | Раскладка по ученикам, вычисляемые поля, каскадное удаление |
 | `test_grades.py` | Авторизация, массовая выставка, сводки |
@@ -368,6 +379,7 @@ pytest
 | `test_classes_admin.py` | Классы, дашборд учителя, админ-панель |
 | `test_admin_migration.py` | Экспорт/импорт учеников JSON: идемпотентность, перенос с сохранением оценок |
 | `test_users.py` | HTTP-флоу регистрация→подтверждение→вход, auth-зависимости |
+| `test_messages.py` | Получатели почты: неподтверждённые видны, заблокированные — нет |
 | `test_db_constraints.py` | Ограничения БД реально отвергают плохие данные |
 
 ### Правила
@@ -461,6 +473,27 @@ EMAIL_FROM=your@yandex.ru
 
 OLLAMA_URL=http://ollama:11434
 OLLAMA_MODEL=qwen2.5:7b
+
+# Пояс по умолчанию; браузер присылает свой и он важнее. В БД время в UTC.
+TIMEZONE=Europe/Moscow
+
+# Модель не трогаем в коде: при переезде на мощное железо правится только .env.
+AI_NUM_CTX=8192
+AI_TIMEOUT=90
+AI_TEMPERATURE=0.3
+AI_NUM_PREDICT=700
+AI_KEEP_ALIVE=30m
+
+# Базовый контекст и бюджет истории (символы). Остальное модель берёт
+# инструментами; при переполнении история сжимается в резюме.
+AI_CONTEXT_GRADES=3
+AI_CONTEXT_TASKS=30
+AI_CONTEXT_DAYS=7
+AI_HISTORY_CHARS=8000
+AI_COMPACT_KEEP=20
+AI_SUMMARY_CHARS=2000
+AI_CHAT_TITLE_CHARS=60
+AI_PROMPT_EXTRA=
 
 APP_URL=https://vector.myftp.org
 DEBUG=false

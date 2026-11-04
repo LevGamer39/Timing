@@ -8,16 +8,18 @@ import { chat, setChat } from "./shared/teacher.js";
 const surname = (n) => n.split(' ')[0];
 
 function analysisView({ params, go, rerender }) {
-  const [key, date] = params;
+  const [key, date, slotParam] = params;
   if (!store.journalKeys().some((k) => k.key === key)) { go('journal'); return { html: '' }; }
   const j = store.journal(key);
-  const c = j.lessons.findIndex((l) => l.date === date);
+  const slot = Number(slotParam) || 0;
+  const c = j.lessons.findIndex((l) => l.date === date && (Number(l.slot) || 0) === slot);
   if (c < 0) { go('journal/' + key); return { html: '' }; }
-  const id = key + date;
+  const id = key + date + '#' + slot;
   if (chat.id !== id) setChat({ id, msgs: [] });
   const l = j.lessons[c];
+  const cell = store.lessonKey(l);
   const t = store.typeOf(l.type);
-  const vals = j.names.map((n, r) => ({ n, v: j.grades[r + '|' + date] }));
+  const vals = j.names.map((n, r) => ({ n, v: j.grades[r + '|' + cell] }));
   const nums = vals.filter((x) => typeof x.v === 'number');
   if (!nums.length) return {
     html: '<header class="top"><a class="icon-btn" href="#/journal/' + key + '" aria-label="Назад в журнал">' + icon('back') + '</a><h1>Анализ работы</h1></header><div class="card pad empty-state"><p>Оценок по работе пока нет</p><a class="text-action" href="#/journal/' + key + '">Открыть журнал</a></div>'
@@ -47,11 +49,12 @@ function analysisView({ params, go, rerender }) {
     cmp: () => {
       if (prevIdx < 0) return { text: 'Это первая работа такого типа в ' + store.periodWord('prep') + ' — сравнивать не с чем.' };
       const pd = j.lessons[prevIdx].date;
-      const pn = j.names.map((_, r) => j.grades[r + '|' + pd]).filter((v) => typeof v === 'number');
+      const pk = store.lessonKey(j.lessons[prevIdx]);
+      const pn = j.names.map((_, r) => j.grades[r + '|' + pk]).filter((v) => typeof v === 'number');
       const pa = pn.reduce((a, v) => a + v, 0) / (pn.length || 1);
       const up = [], down = [];
       j.names.forEach((n, r) => {
-        const a = j.grades[r + '|' + pd], b = j.grades[r + '|' + date];
+        const a = j.grades[r + '|' + pk], b = j.grades[r + '|' + cell];
         if (typeof a === 'number' && typeof b === 'number') { if (b - a >= 10) up.push(surname(n) + ' +' + (b - a)); if (a - b >= 10) down.push(surname(n) + ' −' + (a - b)); }
       });
       return { text: 'Прошлая такая работа — ' + ddmm(pd) + ', средний ' + fmt(pa) + '. Сейчас ' + fmt(avg) + ' (' + (avg >= pa ? '+' : '−') + fmt(Math.abs(avg - pa)) + ').' + (up.length ? '\nВыросли: ' + up.join(', ') + '.' : '') + (down.length ? '\nУпали: ' + down.join(', ') + '.' : '') };
@@ -75,7 +78,7 @@ function analysisView({ params, go, rerender }) {
     if (/(задани|задач|придума|составь)/.test(s)) return { text: 'Задания не предлагаю — это решает учитель. Могу показать статистику по классу и по работам.' };
     const who = j.names.findIndex((n) => s.includes(surname(n).toLowerCase().slice(0, 5)));
     if (who >= 0) {
-      const g = j.lessons.map((x) => j.grades[who + '|' + x.date]).filter((v) => v !== undefined);
+      const g = j.lessons.map((x) => j.grades[who + '|' + store.lessonKey(x)]).filter((v) => v !== undefined);
       return { text: j.names[who] + ': ' + (g.length ? g.map((v) => score(v)).join(', ') : 'оценок нет') + '. Средний ' + (store.rowAvg(j, who) == null ? '—' : fmt(store.rowAvg(j, who))) + '.' };
     }
     return { text: 'Я считаю статистику по этому журналу: распределение, слабые места, сравнение с прошлой работой, итоги четверти. Можно спросить и про конкретного ученика — по фамилии.' };

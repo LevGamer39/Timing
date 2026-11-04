@@ -167,3 +167,14 @@
 }
 
 @media (max-width: 1023px) { .jt .nm { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; } }
+
+/* Ненавязчивое предупреждение о нагрузке дня в форме урока */
+.load-warn {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--g3-bg);
+  color: var(--g3);
+  font-weight: 600;
+  line-height: 1.35;
+}

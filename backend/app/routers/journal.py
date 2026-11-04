@@ -13,6 +13,7 @@ from datetime import date as date_type
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -59,6 +60,7 @@ class JournalKey(BaseModel):
 
 class JournalLessonModel(BaseModel):
     date: date_type
+    slot: int = 0
     type: str = "lesson"
     homework: str = ""
 
@@ -66,6 +68,7 @@ class JournalLessonModel(BaseModel):
 class JournalMarkModel(BaseModel):
     student_id: int
     date: date_type
+    slot: int = 0
     value: float
     comment: str | None = None
 
@@ -73,6 +76,7 @@ class JournalMarkModel(BaseModel):
 class JournalAbsenceModel(BaseModel):
     student_id: int
     date: date_type
+    slot: int = 0
 
 
 class JournalFinalModel(BaseModel):
@@ -100,12 +104,22 @@ class JournalResponse(BaseModel):
     absences: list[JournalAbsenceModel]
     finals: list[JournalFinalModel]
     work_types: list[JournalWorkTypeModel]
+    # Дата -> работы с весом >= 2 по другим предметам этого класса.
+    class_load: dict[str, int] = {}
 
 
 class JournalLessonIn(BaseModel):
     date: date_type
+    slot: int = 0
     type: str = "lesson"
     homework: str = ""
+
+    @field_validator("slot")
+    @classmethod
+    def _slot_range(cls, value: int) -> int:
+        if not 0 <= value <= 20:
+            raise ValueError("Lesson slot must be between 0 and 20")
+        return value
 
     @field_validator("homework")
     @classmethod
@@ -121,8 +135,16 @@ class JournalLessonIn(BaseModel):
 class JournalMarkIn(BaseModel):
     student_id: int
     date: date_type
+    slot: int = 0
     value: float
     comment: str | None = None
+
+    @field_validator("slot")
+    @classmethod
+    def _slot_range(cls, value: int) -> int:
+        if not 0 <= value <= 20:
+            raise ValueError("Lesson slot must be between 0 and 20")
+        return value
 
     @field_validator("value")
     @classmethod
@@ -147,6 +169,14 @@ class JournalMarkIn(BaseModel):
 class JournalAbsenceIn(BaseModel):
     student_id: int
     date: date_type
+    slot: int = 0
+
+    @field_validator("slot")
+    @classmethod
+    def _slot_range(cls, value: int) -> int:
+        if not 0 <= value <= 20:
+            raise ValueError("Lesson slot must be between 0 and 20")
+        return value
 
 
 class JournalFinalIn(BaseModel):
@@ -467,7 +497,7 @@ def get_journal(
             JournalLesson.class_id == class_id,
             JournalLesson.subject == subject,
         )
-        .order_by(JournalLesson.date)
+        .order_by(JournalLesson.date, JournalLesson.slot)
         .all()
     )
     lesson_ids = [lesson.id for lesson in lessons]
@@ -497,6 +527,25 @@ def get_journal(
         else []
     )
     lesson_by_id = {lesson.id: lesson for lesson in lessons}
+    # Нагрузка дня по другим предметам: с фронта сюда прибавляются работы
+    # этого журнала, поэтому счётчик не устаревает при правках на месте.
+    class_load = {
+        day.isoformat(): int(count)
+        for day, count in (
+            db.query(JournalLesson.date, func.count(JournalLesson.id))
+            .join(
+                JournalWorkType,
+                JournalWorkType.code == JournalLesson.type_code,
+            )
+            .filter(
+                JournalLesson.class_id == class_id,
+                JournalLesson.subject != subject,
+                JournalWorkType.weight >= 2,
+            )
+            .group_by(JournalLesson.date)
+            .all()
+        )
+    }
 
     return JournalResponse(
         class_id=class_.id,
@@ -508,6 +557,7 @@ def get_journal(
         lessons=[
             JournalLessonModel(
                 date=lesson.date,
+                slot=lesson.slot,
                 type=lesson.type_code,
                 homework=lesson.homework or "",
             )
@@ -517,6 +567,7 @@ def get_journal(
             JournalMarkModel(
                 student_id=grade.student_id,
                 date=lesson_by_id[grade.journal_lesson_id].date,
+                slot=lesson_by_id[grade.journal_lesson_id].slot,
                 value=grade.value,
                 comment=grade.comment,
             )
@@ -527,6 +578,7 @@ def get_journal(
             JournalAbsenceModel(
                 student_id=absence.student_id,
                 date=absence.date,
+                slot=absence.slot,
             )
             for absence in absences
         ],
@@ -546,6 +598,7 @@ def get_journal(
             )
             for item in _work_types(db)
         ],
+        class_load=class_load,
     )
 
 
@@ -571,19 +624,19 @@ def save_journal(
     student_ids = {student.id for student in students}
 
     known_types = {item.code for item in _work_types(db)}
-    dates = [lesson.date for lesson in body.lessons]
-    if len(dates) != len(set(dates)):
-        raise HTTPException(400, "Duplicate lesson dates in payload")
+    slots = {(lesson.date, lesson.slot) for lesson in body.lessons}
+    if len(slots) != len(body.lessons):
+        raise HTTPException(400, "Duplicate lesson slots in payload")
 
     for mark in body.marks:
         if mark.student_id not in student_ids:
             raise HTTPException(400, "Student is not in this class")
-        if mark.date not in dates:
+        if (mark.date, mark.slot) not in slots:
             raise HTTPException(400, "Grade date has no lesson")
     for absence in body.absences:
         if absence.student_id not in student_ids:
             raise HTTPException(400, "Student is not in this class")
-        if absence.date not in dates:
+        if (absence.date, absence.slot) not in slots:
             raise HTTPException(400, "Absence date has no lesson")
     for final in body.finals:
         if final.student_id not in student_ids:
@@ -591,7 +644,7 @@ def save_journal(
 
     # --- уроки -------------------------------------------------------------
     existing = {
-        lesson.date: lesson
+        (lesson.date, lesson.slot): lesson
         for lesson in db.query(JournalLesson)
         .filter(
             JournalLesson.class_id == class_id,
@@ -599,28 +652,29 @@ def save_journal(
         )
         .all()
     }
-    for date, lesson in existing.items():
-        if date not in dates:
+    for key, lesson in existing.items():
+        if key not in slots:
             db.delete(lesson)
     db.flush()
 
-    lessons_by_date: dict[date_type, JournalLesson] = {}
+    lessons_by_key: dict[tuple[date_type, int], JournalLesson] = {}
     for item in body.lessons:
-        lesson = existing.get(item.date)
+        lesson = existing.get((item.date, item.slot))
         if lesson is None:
             lesson = JournalLesson(
                 class_id=class_id,
                 subject=subject,
                 date=item.date,
+                slot=item.slot,
                 created_by_id=current_user.id,
             )
             db.add(lesson)
         lesson.type_code = _lesson_type(item.type, known_types)
         lesson.homework = item.homework or None
-        lessons_by_date[item.date] = lesson
+        lessons_by_key[(item.date, item.slot)] = lesson
     db.flush()
 
-    lesson_ids = [lesson.id for lesson in lessons_by_date.values()]
+    lesson_ids = [lesson.id for lesson in lessons_by_key.values()]
 
     # --- оценки ------------------------------------------------------------
     if lesson_ids:
@@ -628,7 +682,7 @@ def save_journal(
             Grade.journal_lesson_id.in_(lesson_ids)
         ).delete(synchronize_session=False)
     for mark in body.marks:
-        lesson = lessons_by_date[mark.date]
+        lesson = lessons_by_key[(mark.date, mark.slot)]
         db.add(
             Grade(
                 student_id=mark.student_id,
@@ -652,6 +706,7 @@ def save_journal(
                 student_id=absence.student_id,
                 subject=subject,
                 date=absence.date,
+                slot=absence.slot,
                 marked_by_id=current_user.id,
             )
         )
