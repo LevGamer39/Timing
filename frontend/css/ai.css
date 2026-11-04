@@ -11,6 +11,34 @@
 
 .quick button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
+.chats {
+  display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 8px;
+  scrollbar-width: none;
+}
+
+.chats::-webkit-scrollbar { display: none; }
+
+.chat-chip {
+  flex: 0 0 auto; max-width: 200px; min-height: 36px; padding: 0 14px;
+  border-radius: 999px; border: 1.5px solid var(--card-border);
+  background: var(--card); font-size: 13px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.chat-chip[aria-current="true"] { background: var(--soft); border-color: var(--accent); }
+
+.chat-chip.new { border-style: dashed; color: var(--muted); }
+
+.chat-chip.del { padding: 0 12px; font-size: 18px; line-height: 1; color: var(--muted); }
+
+.confirm {
+  align-self: flex-end; margin: -4px 4px 12px 0; min-height: 40px;
+  padding: 0 18px; border-radius: 999px; border: 0;
+  background: var(--accent); color: var(--on-accent); font-weight: 700;
+}
+
+.confirm:disabled { opacity: .5; }
+
 .cats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 .cat { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 96px; padding: 16px; border-radius: 20px; border: 1px solid var(--card-border); background: var(--card); text-align: left; }

@@ -9,11 +9,12 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from typing import Iterable, Protocol, Sequence
+from zoneinfo import ZoneInfo
 
-from app.models import TaskPriority
+from app.models import TaskPriority, TaskStatus
 
 # Порог схожести для нечёткого сопоставления по названию. Ниже него
 # совпадение отбрасывается, а не угадывается: ошибочно выбранная задача
@@ -25,8 +26,6 @@ CONTAINS_BONUS = 0.35
 SUBJECT_BONUS = 0.1
 # Сколько кандидатов модель может запросить на сопоставление за раз.
 MAX_MATCH_QUERIES = 5
-
-_WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
 
 WEEKDAY_MAP = {
     "понедельник": 0,
@@ -60,7 +59,7 @@ class TaskLike(Protocol):
 
 
 def clean_ai_text(text: str | None) -> str:
-    """Убирает HTML, который модель иногда подмешивает в ответ."""
+    """Убирает HTML и markdown, который модель подмешивает в ответ."""
     cleaned = (text or "").strip()
     for tag in ("<br>", "<br/>", "<br />"):
         cleaned = cleaned.replace(tag, "\n")
@@ -69,6 +68,11 @@ def clean_ai_text(text: str | None) -> str:
     cleaned = re.sub(r"</?[^>]+>", "", cleaned)
     cleaned = cleaned.replace("&nbsp;", " ")
     cleaned = cleaned.replace("•", "-")
+    # Модель любит заголовки и жирный текст, а чат показывает обычный текст.
+    cleaned = re.sub(r"^\s{0,3}#{1,6}\s*", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"\*\*(.+?)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"__(.+?)__", r"\1", cleaned)
+    cleaned = re.sub(r"^\s*[*+]\s+", "- ", cleaned, flags=re.MULTILINE)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
@@ -138,19 +142,26 @@ def parse_priority(
 
 
 def parse_deadline_hint(
-    deadline_hint: str | None, user_message: str = ""
+    deadline_hint: str | None,
+    user_message: str = "",
+    tz: ZoneInfo | None = None,
 ) -> datetime | None:
     """Переводит русскую датировку в datetime по UTC, насколько может.
 
     Распознаёт «сегодня», «завтра», «послезавтра», названия дней недели и
     ``ДД.ММ[.ГГГГ]``, при желании с ``ЧЧ:ММ``. Всё остальное — и любая
     некорректная дата — даёт ``None``, а не выдуманную дату.
+
+    Дата и время считаются в поясе ``tz`` (поясе устройства ученика): «завтра
+    18:00» должно означать 18:00 там, где он сидит, а не 21:00 по Москве.
+    Без ``tz`` поведение прежнее — UTC.
     """
     source = f"{deadline_hint or ''} {user_message}".strip().lower()
     if not source:
         return None
 
-    now = datetime.now(timezone.utc)
+    zone = tz or timezone.utc
+    now = datetime.now(zone)
     base_date = now.date()
 
     if "послезавтра" in source:
@@ -174,10 +185,23 @@ def parse_deadline_hint(
     time_match = _TIME_RE.search(source)
     hour = int(time_match.group(1)) if time_match else 18
     minute = int(time_match.group(2)) if time_match else 0
-    return datetime(
+    local = datetime(
         base_date.year, base_date.month, base_date.day, hour, minute,
-        tzinfo=timezone.utc,
+        tzinfo=zone,
     )
+    return local.astimezone(timezone.utc)
+
+
+def has_date_hint(text: str) -> bool:
+    """Есть ли в тексте хоть какая-то дата: без неё срок не выдумываем."""
+    source = (text or "").lower()
+    if not source:
+        return False
+    if any(word in source for word in ("сегодня", "завтра", "послезавтра")):
+        return True
+    if _DATE_RE.search(source) or _TIME_RE.search(source):
+        return True
+    return any(name in source for name in WEEKDAY_MAP)
 
 
 def _safe_date(match: re.Match[str], now: datetime) -> datetime.date | None:
@@ -267,12 +291,14 @@ def match_tasks(
 # ---------------------------------------------------------------------------
 
 
-def format_deadline(deadline: datetime | None) -> str:
+def format_deadline(
+    deadline: datetime | None, tz: ZoneInfo | None = None
+) -> str:
     if not deadline:
         return "без срока"
     if deadline.tzinfo is None:
         deadline = deadline.replace(tzinfo=timezone.utc)
-    return deadline.astimezone(timezone.utc).strftime("%d.%m %H:%M")
+    return deadline.astimezone(tz or timezone.utc).strftime("%d.%m %H:%M")
 
 
 def format_priority(priority: TaskPriority) -> str:
@@ -284,26 +310,223 @@ def format_priority(priority: TaskPriority) -> str:
     }[priority]
 
 
-def format_task(task: TaskLike, status: str, index: int | None = None) -> str:
-    prefix = f"{index}. " if index is not None else "- "
-    return (
-        f"{prefix}{task.title} "
-        f"(id: {task.id}, статус: {status}, приоритет: "
-        f"{getattr(task, 'priority', None)}, предмет: "
-        f"{getattr(task, 'subject', None) or 'общее'}, дедлайн: "
-        f"{format_deadline(getattr(task, 'deadline', None))})"
+# ---------------------------------------------------------------------------
+# Расписание на неделю
+# ---------------------------------------------------------------------------
+
+# Оценка нагрузки: урок и задача считаются одинаково, порог в 7 учебных часов
+# соответствует «школьный день + домашняя работа». День помечается перегруженным
+# по любому из трёх признаков — так видны и дни без уроков с тремя дедлайнами.
+PLAN_MINUTES_PER_LESSON = 45
+PLAN_MINUTES_PER_TASK = 45
+PLAN_OVERLOAD_MINUTES = 420
+PLAN_OVERLOAD_TASKS = 3
+PLAN_OVERLOAD_LESSONS = 7
+MAX_PLAN_DAYS = 14
+
+# Кружки и доп. занятия узнаём по названию задачи: «кружок», «секция»,
+# «репетитор». Худший случай — кружок остался в обычных заданиях: он всё равно
+# виден в плане, просто в другом разделе.
+ACTIVITY_WORDS = (
+    "кружок", "секци", "репетитор", "трениров", "музыкальн", "худож",
+    "шахмат", "бассейн", "танц", "спортивн",
+)
+
+
+def looks_like_activity(title: str | None) -> bool:
+    source = (title or "").lower()
+    return any(word in source for word in ACTIVITY_WORDS)
+
+_WEEKDAY_FULL = [
+    "понедельник", "вторник", "среда", "четверг",
+    "пятница", "суббота", "воскресенье",
+]
+
+
+def resolve_timezone(
+    name: str | None, fallback: str = "Europe/Moscow"
+) -> ZoneInfo:
+    """Пояс браузера, а если его нет или он битый — пояс из конфигурации."""
+    for candidate in (name, fallback, "UTC"):
+        if not candidate:
+            continue
+        try:
+            return ZoneInfo(candidate)
+        except Exception:  # noqa: BLE001 - ZoneInfoNotFoundError и пустые строки
+            continue
+    return ZoneInfo("UTC")
+
+
+def _plural(count: int, one: str, few: str, many: str) -> str:
+    if count % 10 == 1 and count % 100 != 11:
+        return one
+    if 2 <= count % 10 <= 4 and not 12 <= count % 100 <= 14:
+        return few
+    return many
+
+
+def _local_date(value: datetime | None, zone) -> date | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(zone).date()
+
+
+def _overload_reason(lessons: int, tasks: int, minutes: int) -> str | None:
+    overloaded = (
+        minutes >= PLAN_OVERLOAD_MINUTES
+        or tasks >= PLAN_OVERLOAD_TASKS
+        or lessons >= PLAN_OVERLOAD_LESSONS
     )
-
-
-def describe_schedule(entries: Sequence) -> list[str]:
-    """Представляет строки расписания строками для промпта."""
-    lines = []
-    for item in entries:
-        lines.append(
-            f"- {_WEEKDAYS[item.weekday]} {item.start_time}-{item.end_time}: "
-            f"{item.subject}"
+    if not overloaded:
+        return None
+    parts = []
+    if lessons >= PLAN_OVERLOAD_LESSONS:
+        parts.append(f"{lessons} {_plural(lessons, 'урок', 'урока', 'уроков')}")
+    if tasks >= PLAN_OVERLOAD_TASKS:
+        parts.append(
+            f"{tasks} {_plural(tasks, 'дедлайн', 'дедлайна', 'дедлайнов')}"
         )
-    return lines
+    if not parts:
+        hours = max(1, round(minutes / 60))
+        parts.append(f"{hours} ч нагрузки")
+    return " и ".join(parts)
+
+
+def build_plan(
+    schedule: Sequence,
+    tasks: Sequence,
+    start_date: date,
+    days: int = 7,
+    tz: ZoneInfo | None = None,
+    activity_ids: Iterable[int] | None = None,
+) -> dict:
+    """Собирает расписание на несколько дней из уроков и задач.
+
+    Задачи, которые модель признала кружками/доп. занятиями, попадают
+    в отдельный список ``activities`` и не считаются дважды. Выполненные
+    задачи пропускаются: план — про то, что ещё предстоит.
+    """
+    zone = tz or timezone.utc
+    days = max(1, min(int(days or 7), MAX_PLAN_DAYS))
+    activity_ids = set(activity_ids or ())
+
+    by_weekday: dict[int, list] = {}
+    for entry in schedule:
+        by_weekday.setdefault(entry.weekday, []).append(entry)
+
+    tasks_by_date: dict[date, list] = {}
+    undated: list = []
+    for task in tasks:
+        if getattr(task, "status", None) == TaskStatus.done:
+            continue
+        key = _local_date(getattr(task, "deadline", None), zone)
+        if key is None:
+            undated.append(task)
+            continue
+        tasks_by_date.setdefault(key, []).append(task)
+
+    planned: list[dict] = []
+    for offset in range(days):
+        day = start_date + timedelta(days=offset)
+        lessons = sorted(
+            by_weekday.get(day.weekday(), []), key=lambda item: item.start_time
+        )
+        day_tasks = sorted(
+            tasks_by_date.get(day, []),
+            key=lambda item: (item.deadline, item.title),
+        )
+        activities = [t for t in day_tasks if t.id in activity_ids]
+        study = [t for t in day_tasks if t.id not in activity_ids]
+        minutes = (
+            PLAN_MINUTES_PER_LESSON * len(lessons)
+            + PLAN_MINUTES_PER_TASK * len(day_tasks)
+        )
+        reason = _overload_reason(len(lessons), len(day_tasks), minutes)
+        planned.append(
+            {
+                "date": day,
+                "weekday": day.weekday(),
+                "lessons": lessons,
+                "tasks": study,
+                "activities": activities,
+                "minutes": minutes,
+                "overloaded": reason is not None,
+                "reason": reason,
+            }
+        )
+
+    return {"days": planned, "undated": undated}
+
+
+def _task_line(task, zone) -> str:
+    priority = getattr(task, "priority", None)
+    try:
+        label = format_priority(
+            priority if isinstance(priority, TaskPriority)
+            else TaskPriority(priority)
+        )
+    except (ValueError, TypeError):
+        label = "важный"
+    subject = getattr(task, "subject", None)
+    parts = [task.title]
+    if subject:
+        parts.append(subject)
+    parts.append("до " + format_deadline(getattr(task, "deadline", None), zone))
+    parts.append(label)
+    return " · ".join(parts)
+
+
+def format_plan(plan: dict, tz: ZoneInfo | None = None) -> str:
+    """Текст расписания для чата. Данные никуда не сохраняются."""
+    zone = tz or timezone.utc
+    days = plan.get("days") or []
+    if not days:
+        return "На эти дни уроков и задач нет."
+
+    first, last = days[0]["date"], days[-1]["date"]
+    lines = [
+        f"Расписание на {len(days)} "
+        f"{_plural(len(days), 'день', 'дня', 'дней')}: "
+        f"{first:%d.%m} – {last:%d.%m}"
+    ]
+
+    for day in days:
+        head = (
+            f"\n{_WEEKDAY_FULL[day['weekday']].capitalize()} "
+            f"{day['date']:%d.%m}"
+        )
+        if day["overloaded"]:
+            head += f" — перегруз: {day['reason']}"
+        lines.append(head)
+
+        if day["lessons"]:
+            lesson_text = "; ".join(
+                f"{item.start_time}–{item.end_time} {item.subject}"
+                + (f" ({item.room})" if item.room else "")
+                for item in day["lessons"]
+            )
+            lines.append(f"Уроки: {lesson_text}")
+        else:
+            lines.append("Уроков нет")
+
+        if day["tasks"]:
+            lines.append("Задания:")
+            lines.extend(f"- {_task_line(task, zone)}" for task in day["tasks"])
+        if day["activities"]:
+            lines.append("Кружки и доп. занятия:")
+            lines.extend(
+                f"- {_task_line(task, zone)}" for task in day["activities"]
+            )
+
+    if plan.get("undated"):
+        lines.append("\nБез срока:")
+        lines.extend(
+            f"- {_task_line(task, zone)}" for task in plan["undated"][:10]
+        )
+
+    return "\n".join(lines)
 
 
 def detect_action(

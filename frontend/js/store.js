@@ -308,6 +308,20 @@ export async function bootstrap() {
   }
 }
 
+// Перечитать данные с сервера, не разлогинивая при сбое сети: нужен после
+// того, как ИИ создал или изменил задачи.
+export async function refreshData() {
+  if (!serverSession) return false;
+  try {
+    const { profile } = await server.load();
+    adopt(profile);
+    applySchoolScale();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function passwordLogin(value, password) {
   try {
     const result = await api.loginPassword(value, password);
@@ -1011,20 +1025,39 @@ export function saveSchool(s) {
 
 // --- ИИ -------------------------------------------------------------------
 
-export async function askAi(message) {
+export async function askAi(message, options) {
   if (!serverSession) return null;
   try {
-    const result = await api.aiChat(message);
-    return (result && result.reply) || null;
+    return await api.aiChat(message, options);
   } catch {
     return null;
   }
 }
 
-export async function aiHistory() {
+export async function aiChats() {
   if (!serverSession) return [];
   try {
-    const list = await api.aiHistory();
+    const list = await api.aiChats();
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function aiDeleteChat(id) {
+  if (!serverSession) return Promise.resolve(false);
+  return api.aiDeleteChat(id).then(() => true).catch(() => false);
+}
+
+export function aiAction(body) {
+  if (!serverSession) return Promise.resolve(null);
+  return api.aiAction(body).catch(() => null);
+}
+
+export async function aiHistory(chatId) {
+  if (!serverSession) return [];
+  try {
+    const list = await api.aiHistory(chatId);
     return Array.isArray(list) ? list : [];
   } catch {
     return [];

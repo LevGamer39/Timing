@@ -81,6 +81,9 @@ class User(Base):
     ai_messages = relationship(
         "AIMessage", back_populates="user", cascade="all, delete-orphan"
     )
+    ai_chats = relationship(
+        "AIChat", back_populates="user", cascade="all, delete-orphan"
+    )
     notifications = relationship(
         "Notification", back_populates="user", cascade="all, delete-orphan"
     )
@@ -366,16 +369,56 @@ class EmailChangeToken(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class AIChat(Base):
+    """Один диалог с ИИ-ассистентом.
+
+    ``summary`` — сжатая старая часть диалога, ``summary_upto_id`` — id
+    последнего сообщения, которое в это сжатие вошло. Всё, что новее,
+    уходит модели как есть, поэтому старый чат не растёт в промпте
+    бесконечно.
+    """
+    __tablename__ = "ai_chats"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    title = Column(String(120), nullable=False, default="Новый чат")
+    summary = Column(Text, nullable=True)
+    summary_upto_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="ai_chats")
+    messages = relationship(
+        "AIMessage",
+        back_populates="chat",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="AIMessage.id",
+    )
+
+
 class AIMessage(Base):
     __tablename__ = "ai_messages"
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # NULL допустим только для строк, созданных до появления чатов:
+    # _apply_schema_updates() привязывает их к архивному чату.
+    chat_id = Column(
+        Integer,
+        ForeignKey("ai_chats.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     role = Column(String(20), nullable=False)  # "user" | "assistant"
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="ai_messages")
+    chat = relationship("AIChat", back_populates="messages")
 
 
 class JournalWorkType(Base):
