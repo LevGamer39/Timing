@@ -27,7 +27,7 @@
 
 .chat-chip[aria-current="true"] { background: var(--soft); border-color: var(--accent); }
 
-.chat-chip.new { border-style: dashed; color: var(--muted); }
+.chat-chip.new { border-style: dashed; color: var(--muted); margin-left: 28px }
 
 .chat-chip.del { padding: 0 12px; font-size: 18px; line-height: 1; color: var(--muted); }
 
