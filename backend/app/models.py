@@ -49,7 +49,6 @@ class User(Base):
     role = Column(SAEnum(UserRole), nullable=False)
     avatar_url = Column(Text, nullable=True)
     grade = Column(String(20), nullable=True)  # для ученика: "10А"
-    teacher_subject = Column(String(100), nullable=True)
     teacher_invite_code = Column(String(16), nullable=True)
     is_active = Column(Boolean, default=False)  # активируется после подтверждения email
     is_verified = Column(Boolean, default=False)
@@ -88,6 +87,38 @@ class User(Base):
     schedule_entries = relationship(
         "Schedule", back_populates="student", cascade="all, delete-orphan"
     )
+    # Учитель ведёт несколько предметов: строки таблицы, а не одна колонка.
+    subject_links = relationship(
+        "TeacherSubject",
+        back_populates="teacher",
+        cascade="all, delete-orphan",
+        order_by="TeacherSubject.id",
+    )
+
+    @property
+    def teacher_subjects(self) -> list[str]:
+        """Названия предметов учителя в порядке назначения."""
+        return [link.subject for link in self.subject_links]
+
+
+class TeacherSubject(Base):
+    """Предмет, который ведёт учитель. У учителя их может быть несколько."""
+
+    __tablename__ = "teacher_subjects"
+    __table_args__ = (
+        UniqueConstraint("user_id", "subject", name="uq_teacher_subjects"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subject = Column(String(100), nullable=False)
+
+    teacher = relationship("User", back_populates="subject_links")
 
 
 class InviteCode(Base):
@@ -363,8 +394,11 @@ class JournalLesson(Base):
 
     __tablename__ = "journal_lessons"
     __table_args__ = (
+        # У одного предмета бывает несколько уроков в день (две алгебры
+        # подряд), поэтому дату дополняет порядковый slot.
         UniqueConstraint(
-            "class_id", "subject", "date", name="uq_journal_lesson_slot"
+            "class_id", "subject", "date", "slot",
+            name="uq_journal_lesson_slot",
         ),
     )
 
@@ -377,6 +411,7 @@ class JournalLesson(Base):
     )
     subject = Column(String(100), nullable=False)
     date = Column(Date, nullable=False, index=True)
+    slot = Column(Integer, nullable=False, default=0, server_default="0")
     type_code = Column(String(40), nullable=False, default="lesson")
     homework = Column(Text, nullable=True)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -416,7 +451,8 @@ class JournalAbsence(Base):
     __tablename__ = "journal_absences"
     __table_args__ = (
         UniqueConstraint(
-            "student_id", "subject", "date", name="uq_journal_absence_slot"
+            "student_id", "subject", "date", "slot",
+            name="uq_journal_absence_slot",
         ),
     )
 
@@ -432,6 +468,7 @@ class JournalAbsence(Base):
     )
     subject = Column(String(100), nullable=False)
     date = Column(Date, nullable=False, index=True)
+    slot = Column(Integer, nullable=False, default=0, server_default="0")
     marked_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

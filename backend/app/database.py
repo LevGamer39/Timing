@@ -142,10 +142,55 @@ def _apply_schema_updates() -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_grades_student_lesson "
         "ON grades (student_id, journal_lesson_id) "
         "WHERE journal_lesson_id IS NOT NULL",
+        # Несколько уроков одного предмета в день: дату дополняет slot.
+        "ALTER TABLE journal_lessons "
+        "ADD COLUMN IF NOT EXISTS slot INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE journal_lessons "
+        "DROP CONSTRAINT IF EXISTS uq_journal_lesson_slot",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_journal_lesson_slot "
+        "ON journal_lessons (class_id, subject, date, slot)",
+        # «Н» привязан к конкретному уроку дня.
+        "ALTER TABLE journal_absences "
+        "ADD COLUMN IF NOT EXISTS slot INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE journal_absences "
+        "DROP CONSTRAINT IF EXISTS uq_journal_absence_slot",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_journal_absence_slot "
+        "ON journal_absences (student_id, subject, date, slot)",
     )
     with engine.begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+        _migrate_teacher_subjects(connection)
+
+
+def _migrate_teacher_subjects(connection) -> None:
+    """Переносит единственный предмет учителя в таблицу ``teacher_subjects``.
+
+    Раньше ``users.teacher_subject`` хранил одну строку. Значения переносятся,
+    после чего колонка удаляется: два источника правды разошлись бы.
+    """
+    legacy = connection.execute(
+        text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'users' "
+            "AND column_name = 'teacher_subject'"
+        )
+    ).first()
+    if not legacy:
+        return
+    connection.execute(
+        text(
+            "INSERT INTO teacher_subjects (user_id, subject) "
+            "SELECT id, btrim(teacher_subject) FROM users "
+            "WHERE teacher_subject IS NOT NULL "
+            "AND btrim(teacher_subject) <> '' "
+            "ON CONFLICT (user_id, subject) DO NOTHING"
+        )
+    )
+    connection.execute(
+        text("ALTER TABLE users DROP COLUMN teacher_subject")
+    )
 
 
 def _ensure_work_types() -> None:

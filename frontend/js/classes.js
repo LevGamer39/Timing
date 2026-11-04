@@ -44,7 +44,10 @@ function classesView({ params, go, rerender }) {
         const needle = query.trim().toLowerCase();
         const hits = teachers.filter((t) => !needle || t.name.toLowerCase().includes(needle));
         show(!!hits.length);
-        list.innerHTML = hits.map((t) => ('<button type="button" role="option" data-id="' + esc(t.id) + '"><b>' + esc(t.name) + '</b>' + (t.subject ? '<span class="muted small">' + esc(subjName(t.subject)) + '</span>' : '') + '</button>')).join('');
+        list.innerHTML = hits.map((t) => {
+          const subs = (t.subjects && t.subjects.length ? t.subjects : (t.subject ? [t.subject] : [])).map(subjName).join(', ');
+          return '<button type="button" role="option" data-id="' + esc(t.id) + '"><b>' + esc(t.name) + '</b>' + (subs ? '<span class="muted small">' + esc(subs) + '</span>' : '') + '</button>';
+        }).join('');
         list.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
           const t = teachers.find((x) => x.id === b.dataset.id);
           value.value = t.id; input.value = t.name;

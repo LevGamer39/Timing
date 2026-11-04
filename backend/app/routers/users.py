@@ -19,7 +19,11 @@ from sqlalchemy.orm import Session
 from app import config
 from app.database import get_db
 from app.dependencies import get_current_user, require_role
-from app.enrollment import add_missing_assignment_tasks, refresh_student_grade
+from app.enrollment import (
+    add_missing_assignment_tasks,
+    refresh_student_grade,
+    set_teacher_subjects,
+)
 from app.models import (
     Class,
     ClassMembership,
@@ -189,7 +193,7 @@ class ProfileResponse(BaseModel):
     last_name: str
     role: UserRole
     grade: str | None
-    teacher_subject: str | None
+    teacher_subjects: list[str]
     avatar_url: str | None
     yandex_id: str | None
     notify_email: bool
@@ -203,7 +207,7 @@ class ProfileResponse(BaseModel):
 class ProfileUpdateRequest(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
-    teacher_subject: str | None = None
+    teacher_subjects: list[str] | None = None
     avatar_url: str | None = None
     notify_email: bool | None = None
     notify_browser: bool | None = None
@@ -230,17 +234,23 @@ class ProfileUpdateRequest(BaseModel):
             raise ValueError(f"Name must be <= {MAX_NAME_LENGTH} characters")
         return value
 
-    @field_validator("teacher_subject")
+    @field_validator("teacher_subjects")
     @classmethod
-    def _subject_length(cls, value: str | None) -> str | None:
+    def _subject_length(cls, value: list[str] | None) -> list[str] | None:
         if value is None:
             return None
-        value = value.strip()
-        if len(value) > MAX_SUBJECT_LENGTH:
-            raise ValueError(
-                f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
-            )
-        return value or None
+        cleaned: list[str] = []
+        for raw in value:
+            subject = (raw or "").strip()
+            if not subject:
+                continue
+            if len(subject) > MAX_SUBJECT_LENGTH:
+                raise ValueError(
+                    f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
+                )
+            if subject.lower() not in {item.lower() for item in cleaned}:
+                cleaned.append(subject)
+        return cleaned
 
     @field_validator("avatar_url")
     @classmethod
@@ -735,11 +745,15 @@ def update_profile(
     Раньше его принимали здесь, и любой ученик мог переписать свой класс.
     """
     updates = body.model_dump(exclude_none=True)
+    subjects = updates.pop("teacher_subjects", None)
     if current_user.role != UserRole.teacher:
-        updates.pop("teacher_subject", None)
+        subjects = None
 
     for field, value in updates.items():
         setattr(current_user, field, value)
+
+    if subjects is not None:
+        set_teacher_subjects(current_user, subjects, db)
 
     # Держим денормализованный grade в синхроне с членством в классе.
     if current_user.role == UserRole.student:

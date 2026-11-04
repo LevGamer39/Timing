@@ -94,6 +94,7 @@ from app.models import (  # noqa: E402
     PasswordResetToken,
     Schedule,
     Task,
+    TeacherSubject,
     User,
     UserRole,
 )
@@ -251,17 +252,21 @@ def admin(make_user):
 
 
 @pytest.fixture()
-def teacher(make_user):
-    return make_user(
-        "teacher@test.local", UserRole.teacher, teacher_subject="Math"
-    )
+def teacher(make_user, db):
+    user = make_user("teacher@test.local", UserRole.teacher)
+    db.add(TeacherSubject(user_id=user.id, subject="Math"))
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @pytest.fixture()
-def other_teacher(make_user):
-    return make_user(
-        "other@test.local", UserRole.teacher, teacher_subject="Physics"
-    )
+def other_teacher(make_user, db):
+    user = make_user("other@test.local", UserRole.teacher)
+    db.add(TeacherSubject(user_id=user.id, subject="Physics"))
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @pytest.fixture()

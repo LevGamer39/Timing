@@ -168,6 +168,12 @@ parent_task = relationship("Task", back_populates="subtasks", remote_side="[Task
   `attendance_marks`; `class_schedule`; `messages` + `mail_files`;
   `school_settings`. Оценка журнала — обычный `Grade` с
   `journal_lesson_id`, поэтому она сразу видна ученику.
+- У учителя несколько предметов: строки `teacher_subjects` (названия, не
+  ключи фронта), свойство `User.teacher_subjects`. Колонки
+  `users.teacher_subject` больше нет — не возвращай её.
+- В `journal_lessons` и `journal_absences` дату дополняет `slot`: у одного
+  предмета бывает несколько уроков в день. Уникальность —
+  `(class_id, subject, date, slot)` и `(student_id, subject, date, slot)`.
 - `Message.files` — JSON-список объектов `{token, name, size}`. Сами файлы
   лежат в `backend/data/uploads/mail/`, доступ — по токену `mail_files`.
 
