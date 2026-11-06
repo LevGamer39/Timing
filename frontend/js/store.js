@@ -456,6 +456,7 @@ export function gradesOf(sid) {
 
 export function week(offset) {
   const s = student();
+  if (!s) return { mon: new Date(), days: [] };
   const base = serverSession ? new Date() : NOW;
   const mon = addDays(mondayOf(base), offset * 7);
   const hw = HOMEWORK[s.id] || [];
@@ -860,7 +861,18 @@ export function removeScheduleLesson(cls, day, index) {
   if (assignments[cls]) delete assignments[cls][day + '|' + index];
   return set({ schedules: { ...state.schedules, [cls]: plan }, schedTeachers: assignments, ...attendanceForSchedule(cls, plan) }) ? '' : SAVE_ERROR;
 }
-export function scheduleOf(key) { const plan = copy(serverSession ? (SCHEDULES[key] || []) : (state.schedules?.[key] || SCHEDULES[key] || [])); while (plan.length < 7) plan.push([]); return plan; }
+export function scheduleOf(key) {
+  let plan = copy(serverSession ? (SCHEDULES[key] || []) : (state.schedules?.[key] || SCHEDULES[key] || []));
+  // Сервер кладёт расписание под сырое название «8А», а classKey даёт «8a»:
+  // «а» кириллицей и «a» латиницей визуально неразличимы, но ключи разные — ищем по нормализации.
+  if (serverSession && !plan.some((d) => d?.length)) {
+    const norm = (s) => String(s || '').toLowerCase().replace(/а/g, 'a').replace(/б/g, 'b').replace(/в/g, 'v').replace(/г/g, 'g');
+    const found = Object.keys(SCHEDULES).find((k) => norm(k) === norm(key) && SCHEDULES[k]?.length);
+    if (found) plan = copy(SCHEDULES[found]);
+  }
+  while (plan.length < 7) plan.push([]);
+  return plan;
+}
 function attendanceForSchedule(cls, plan) {
   const previous = scheduleOf(cls), all = copy(state.attendance || {}), subjects = copy(state.attendanceSubjects || {});
   // «Н» относится к удалённому занятию, а не к следующему предмету на том же номере.

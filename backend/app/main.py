@@ -71,6 +71,17 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+# ES-модули без версионирования в URL: браузер кэширует их жёстко и не видит
+# обновление после деплоя, пока не снесёт кэш вручную. no-cache заставляет
+# перепроверить файл, ETag Starlette всё равно отвечает 304 на неизменный.
+@app.middleware("http")
+async def no_cache_js(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith(("/js/", "/css/", "/html/", "/static/")) or path.endswith(".html") or path == "/":
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
 app.include_router(users.router)
 app.include_router(admin.router)
 app.include_router(classes.router)

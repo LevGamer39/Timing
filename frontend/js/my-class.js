@@ -1,8 +1,9 @@
 import { fragment } from './templates.js';
 import * as store from './store.js';
 import { normalizedBounds } from "./grading.js";
-import { esc, zone, fmt, dayMonth, dayMonthShort, DAYS, weekday, plural, toast, iso, weighted, sheet } from "./ui.js";
+import { esc, icon, zone, fmt, dayMonth, dayMonthShort, DAYS, weekday, plural, toast, iso, weighted, sheet } from "./ui.js";
 import { header } from './common.js';
+import { fileChip, bindFilePreviews } from './shared/file-preview.js';
 import { absenceBlock } from './shared/attendance.js';
 import { periodLabel, classTab, setClassTab } from "./shared/teacher.js";
 
@@ -20,11 +21,13 @@ function mountHomework(cls, root) {
         + '<div class="row" style="gap: 8px"><b class="grow">' + esc(a.title) + '</b><span class="pill">' + (a.submitted_count || 0) + '/' + (a.total_count || 0) + '</span></div>'
         + '<p class="hint" style="margin: 0">' + esc(a.subject) + ' · до ' + deadlineText(a.deadline) + '</p>'
         + (a.description ? '<p style="margin: 0; font-size: 14px">' + esc(a.description) + '</p>' : '')
+        + ((a.files && a.files.length) ? '<div class="file-row">' + a.files.map(fileChip).join('') + '</div>' : '')
         + '<div class="row" style="justify-content: flex-end"><button class="text-action" type="button" data-hw-open="' + a.id + '">Кто сдал</button>'
         + '<button class="text-action" type="button" data-hw-del="' + a.id + '">Удалить</button></div>'
         + '</article>').join('')
         : '<div class="card pad"><p class="muted" style="margin: 0">Заданий пока нет. Выдайте первое — оно появится у учеников в дневнике.</p></div>');
     box.querySelector('#hw-add')?.addEventListener('click', () => createSheet());
+    bindFilePreviews(box);
     box.querySelectorAll('[data-hw-del]').forEach((b) => b.addEventListener('click', () => {
       store.assignmentDelete(b.dataset.hwDel).then((result) => {
         if (typeof result === 'string') return toast(result);
@@ -42,6 +45,30 @@ function mountHomework(cls, root) {
     sheet(fragment('my-class', 'hw-form', [esc(store.account()?.subject || '')]), (el, close) => {
       const err = el.querySelector('#ah-err');
       const fail = (text) => { err.textContent = text; err.hidden = false; };
+      const files = [];
+      const drawFiles = () => {
+        el.querySelector('#ah-files').innerHTML = files.map((f) => '<span class="pill">' + icon('clip', 14) + ' ' + esc(f.name) + '</span>').join('');
+      };
+      el.querySelector('#ah-file')?.addEventListener('change', (e) => {
+        const picked = [...e.target.files];
+        e.target.value = '';
+        if (!picked.length) return;
+        files.push(...picked.map((x) => ({ name: x.name, token: '', pending: true })));
+        drawFiles();
+        picked.forEach((x, i) => {
+          const item = files[files.length - picked.length + i];
+          store.uploadAttachment(x).then((result) => {
+            item.token = result.token || '';
+            item.name = result.name || x.name;
+            delete item.pending;
+            drawFiles();
+          }).catch((error) => {
+            files.splice(files.indexOf(item), 1);
+            drawFiles();
+            toast((error && error.message) || 'Не удалось загрузить файл');
+          });
+        });
+      });
       const deadline = el.querySelector('#ah-deadline');
       const note = el.querySelector('#ah-load');
       const minutesLabel = (m) => (m >= 60 ? ((m / 60) % 1 ? (m / 60).toFixed(1) : m / 60) + ' ч' : m + ' мин');
@@ -89,13 +116,15 @@ function mountHomework(cls, root) {
         if (!title) return fail('Введите задание.');
         if (!subject) return fail('Укажите предмет.');
         if (!raw) return fail('Укажите срок сдачи.');
+        if (files.some((f) => f.pending)) return fail('Подождите, файлы ещё загружаются.');
         store.assignmentCreate({
           title,
           subject,
           description: el.querySelector('#ah-desc').value.trim() || null,
           deadline: new Date(raw).toISOString(),
           class_id: Number(cls.key),
-          priority: el.querySelector('#ah-priority').value
+          priority: el.querySelector('#ah-priority').value,
+          files: files.filter((f) => f.token).map((f) => f.token),
         }).then((result) => {
           if (typeof result === 'string') return fail(result);
           close(); reload(); toast('Задание выдано');

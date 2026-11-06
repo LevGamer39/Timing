@@ -1,6 +1,6 @@
 import { esc, icon, toast, sheet } from './ui.js';
 
-export const copyCode = (value, label = 'код') => `<button class="code-copy" type="button" data-copy="${esc(value)}" aria-label="Скопировать ${esc(label)} ${esc(value)}"><code>${esc(value)}</code><span class="copy-caption" data-copy-label>Скопировать</span>${icon('copy', 18)}</button>`;
+export const copyCode = (value, label = 'код') => `<span class="code-copy-wrap"><button class="code-copy" type="button" data-copy="${esc(value)}" aria-label="Скопировать ${esc(label)}"><code class="code-blur" data-code-blur title="Нажми, чтобы показать">${esc(value)}</code><span class="copy-caption" data-copy-label>Скопировать</span>${icon('copy', 18)}</button><span class="hint code-hint">код скрыт — нажми, чтобы показать</span></span>`;
 
 export async function copyText(value, environment = globalThis) {
   try {
@@ -20,6 +20,13 @@ export async function copyText(value, environment = globalThis) {
 
 export function bindCopy(root) {
   root.addEventListener('click', async (event) => {
+    const blur = event.target.closest('[data-code-blur]');
+    if (blur) {
+      blur.classList.toggle('revealed');
+      const hint = blur.closest('.code-copy-wrap')?.querySelector('.code-hint');
+      if (hint) hint.textContent = blur.classList.contains('revealed') ? 'код виден — копируй' : 'код скрыт — нажми, чтобы показать';
+      return;
+    }
     const button = event.target.closest('[data-copy]');
     if (!button || button.dataset.copying === 'true') return;
     button.dataset.copying = 'true';

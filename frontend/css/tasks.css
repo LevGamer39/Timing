@@ -4,6 +4,7 @@
 .task-date { margin: 0; }
 .task-date.late { color: var(--danger, #c0392b); }
 .task-desc { margin: 2px 0 0; font-size: 14px; opacity: .85; white-space: pre-wrap; }
-.task-prio { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2, #eee); white-space: nowrap; }
+.task-prio { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: #E8E8EA; color: #1A1410; white-space: nowrap; }
+.task-prio.prio-medium { background: #E8E8EA; color: #1A1410; }
 .task-prio.prio-high { background: #fde2e1; color: #a5281b; }
 .task-prio.prio-low { background: #e6f4ea; color: #1e6b3a; }

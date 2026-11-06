@@ -2,6 +2,7 @@ import { fragment } from './templates.js';
 import * as store from './store.js';
 import { esc, icon, toast, sheet } from './ui.js';
 import { header } from './common.js';
+import { fileChip, bindFilePreviews } from './shared/file-preview.js';
 
 const PRIORITY = { high: 'Высокая', medium: 'Обычная', low: 'Низкая' };
 
@@ -31,6 +32,7 @@ function taskCard(t, i) {
     + '</label>'
     + '<p class="hint task-date' + (overdue(t) ? ' late' : '') + '">' + (overdue(t) ? 'Ждёт закрытия: ' : 'Срок: ') + dateLabel(t.deadline) + '</p>'
     + (t.description ? '<p class="task-desc">' + esc(t.description) + '</p>' : '')
+    + ((t.files && t.files.length) ? '<div class="file-row">' + t.files.map(fileChip).join('') + '</div>' : '')
     + '<div class="row" style="gap: 6px; justify-content: flex-end">'
     + '<button class="text-action" type="button" data-sub="' + i + '">Подзадачи</button>'
     + '<button class="text-action" type="button" data-ai="' + i + '">ИИ-план</button>'
@@ -132,6 +134,7 @@ function tasksView({ rerender }) {
         }).catch(() => toast(store.SAVE_ERROR));
       }));
       box.querySelectorAll('[data-sub]').forEach((b) => b.addEventListener('click', () => subtaskSheet(items[Number(b.dataset.sub)], reload)));
+      bindFilePreviews(box);
       box.querySelectorAll('[data-ai]').forEach((b) => b.addEventListener('click', () => {
         const task = items[Number(b.dataset.ai)];
         b.disabled = true;

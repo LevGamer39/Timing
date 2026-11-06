@@ -133,6 +133,7 @@ class TaskResponse(BaseModel):
     created_at: datetime
     completed_at: datetime | None
     accepted_at: datetime | None
+    files: list[dict] = []
 
     class Config:
         from_attributes = True

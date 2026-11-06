@@ -232,6 +232,8 @@ def download_attachment(
     if not row:
         raise HTTPException(404, "File not found")
     allowed = row.uploader_id == current_user.id
+    if not allowed and current_user.role == UserRole.admin:
+        allowed = True
     if not allowed:
         messages = (
             db.query(Message)
@@ -245,11 +247,111 @@ def download_attachment(
             token in (message.files or "") for message in messages
         )
     if not allowed:
+        # Файл задания: учитель класса или ученик классаAssignment
+        from app.models import Assignment, ClassMembership
+        import json
+
+        for assignment in db.query(Assignment).all():
+            try:
+                data = json.loads(assignment.files or "[]")
+            except Exception:
+                continue
+            tokens = {x.get("token") for x in data if isinstance(x, dict)}
+            if token not in tokens:
+                continue
+            if assignment.teacher_id == current_user.id:
+                allowed = True
+                break
+            if db.query(ClassMembership).filter(
+                ClassMembership.class_id == assignment.class_id,
+                ClassMembership.student_id == current_user.id,
+            ).first():
+                allowed = True
+                break
+    if not allowed:
         raise HTTPException(404, "File not found")
     path = Path(row.path)
     if not path.is_file():
         raise HTTPException(404, "File not found")
     return FileResponse(path, filename=row.name)
+
+
+@router.get("/attachments/{token}/render")
+def render_attachment_page(
+    token: str,
+    page: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """PNG первой (или указанной) страницы PDF — для нашего полноэкранного просмотра.
+
+    Проверка доступа та же, что у скачивания, поэтому студент/учитель видят
+    только «свой» документ. Пропустил PDF → 415.
+    """
+    from fastapi.responses import Response as _Resp
+
+    row = db.query(MailFile).filter(MailFile.token == token).first()
+    if not row:
+        raise HTTPException(404, "File not found")
+
+    allowed = row.uploader_id == current_user.id
+    if not allowed and current_user.role == UserRole.admin:
+        allowed = True
+    if not allowed:
+        allowed = any(
+            token in (message.files or "")
+            for message in db.query(Message)
+            .filter(
+                Message.recipient_id == current_user.id,
+                Message.deleted_by_recipient.is_(False),
+            )
+            .all()
+        )
+    if not allowed:
+        from app.models import Assignment, ClassMembership
+        import json
+
+        for assignment in db.query(Assignment).all():
+            try:
+                data = json.loads(assignment.files or "[]")
+            except Exception:
+                continue
+            tokens = {x.get("token") for x in data if isinstance(x, dict)}
+            if token not in tokens:
+                continue
+            if assignment.teacher_id == current_user.id:
+                allowed = True
+                break
+            if db.query(ClassMembership).filter(
+                ClassMembership.class_id == assignment.class_id,
+                ClassMembership.student_id == current_user.id,
+            ).first():
+                allowed = True
+                break
+    if not allowed:
+        raise HTTPException(404, "File not found")
+
+    path = Path(row.path)
+    if not path.is_file():
+        raise HTTPException(404, "File not found")
+
+    try:
+        import pymupdf
+    except Exception:
+        raise HTTPException(415, "PDF preview is not available")
+
+    try:
+        doc = pymupdf.open(str(path))
+        if page < 0 or page >= len(doc):
+            raise HTTPException(404, "Page not found")
+        pix = doc.load_page(page).get_pixmap(dpi=200)
+        data = pix.tobytes("png")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(415, "Not a valid PDF")
+
+    return _Resp(content=data, media_type="image/png")
 
 
 @router.post("", response_model=MessageOut, status_code=201)

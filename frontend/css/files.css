@@ -1,0 +1,37 @@
+/* Встроенный просмотр файлов: полноэкранный viewer, картинки — панорама+зум, PDF — на всё окно */
+.file-pill { cursor: pointer; border: 1px solid var(--card-border); background: var(--soft); color: var(--text); min-height: 32px; }
+.file-pill:hover { background: var(--accent-soft); }
+.file-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+
+.file-viewer {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; flex-direction: column;
+  background: #0A0A0B; color: #F4EEE9;
+}
+.file-viewer-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px; border-bottom: 1px solid rgba(255, 255, 255, .12);
+  flex-wrap: wrap;
+}
+.file-viewer-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-viewer-hint {
+  margin: 0; padding: 6px 12px; font-size: 12px; color: rgba(255,255,255,.6);
+  border-top: 1px solid rgba(255,255,255,.08); text-align: center;
+}
+.file-stage {
+  flex: 1; min-height: 0; overflow: hidden;
+  display: grid; place-items: center;
+  touch-action: none; cursor: grab;
+  background: #E9E9EA;
+  animation: none;
+}
+.file-stage:active { cursor: grabbing; }
+.file-stage img {
+  max-width: 92vw; max-height: 78dvh;
+  user-select: none; -webkit-user-drag: none;
+  transition: transform .18s ease-out;
+  will-change: transform;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .25);
+  border-radius: 8px;
+}
+.file-viewer-frame { flex: 1; min-height: 0; width: 100vw; height: 100%; border: 0; background: #fff; display: block; }

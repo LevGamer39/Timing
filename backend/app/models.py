@@ -226,6 +226,7 @@ class Assignment(Base):
     class_id = Column(Integer, ForeignKey("classes.id"), nullable=False)
     teacher_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     priority = Column(SAEnum(TaskPriority), default=TaskPriority.medium)
+    files = Column(Text, nullable=True)  # JSON-массив {token, name, size}
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     class_ = relationship("Class", back_populates="assignments")
@@ -273,6 +274,20 @@ class Task(Base):
         cascade="all, delete-orphan",
     )
     parent_task = relationship("Task", back_populates="subtasks", remote_side="[Task.id]")
+
+    @property
+    def files(self) -> list[dict]:
+        """Файлы задания учителя (из assignment.files), для ответа TaskResponse."""
+        import json
+
+        raw = getattr(self.assignment, "files", None) if self.assignment else None
+        if not raw:
+            return []
+        try:
+            data = json.loads(raw)
+            return [x for x in data if isinstance(x, dict) and x.get("token")] if isinstance(data, list) else []
+        except Exception:
+            return []
 
 
 class Grade(Base):

@@ -5,10 +5,13 @@ services:
     restart: unless-stopped
     volumes:
       - ./frontend:/frontend:ro
+      - ./backend-data:/app/data
     env_file:
       - .env
     expose:
       - "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
     environment:
       DB_HOST: vector_db
       DB_PORT: 5432

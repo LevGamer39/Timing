@@ -2,11 +2,12 @@
 // Чтобы убрать, удалите файлы demo-bot.*, строку импорта в js/main.js, ссылку на demo-bot.css в index.html и "demo-bot" в html/manifest.json.
 import { fragment } from './templates.js';
 import * as store from './store.js';
-import { esc } from './ui.js';
+import { esc, toast } from './ui.js';
 import { copyCode } from './clipboard.js';
 import { loginAddons } from './login.js';
 
-const DEMO = [['belov.artem', 'Ученик · Артём'], ['belova.anna', 'Родитель · Анна'], ['ivanova.maria', 'Учитель · Мария Петровна'], ['kuznetsova.elena', 'Администратор · Елена Андреевна']];
+const DEMO = [['demo.student', 'Ученик · Артём'], ['demo.parent', 'Родитель · Анна'], ['demo.teacher', 'Учитель · Мария Петровна'], ['demo.admin', 'Администратор · Елена Андреевна']];
+const DEMO_PASSWORD = 'demo2024';
 
 let botLogin = '', botCode = '', botMessage = '', inviteValue = '', needsLogin = false, suggestions = [], botError = false;
 let maxUserId = 'demo-max-' + crypto.randomUUID();
@@ -28,7 +29,12 @@ loginAddons.push({
   footer: () => fragment('demo-bot', 'demo-access', [DEMO.map(([key, label]) => '<button class="btn ghost sm grow" type="button" data-demo="' + key + '">' + esc(label) + '</button>').join('')]),
   mount(root, { rerender, enter, setLogin }) {
     const say = (result, ok) => { botError = !!result.error; botMessage = result.error || ok; };
-    root.querySelectorAll('[data-demo]').forEach((b) => b.addEventListener('click', () => enter(b.dataset.demo)));
+    root.querySelectorAll('[data-demo]').forEach((b) => b.addEventListener('click', async () => {
+      // Демо = реальные аккаунты из БД, вход через серверный пароль (без localStorage-демо).
+      const result = await store.passwordLogin(b.dataset.demo, DEMO_PASSWORD);
+      if (result.error) return toast(result.error);
+      enter(result.login || b.dataset.demo);
+    }));
     root.querySelector('#invite-f')?.addEventListener('submit', (e) => {
       e.preventDefault(); inviteValue = root.querySelector('#invite').value;
       const result = store.redeemInvitation(inviteValue, { maxUserId });

@@ -3,6 +3,7 @@ import * as store from './store.js';
 import { esc, icon, mailDate, dayMonth, toast } from "./ui.js";
 import { header, confirmSheet } from './common.js';
 import { query, setQuery } from "./shared/mail.js";
+import { openFilePreview } from './shared/file-preview.js';
 
 const initials = (name) => name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
@@ -77,7 +78,7 @@ function mailView({ params, path, rerender }) {
         const token = b.dataset.openFile;
         if (!token) return toast('Файл был приложен без загрузки — скачать его нельзя.');
         const name = b.closest('.row')?.querySelector('.grow')?.textContent || 'файл';
-        store.downloadAttachment(token, name).catch(() => toast('Не удалось скачать файл'));
+        openFilePreview(token, name);
       }));
       const del = root.querySelector('#del');
       if (del) del.addEventListener('click', () => confirmSheet('Удалить письмо?', 'Письмо «' + letter.subject + '» пропадёт из почты.', 'Удалить', () => {

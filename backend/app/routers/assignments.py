@@ -44,6 +44,7 @@ class AssignmentCreate(BaseModel):
     class_id: int
     priority: TaskPriority = TaskPriority.medium
     student_ids: list[int] | None = None
+    files: list[str] = []  # токены MailFile, загруженных через /api/messages/attachments
 
     @field_validator("title")
     @classmethod
@@ -114,6 +115,7 @@ class AssignmentResponse(BaseModel):
     submitted_count: int
     total_count: int
     class_name: str | None
+    files: list[dict] = []
 
 
 class AssignmentStudentProgress(BaseModel):
@@ -231,6 +233,15 @@ def _to_response(
     counts: tuple[int, int],
     class_name: str | None,
 ) -> AssignmentResponse:
+    import json as _json
+
+    def _parse(v):
+        try:
+            d = _json.loads(v) if v else []
+            return [x for x in d if isinstance(x, dict) and x.get("token")] if isinstance(d, list) else []
+        except Exception:
+            return []
+
     submitted, total = counts
     return AssignmentResponse(
         id=assignment.id,
@@ -244,6 +255,7 @@ def _to_response(
         submitted_count=submitted,
         total_count=total,
         class_name=class_name,
+        files=_parse(getattr(assignment, "files", None)),
     )
 
 
@@ -300,6 +312,20 @@ def create_assignment(
         teacher_id=current_user.id,
         priority=body.priority,
     )
+    if body.files:
+        from app.models import MailFile
+        import json as _json
+
+        rows = db.query(MailFile).filter(
+            MailFile.token.in_(body.files),
+            MailFile.uploader_id == current_user.id,
+        ).all()
+        by_token = {r.token: r for r in rows}
+        resolved = [
+            {"token": by_token[t].token, "name": by_token[t].name, "size": by_token[t].size}
+            for t in body.files if t in by_token
+        ]
+        assignment.files = _json.dumps(resolved, ensure_ascii=False) if resolved else None
     db.add(assignment)
     db.flush()
 
