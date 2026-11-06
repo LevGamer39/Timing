@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://vector.myftp.org/static/schemas/student-migration.schema.json",
-  "title": "VectorVK: перенос учеников",
-  "description": "Строгая схема обмена учениками между установками VectorVK. Лишние поля запрещены: импорт отвергает документ, который ей не соответствует. Оценки привязаны к ученику, а не к классу, поэтому история переезжает вместе с профилем.",
+  "$id": "https://timing.myftp.org/static/schemas/student-migration.schema.json",
+  "title": "TimingVK: перенос учеников",
+  "description": "Строгая схема обмена учениками между установками TimingVK. Лишние поля запрещены: импорт отвергает документ, который ей не соответствует. Оценки привязаны к ученику, а не к классу, поэтому история переезжает вместе с профилем.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "students"],

@@ -57,7 +57,7 @@ class Settings:
     # MAX Bot API
     max_bot_token: str
 
-    # Внутренний бэкенд VectorVK
+    # Внутренний бэкенд TimingVK
     backend_url: str
     backend_timeout: float
 

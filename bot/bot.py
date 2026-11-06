@@ -1,4 +1,4 @@
-"""Точка входа MAX-бота VectorVK."""
+"""Точка входа MAX-бота TimingVK."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from services.notifications import NotificationRelay
 from services.reminders import ReminderScheduler
 from services.voice import Transcriber
 
-logger = logging.getLogger("vector_bot")
+logger = logging.getLogger("timing_bot")
 
 COMMANDS = [
     BotCommand(name="start", description="Главное меню"),

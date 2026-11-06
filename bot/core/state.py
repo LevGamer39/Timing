@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("vector_bot.state")
+logger = logging.getLogger("timing_bot.state")
 
 
 class StateStore:

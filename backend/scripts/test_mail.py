@@ -29,24 +29,24 @@ from app.routers.notifications import (  # noqa: E402
 
 TEMPLATES = {
     "plain": (
-        "Тестовое письмо — Vector",
+        "Тестовое письмо — Timing",
         _notification_html(
             "Тестовое письмо",
             "Если вы читаете это, SMTP настроен верно.",
         ),
     ),
     "verify": (
-        "Ваш код подтверждения — Vector",
+        "Ваш код подтверждения — Timing",
         _email_verification_html("123456"),
     ),
     "reset": (
-        "Сброс пароля — Vector",
+        "Сброс пароля — Timing",
         _password_reset_html(
             f"{config.APP_URL}/reset-password-new?token=test-token-123"
         ),
     ),
     "overdue": (
-        "Просрочена задача — Vector",
+        "Просрочена задача — Timing",
         _overdue_task_html("Математика, параграф 12", "17.10.2026 23:59"),
     ),
 }

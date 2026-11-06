@@ -68,7 +68,7 @@ def smtp(monkeypatch):
     monkeypatch.setattr(notifications.smtplib, "SMTP", _Captured)
     monkeypatch.setattr(notifications.smtplib, "SMTP_SSL", _Captured)
     monkeypatch.setattr(config, "SMTP_HOST", "smtp.example.org")
-    monkeypatch.setattr(config, "EMAIL_FROM", "noreply@vector.myftp.org")
+    monkeypatch.setattr(config, "EMAIL_FROM", "noreply@timing.myftp.org")
     monkeypatch.setattr(config, "SMTP_TIMEOUT", 15)
     return _Captured
 

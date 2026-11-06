@@ -21,7 +21,7 @@ from core.state import StateStore
 from services.backend import Backend, BackendError
 from texts import esc
 
-logger = logging.getLogger("vector_bot.notifications")
+logger = logging.getLogger("timing_bot.notifications")
 
 
 class NotificationRelay:

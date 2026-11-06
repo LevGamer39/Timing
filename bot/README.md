@@ -1,4 +1,4 @@
-# VectorVK MAX Bot
+# TimingVK MAX Bot
 
 Бот для мессенджера MAX. Работает как клиент к существующему FastAPI-бэкенду
 `backend/` и не подключается к PostgreSQL напрямую.

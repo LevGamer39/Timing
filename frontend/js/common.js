@@ -39,7 +39,7 @@ export function header() {
   const learner = ['student', 'parent'].includes(store.role());
   return `
 <header class="top brandbar">
-  <a class="brand" href="#/home" aria-label="Вектор, на главную">${logo(28)}<span>Вектор</span></a>
+  <a class="brand" href="#/home" aria-label="Тайминг, на главную">${logo(28)}<span>Тайминг</span></a>
   ${learner ? `<a class="btn ai-secondary sm" href="#/ai">${icon('spark', 18)}Спросить ИИ</a>` : ''}
   ${notificationButton()}
   <a class="icon-btn gear" href="#/settings" aria-label="Настройки">${icon('gear', 20)}</a>

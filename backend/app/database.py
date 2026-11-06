@@ -295,16 +295,16 @@ def _ensure_demo_data() -> None:
 
     demo_accounts = (
         # (login, email, password, first_name, last_name, role, grade, is_active)
-        ("demo.admin", "admin@demo.vector", "demo2024", "Елена Андреевна", "Кузнецова", UserRole.admin, None, True),
-        ("demo.teacher", "teacher@demo.vector", "demo2024", "Мария Петровна", "Иванова", UserRole.teacher, None, True),
-        ("demo.student", "student@demo.vector", "demo2024", "Артём", "Белов", UserRole.student, "8А", True),
-        ("demo.parent", "parent@demo.vector", "demo2024", "Анна Викторовна", "Белова", UserRole.parent, None, True),
-        ("demo.student2", "student2@demo.vector", "demo2024", "Полина", "Егорова", UserRole.student, "8А", True),
-        ("demo.student3", "student3@demo.vector", "demo2024", "Даниил", "Громов", UserRole.student, "8А", True),
-        ("demo.wait1", "wait1@demo.vector", None, "Дмитрий", "Смирнов", UserRole.student, "8А", False),
-        ("demo.wait2", "wait2@demo.vector", None, "Алина", "Козлова", UserRole.student, "8Б", False),
-        ("demo.teacher2", "teacher2@demo.vector", None, "Ольга", "Смирнова", UserRole.teacher, None, False),
-        ("demo.teacher3", "teacher3@demo.vector", None, "Игорь", "Павлов", UserRole.teacher, None, False),
+        ("demo.admin", "admin@demo.timing", "demo2024", "Елена Андреевна", "Кузнецова", UserRole.admin, None, True),
+        ("demo.teacher", "teacher@demo.timing", "demo2024", "Мария Петровна", "Иванова", UserRole.teacher, None, True),
+        ("demo.student", "student@demo.timing", "demo2024", "Артём", "Белов", UserRole.student, "8А", True),
+        ("demo.parent", "parent@demo.timing", "demo2024", "Анна Викторовна", "Белова", UserRole.parent, None, True),
+        ("demo.student2", "student2@demo.timing", "demo2024", "Полина", "Егорова", UserRole.student, "8А", True),
+        ("demo.student3", "student3@demo.timing", "demo2024", "Даниил", "Громов", UserRole.student, "8А", True),
+        ("demo.wait1", "wait1@demo.timing", None, "Дмитрий", "Смирнов", UserRole.student, "8А", False),
+        ("demo.wait2", "wait2@demo.timing", None, "Алина", "Козлова", UserRole.student, "8Б", False),
+        ("demo.teacher2", "teacher2@demo.timing", None, "Ольга", "Смирнова", UserRole.teacher, None, False),
+        ("demo.teacher3", "teacher3@demo.timing", None, "Игорь", "Павлов", UserRole.teacher, None, False),
     )
     
     db = SessionLocal()
@@ -520,7 +520,7 @@ def _ensure_demo_data() -> None:
                 sender_id=admin.id,
                 recipient_id=student.id,
                 subject="Приветствие в системе",
-                body="Добро пожаловать в Vector! Это демо-аккаунт для ознакомления с функционалом.",
+                body="Добро пожаловать в Timing! Это демо-аккаунт для ознакомления с функционалом.",
                 is_read=False,
             ))
         # Дополнительно: письмо от учителя ученику

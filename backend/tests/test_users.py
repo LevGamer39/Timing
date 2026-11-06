@@ -487,7 +487,7 @@ def test_missing_page_returns_shell_not_500(client):
     for path in ("/parent/dashboard", "/student/profile"):
         response = client.get(path)
         assert response.status_code == 200, path
-        assert "<title>Вектор</title>" in response.text, path
+        assert "<title>Тайминг</title>" in response.text, path
 
 
 def test_existing_page_is_served(client):

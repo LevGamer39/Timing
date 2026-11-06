@@ -9,7 +9,7 @@ from core.security import hash_user_id, mask_token
 from core.state import StateStore
 from services.backend import Backend, BackendError
 
-logger = logging.getLogger("vector_bot.sessions")
+logger = logging.getLogger("timing_bot.sessions")
 
 
 class SessionManager:

@@ -24,9 +24,9 @@ from pathlib import Path
 from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_USER = "vector"
+DEFAULT_USER = "timing"
 DEFAULT_PORT = "5432"
-TEST_DB = "vectordb_test"
+TEST_DB = "timingdb_test"
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -60,7 +60,7 @@ def url_from_env_file() -> str:
 
 
 def mask(url: str) -> str:
-    """Hide the password: postgresql://vector:***@127.0.0.1:5432/..."""
+    """Hide the password: postgresql://timing:***@127.0.0.1:5432/..."""
     return re.sub(r"(://[^:/@]+:)[^@]*@", r"\1***@", url)
 
 
@@ -99,8 +99,8 @@ def main() -> int:
             "",
             "Check:",
             "  1. docker compose up -d db",
-            '  2. docker exec vector_db psql -U vector -d vectordb '
-            '-c "CREATE DATABASE vectordb_test;"',
+            '  2. docker exec timing_db psql -U timing -d timingdb '
+            '-c "CREATE DATABASE timingdb_test;"',
         ]
         if source.startswith("environment"):
             lines += [

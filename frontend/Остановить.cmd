@@ -6,8 +6,8 @@ for /f "tokens=5" %%p in ('netstat -ano ^| findstr ":5173 " ^| findstr LISTENING
   set found=1
 )
 if defined found (
-  echo Вектор остановлен.
+  echo Тайминг остановлен.
 ) else (
-  echo Вектор не был запущен.
+  echo Тайминг не был запущен.
 )
 ping -n 3 127.0.0.1 >nul

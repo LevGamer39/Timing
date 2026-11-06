@@ -38,7 +38,7 @@ from app.models import (
     UserRole,
 )
 
-logger = logging.getLogger("vector.users")
+logger = logging.getLogger("timing.users")
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -426,7 +426,7 @@ def _build_email_change_html(confirm_link: str, new_email: str) -> str:
       <p style="margin:0 0 8px;color:rgba(255,255,255,0.3);font-size:12px;">Или скопируйте ссылку в браузер:</p>
       <p style="margin:0;background:rgba(255,255,255,0.05);border-radius:8px;padding:10px 14px;font-size:12px;color:rgba(255,255,255,0.4);word-break:break-all;">{_escape(confirm_link)}</p>
     """
-    return _base_template("Смена email — Vector", content)
+    return _base_template("Смена email — Timing", content)
 
 
 # ---------------------------------------------------------------------------
@@ -841,7 +841,7 @@ def request_email_change(
     confirm_link = f"{config.APP_URL}/settings/change-email/confirm?token={token}"
     send_email(
         new_email,
-        "Подтверждение смены email — Vector",
+        "Подтверждение смены email — Timing",
         _build_email_change_html(confirm_link, new_email),
     )
     return {"message": "Письмо с подтверждением отправлено на новую почту."}

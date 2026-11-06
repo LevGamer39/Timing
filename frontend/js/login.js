@@ -16,8 +16,8 @@ function loginView({ go, rerender }) {
     html: fragment('login', 'screen', [logo(56), esc(loginValue), max ? 'Код из MAX' : 'Пароль', max ? 'text' : 'password',
       max ? 'inputmode="numeric" maxlength="6" autocomplete="one-time-code"' : 'autocomplete="current-password"',
       max ? '<button class="btn ghost block" type="button" id="password-login">Войти по паролю</button>' : '',
-      max ? '<p class="hint">В боте «Вектор» в MAX нажмите «Вход», затем введите здесь свой логин и полученный код. Код действует 5 минут.</p>'
-        : '<p class="hint">Логин и пароль вы задаёте при регистрации в боте «Вектор» в MAX. Или войдите по коду из бота.</p>',
+      max ? '<p class="hint">В боте «Тайминг» в MAX нажмите «Вход», затем введите здесь свой логин и полученный код. Код действует 5 минут.</p>'
+        : '<p class="hint">Логин и пароль вы задаёте при регистрации в боте «Тайминг» в MAX. Или войдите по коду из бота.</p>',
       loginAddons.map((addon) => addon.html?.(mode) ?? '').join(''),
       loginAddons.map((addon) => addon.footer?.() ?? '').join(''),
       max && loginAddons.length ? 'auth-max' : '']),

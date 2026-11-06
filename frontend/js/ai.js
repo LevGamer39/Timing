@@ -92,7 +92,7 @@ function freeAnswer(q) {
   if (subj && subj.avg != null) return goalText(subj.list, Math.min(mark(subj.avg) + 1, 5));
   if (/(напис|учител|почт)/.test(t)) return HELP['Как написать учителю'];
   if (/(тем|тёмн|темн|светл)/.test(t)) return HELP['Как сменить тему'];
-  return 'Я отвечаю про оценки, цели, неделю и про то, как пользоваться Вектором. Попробуй, например: «Где я проседаю?», «Что нужно для 5 по химии?» или «Когда каникулы?»';
+  return 'Я отвечаю про оценки, цели, неделю и про то, как пользоваться Таймингом. Попробуй, например: «Где я проседаю?», «Что нужно для 5 по химии?» или «Когда каникулы?»';
 }
 
 const genitive = (n) => /[гкхжшчщ]а$/.test(n) ? n.slice(0, -1) + 'и' : /а$/.test(n) ? n.slice(0, -1) + 'ы'
@@ -121,8 +121,8 @@ function aiView({ rerender }) {
   const s = store.student();
 
   const hello = isParent
-    ? 'Здравствуйте! Подскажу по оценкам ' + genitive(s.first) + ' и по самому Вектору. С чего начнём?'
-    : 'Привет, ' + s.first + '! Помогаю разобраться с оценками и с Вектором. Домашку за тебя не решаю. С чего начнём?';
+    ? 'Здравствуйте! Подскажу по оценкам ' + genitive(s.first) + ' и по самому Таймингу. С чего начнём?'
+    : 'Привет, ' + s.first + '! Помогаю разобраться с оценками и с Таймингом. Домашку за тебя не решаю. С чего начнём?';
 
   return {
     html: fragment("ai", "screen", [icon('back'), icon('spark', 20), icon('reset', 20), Object.entries(T).map(([k, v]) => ("<button class=\"cat\" type=\"button\" data-topic=\"" + (k) + "\" style=\"min-height: 0\"" + (topic === k ? ' aria-current="true"' : '') + "><b>" + (esc(v.title)) + "</b><span>" + (esc(v.desc)) + "</span></button>")).join(''), isParent ? ' ребёнка' : '', esc(hello), chat.map((m, i) => messageHtml(m, i)).join(''), topic ? ("\n      <div class=\"quick\">" + (Object.keys(T[topic].subs).map((k) => ("<button type=\"button\" data-sub=\"" + (esc(k)) + "\">" + (esc(k)) + "</button>")).join('')) + "<button type=\"button\" data-topic=\"\">Другая тема</button></div>") : chat.length ? ("\n      <div class=\"quick only-mobile\">" + (Object.entries(T).map(([k, v]) => ("<button type=\"button\" data-topic=\"" + (k) + "\">" + (esc(v.title)) + "</button>")).join('')) + "</div>") : ("\n      <div class=\"cats\">" + (Object.entries(T).map(([k, v]) => ("<button class=\"cat\" type=\"button\" data-topic=\"" + (k) + "\"><b>" + (esc(v.title)) + "</b><span>" + (esc(v.desc)) + "</span></button>")).join('')) + "</div>"), icon('send', 20), isParent ? ' ребёнка' : '', chatStrip(isAi)]),    mount(root) {

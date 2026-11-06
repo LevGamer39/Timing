@@ -8,8 +8,8 @@ export function registerFragments(page, source) {
 }
 
 export async function loadTemplates() {
-  if (globalThis.__VECTOR_TEMPLATES__) {
-    for (const [page, source] of Object.entries(globalThis.__VECTOR_TEMPLATES__)) registerFragments(page, source);
+  if (globalThis.__TIMING_TEMPLATES__) {
+    for (const [page, source] of Object.entries(globalThis.__TIMING_TEMPLATES__)) registerFragments(page, source);
     return;
   }
   const base = new URL('../html/', import.meta.url);

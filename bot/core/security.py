@@ -7,7 +7,7 @@ import hmac
 
 from config import settings
 
-_WEAK_SALTS = {"", "changeme", "vectorvk-default-salt"}
+_WEAK_SALTS = {"", "changeme", "timingvk-default-salt"}
 
 
 def _salt() -> bytes:
@@ -22,7 +22,7 @@ def _salt() -> bytes:
         return raw.encode()
     return hmac.new(
         settings.max_bot_token.encode(),
-        b"vectorvk:user-id-salt:v1",
+        b"timingvk:user-id-salt:v1",
         hashlib.sha256,
     ).digest()
 

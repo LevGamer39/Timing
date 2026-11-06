@@ -63,7 +63,7 @@ DB_USER = _str("DB_USER", "user")
 DB_PASS = _str("DB_PASS", "")
 DB_HOST = _str("DB_HOST", "localhost")
 DB_PORT = _int("DB_PORT", 5432)
-DB_NAME = _str("DB_NAME", "vectordb")
+DB_NAME = _str("DB_NAME", "timingdb")
 
 
 def build_database_url() -> str:
@@ -75,10 +75,10 @@ def build_database_url() -> str:
     )
 
 # ─── Админ при первом запуске ──────────────────────────────────────────────────
-ADMIN_EMAIL = _str("ADMIN_EMAIL", "admin@vector.local")
+ADMIN_EMAIL = _str("ADMIN_EMAIL", "admin@timing.local")
 ADMIN_PASSWORD = _str("ADMIN_PASSWORD")
 ADMIN_FIRST_NAME = _str("ADMIN_FIRST_NAME", "Admin")
-ADMIN_LAST_NAME = _str("ADMIN_LAST_NAME", "Vector")
+ADMIN_LAST_NAME = _str("ADMIN_LAST_NAME", "Timing")
 
 # ─── Авторизация ──────────────────────────────────────────────────────────────
 SECRET_KEY = _str("SECRET_KEY")

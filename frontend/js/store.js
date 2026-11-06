@@ -6,7 +6,7 @@ import { iso, parse, addDays, mondayOf, weekday, weighted, mark } from './ui.js'
 import * as api from './api.js';
 import * as server from './server.js';
 
-const KEY = 'vector-demo-v1';
+const KEY = 'timing-demo-v1';
 export const SAVE_ERROR = 'Не удалось сохранить. Данные могли измениться в другой вкладке. Повторите действие.';
 const DEFAULTS = {
   session: null,                 // { login, role, childId }
@@ -48,7 +48,7 @@ function refresh(conflict = false) {
   state = load(latest);
   generation++;
   // Серверная сессия живёт в памяти и не проверяется по демо-данным: иначе
-  // запись vector-demo-v1 из другой вкладки выкидывала вошедшего на форму входа.
+  // запись timing-demo-v1 из другой вкладки выкидывала вошедшего на форму входа.
   state.session = session && (serverSession || accountByLogin(session.login)) ? session : null;
   if (state.session?.role === 'parent') {
     const ids = account().children;

@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
         stop_scheduler()
 
 
-app = FastAPI(title="Vector API", lifespan=lifespan)
+app = FastAPI(title="Timing API", lifespan=lifespan)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 frontend_path = os.path.abspath(os.path.join(current_dir, "../../frontend"))

@@ -17,7 +17,7 @@ from keyboards import tasks_keyboard
 from services.backend import Backend, BackendError
 from texts import esc, fmt_deadline, summary_block, tasks_block
 
-logger = logging.getLogger("vector_bot.reminders")
+logger = logging.getLogger("timing_bot.reminders")
 
 
 class ReminderScheduler:

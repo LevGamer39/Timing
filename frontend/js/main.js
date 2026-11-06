@@ -105,7 +105,7 @@ function topbar(active) {
   const learner = LEARNER.includes(store.role());
   return `
 <header class="topbar">
-  <a class="brand" href="#/home" aria-label="Вектор, на главную">${logo(30)}<span>Вектор</span></a>
+  <a class="brand" href="#/home" aria-label="Тайминг, на главную">${logo(30)}<span>Тайминг</span></a>
   <nav class="tabs" aria-label="Разделы"><div class="tabs-in">${menuItems(active, true)}</div></nav>
   <div class="top-act">
     ${learner ? `<a class="btn ai-secondary sm" href="#/ai">${icon('spark', 18)}Спросить ИИ</a>` : ''}
@@ -171,7 +171,7 @@ function render(external = false) {
   mountedScreen = screen;
   screenData = dataForScreen(); screenRights = rights();
   const h1 = app.querySelector('main h1, .auth h1');
-  document.title = (h1 ? h1.textContent.trim() + ' · ' : '') + 'Вектор';
+  document.title = (h1 ? h1.textContent.trim() + ' · ' : '') + 'Тайминг';
 }
 
 let lastPath = '';
@@ -208,4 +208,4 @@ try {
   lastPath = location.hash;
   render();
 }
-catch (error) { console.error(error); app.innerHTML = '<main class="auth card pad"><h1>Не удалось открыть Вектор</h1><p>Проверьте подключение и обновите страницу.</p><button class="btn" id="retry" type="button">Повторить</button></main>'; document.getElementById('retry').addEventListener('click', () => location.reload()); }
+catch (error) { console.error(error); app.innerHTML = '<main class="auth card pad"><h1>Не удалось открыть Тайминг</h1><p>Проверьте подключение и обновите страницу.</p><button class="btn" id="retry" type="button">Повторить</button></main>'; document.getElementById('retry').addEventListener('click', () => location.reload()); }

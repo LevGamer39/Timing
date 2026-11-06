@@ -12,7 +12,7 @@ import httpx
 
 from config import settings
 
-logger = logging.getLogger("vector_bot.ai")
+logger = logging.getLogger("timing_bot.ai")
 
 SUBJECTS = {
     "матем": "математика",
@@ -70,14 +70,14 @@ _WEEKDAYS = {
     "воскресень": 6,
 }
 
-TASK_PROMPT = """Ты — школьный помощник VectorVK. Разбери текст и верни ТОЛЬКО JSON без пояснений:
+TASK_PROMPT = """Ты — школьный помощник TimingVK. Разбери текст и верни ТОЛЬКО JSON без пояснений:
 {{"is_homework": true|false, "title": "краткая суть задания", "subject": "предмет или null", "deadline": "YYYY-MM-DD или null", "priority": "low|medium|high|critical"}}
 Сегодня {today}. Если срок не указан — deadline null. Предмет выбирай из школьной программы. Приоритет high — если срок сегодня/завтра или сказано «срочно».
 
 Текст:
 {text}"""
 
-BATCH_PROMPT = """Ты — школьный помощник VectorVK. Ниже сообщения из чата класса.
+BATCH_PROMPT = """Ты — школьный помощник TimingVK. Ниже сообщения из чата класса.
 Верни ТОЛЬКО JSON-массив объектов для каждого сообщения, которое является домашним заданием:
 [{{"index": 0, "title": "суть", "subject": "предмет или null", "deadline": "YYYY-MM-DD или null", "priority": "low|medium|high|critical"}}]
 Пропускай болтовню, вопросы и сообщения без задания. Сегодня {today}.
@@ -273,7 +273,7 @@ async def chat_reply(text: str, context: str = "") -> str:
     """Запасной ИИ-чат, если бэкенд недоступен."""
 
     system = (
-        "Ты — дружелюбный помощник школьника VectorVK. Отвечай кратко, "
+        "Ты — дружелюбный помощник школьника TimingVK. Отвечай кратко, "
         "по-русски, без выдуманных фактов."
     )
     if context:

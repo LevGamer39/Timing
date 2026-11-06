@@ -204,7 +204,7 @@ def test_http_flow_serves_schema_and_guards_import(client, real_db):
 
     schema = client.get(migration.SCHEMA_PATH)
     assert schema.status_code == 200
-    assert schema.json()["title"].startswith("VectorVK")
+    assert schema.json()["title"].startswith("TimingVK")
 
     body = {
         "$schema": "https://example.org/whatever.json",

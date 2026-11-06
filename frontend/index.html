@@ -6,17 +6,17 @@
 // Тема до первой отрисовки и до загрузки модулей/шаблонов.
 (() => {
   let saved;
-  try { saved = JSON.parse(localStorage.getItem('vector-demo-v1') || '{}'); } catch {}
+  try { saved = JSON.parse(localStorage.getItem('timing-demo-v1') || '{}'); } catch {}
   const theme = saved?.theme;
   document.documentElement.dataset.theme = theme === 'light' || theme === 'dark' ? theme : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   document.documentElement.dataset.accent = saved?.accent || 'orange';
 })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Вектор — демонстрация школьного электронного дневника и журнала для ученика, родителя, учителя и администратора.">
+<meta name="description" content="Тайминг — демонстрация школьного электронного дневника и журнала для ученика, родителя, учителя и администратора.">
 <meta name="theme-color" content="#F6F4F1" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#070708" media="(prefers-color-scheme: dark)">
-<title>Вектор</title>
+<title>Тайминг</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8 -9 620 470'%3E%3Cpath fill='%23D4652C' d='M137 0H535C577 0 604 31 604 70C604 87 598 100 591 113L383 428Q370 452 344 452H298Q267 452 278 426L440 154Q454 130 427 113H201Q183 113 174 99L122 36Q111 17 124 6Q130 0 137 0Z'/%3E%3Cpath fill='%23D4652C' d='M24 165H301C329 165 347 196 333 220L208 429Q194 452 169 452H127Q95 452 107 426L229 271Q242 250 221 250H57Q43 250 33 240L4 199Q-3 188 5 177Q12 165 24 165Z'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

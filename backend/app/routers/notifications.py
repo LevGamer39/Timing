@@ -27,7 +27,7 @@ from app.models import (
 )
 from app.stats import summary, waiting, week_bounds, zone
 
-logger = logging.getLogger("vector.notifications")
+logger = logging.getLogger("timing.notifications")
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -95,7 +95,7 @@ def _base_template(title: str, content: str) -> str:
                 <tr>
                   <td>
                     <div style="display:inline-block;background:linear-gradient(135deg,#8B79FF,#6b5ce7);border-radius:12px;padding:8px 14px;">
-                      <span style="color:#fff;font-size:15px;font-weight:700;">Vector</span>
+                      <span style="color:#fff;font-size:15px;font-weight:700;">Timing</span>
                     </div>
                   </td>
                   <td align="right">
@@ -113,8 +113,8 @@ def _base_template(title: str, content: str) -> str:
           <tr>
             <td style="background:#13121a;border-radius:0 0 20px 20px;padding:20px 40px;border:1px solid rgba(255,255,255,0.05);border-top:none;">
               <p style="margin:0;color:rgba(255,255,255,0.25);font-size:12px;line-height:1.5;">
-                Это автоматическое письмо от Vector. Не отвечайте на него.<br>
-                © {datetime.now(timezone.utc).year} Vector — учебный планировщик
+                Это автоматическое письмо от Timing. Не отвечайте на него.<br>
+                © {datetime.now(timezone.utc).year} Timing — учебный планировщик
               </p>
             </td>
           </tr>
@@ -136,10 +136,10 @@ def _email_verification_html(code: str) -> str:
         <div style="letter-spacing:12px;font-size:40px;font-weight:800;color:#8B79FF;font-variant-numeric:tabular-nums;">{_escape(code)}</div>
       </div>
       <p style="margin:0;color:rgba(255,255,255,0.35);font-size:13px;line-height:1.6;">
-        Если вы не регистрировались в Vector — просто проигнорируйте это письмо.
+        Если вы не регистрировались в Timing — просто проигнорируйте это письмо.
       </p>
     """
-    return _base_template("Подтверждение email — Vector", content)
+    return _base_template("Подтверждение email — Timing", content)
 
 
 def _password_reset_html(reset_link: str) -> str:
@@ -157,7 +157,7 @@ def _password_reset_html(reset_link: str) -> str:
       <p style="margin:0 0 8px;color:rgba(255,255,255,0.3);font-size:12px;">Или скопируйте ссылку в браузер:</p>
       <p style="margin:0;background:rgba(255,255,255,0.05);border-radius:8px;padding:10px 14px;font-size:12px;color:rgba(255,255,255,0.4);word-break:break-all;">{link}</p>
     """
-    return _base_template("Сброс пароля — Vector", content)
+    return _base_template("Сброс пароля — Timing", content)
 
 
 def _overdue_task_html(task_title: str, deadline_str: str) -> str:
@@ -176,7 +176,7 @@ def _overdue_task_html(task_title: str, deadline_str: str) -> str:
         </a>
       </div>
     """
-    return _base_template("Задание ждёт закрытия — Vector", content)
+    return _base_template("Задание ждёт закрытия — Timing", content)
 
 
 def _notification_html(title: str, body: str) -> str:
@@ -189,7 +189,7 @@ def _notification_html(title: str, body: str) -> str:
         </a>
       </div>
     """
-    return _base_template(f"{title} — Vector", content)
+    return _base_template(f"{title} — Timing", content)
 
 
 # ---------------------------------------------------------------------------
@@ -236,11 +236,11 @@ def send_email(to: str, subject: str, body_html: str) -> None:
 
 
 def send_verification_email(to: str, code: str) -> None:
-    send_email(to, "Ваш код подтверждения — Vector", _email_verification_html(code))
+    send_email(to, "Ваш код подтверждения — Timing", _email_verification_html(code))
 
 
 def send_password_reset_email(to: str, reset_link: str) -> None:
-    send_email(to, "Сброс пароля — Vector", _password_reset_html(reset_link))
+    send_email(to, "Сброс пароля — Timing", _password_reset_html(reset_link))
 
 
 # ---------------------------------------------------------------------------
@@ -458,7 +458,7 @@ async def _job_check_overdue() -> None:
                     await asyncio.to_thread(
                         send_email,
                         user.email,
-                        f"Задание ждёт закрытия: {task.title} — Vector",
+                        f"Задание ждёт закрытия: {task.title} — Timing",
                         _overdue_task_html(task.title, deadline_str),
                     )
                     mailed += 1

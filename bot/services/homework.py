@@ -20,7 +20,7 @@ from services.ai import looks_like_homework, parse_batch, parse_task
 from services.voice import Transcriber, audio_url, body_text
 from texts import PROCESSING_TEXT, esc
 
-logger = logging.getLogger("vector_bot.homework")
+logger = logging.getLogger("timing_bot.homework")
 
 MAX_BUFFER = 50
 

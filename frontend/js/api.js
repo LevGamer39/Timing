@@ -1,12 +1,12 @@
 // Сетевой слой SPA. Единственное место, где живёт fetch к /api.
 // Демо-режим (без токена) работает на данных из store.js/demo-*.js.
 
-const TOKEN_KEY = 'vector-token';
+const TOKEN_KEY = 'timing-token';
 
 // При локальной разработке страницу отдаёт http.server на 5173, а API —
 // uvicorn на 8000. В проде всё приходит с одного origin, поэтому база пустая.
 const API_BASE = (() => {
-  if (globalThis.__VECTOR_API__ !== undefined) return String(globalThis.__VECTOR_API__).replace(/\/$/, '');
+  if (globalThis.__TIMING_API__ !== undefined) return String(globalThis.__TIMING_API__).replace(/\/$/, '');
   if (typeof location === 'undefined') return '';
   const local = ['127.0.0.1', 'localhost'].includes(location.hostname);
   if (local && location.port && location.port !== '8000' && location.port !== '80' && location.port !== '443') return 'http://127.0.0.1:8000';

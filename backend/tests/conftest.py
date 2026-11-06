@@ -10,9 +10,9 @@
 например созданную так::
 
     docker compose up -d db
-    docker exec vector_db psql -U vector -d vectordb \
-        -c "CREATE DATABASE vectordb_test;"
-    $env:TEST_DATABASE_URL="postgresql://vector:pw@127.0.0.1:5432/vectordb_test"
+    docker exec timing_db psql -U timing -d timingdb \
+        -c "CREATE DATABASE timingdb_test;"
+    $env:TEST_DATABASE_URL="postgresql://timing:pw@127.0.0.1:5432/timingdb_test"
 
 Схема один раз за сессию пересоздаётся, а каждый тест выполняется внутри
 транзакции, которая затем откатывается.
@@ -25,14 +25,14 @@ if not TEST_DATABASE_URL:
     raise RuntimeError(
         "TEST_DATABASE_URL is not set. These tests require PostgreSQL.\n"
         "  docker compose up -d db\n"
-        '  docker exec vector_db psql -U vector -d vectordb '
-        '-c "CREATE DATABASE vectordb_test;"\n'
+        '  docker exec timing_db psql -U timing -d timingdb '
+        '-c "CREATE DATABASE timingdb_test;"\n'
         "  cd backend\n"
         "  python run_tests.py -v\n"
         "\n"
         "Or set it manually (only for the current shell):\n"
-        '  $env:TEST_DATABASE_URL="postgresql://vector:<DB_PASS>'
-        '@127.0.0.1:5432/vectordb_test"\n'
+        '  $env:TEST_DATABASE_URL="postgresql://timing:<DB_PASS>'
+        '@127.0.0.1:5432/timingdb_test"\n'
         "  pytest -v\n"
         "\n"
         "Use 127.0.0.1, not localhost: Docker listens on IPv4."

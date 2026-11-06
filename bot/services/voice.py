@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 from maxapi.enums.attachment import AttachmentType
 
-logger = logging.getLogger("vector_bot.voice")
+logger = logging.getLogger("timing_bot.voice")
 
 
 def _plain_text(body: Any) -> str | None:
