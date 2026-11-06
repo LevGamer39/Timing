@@ -332,15 +332,18 @@ nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend чер
 
 | # | Проблема | Файл |
 |---|---|---|
-| 10 | `pydantic-settings` и `PyYAML` установлены, но не используются | `backend/requirements.txt` |
-| 11 | Фреймворка миграций нет: `create_all()` не меняет созданные таблицы; часть колонок догоняется в `_apply_schema_updates()` | `backend/app/database.py` |
-| 12 | Планировщик рассчитан на один процесс uvicorn | `backend/app/routers/notifications.py` |
 | 13 | Свой SMTP невозможен: домен на `no-ip.com`, нет контроля над TXT- и PTR-записями | `docker-compose.yml`, DNS |
 
-Про 12: `docker-compose` запускает один `uvicorn`, поэтому джобы не
-дублируются. При нескольких воркерах каждый поднимет свой APScheduler —
-сначала поставь `ENABLE_SCHEDULER=false` лишним, либо вынеси джобы в
-отдельный процесс.
+Исправлены ранее и убраны из таблицы: №10 — `pydantic-settings`/`PyYAML`
+удалены из `backend/requirements.txt`; №11 — ограничения моделей
+(`uq_class_memberships_student`, `uq_grades_student_assignment`,
+`ck_grades_value_range`) догоняются идемпотентным DDL в
+`_apply_schema_updates()` (полноценного фреймворка миграций по-прежнему нет —
+новые колонки всё равно требуют ручного `ALTER TABLE` или правки там же);
+№12 — планировщик выбирает один процесс-лидер через PostgreSQL
+advisory-лок (`SCHEDULER_LOCK_KEY` в `notifications.py`), лишним воркерам
+джобы не нужны, `ENABLE_SCHEDULER=false` для них больше не обязателен
+(но лидер не переизбирается до рестарта: упал лидер — рестартуй остальных).
 
 ## Testing Guidelines
 

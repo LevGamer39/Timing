@@ -191,7 +191,7 @@ PostgreSQL, 28 таблиц. `create_all()` создаёт только отсу
 | `uq_class_memberships_student` | Ученик ровно в одном классе (это же предполагает `User.grade`) |
 | `ck_grades_value_range` | Оценка 1..5 |
 
-На базе, поднятой до этих ограничений, их не будет (проверка уходит в приложение) — добавить вручную `ALTER TABLE grades / class_memberships` или пересоздать схему на пустой базе.
+На старой базе ограничения догоняет `_apply_schema_updates()` при старте (идемпотентный DO-блок по `pg_constraint`). Если на базе есть дубли/оценки вне 1..5, старт упадёт — сначала почистить данные.
 
 ## Отправка писем
 
@@ -204,6 +204,7 @@ Python `smtplib` (stdlib). Транспорт по порту: `465` — `SMTP_S
 - **MAX** (основной): `notifications` → бот забирает `/api/notifications/max/pending`, подтверждает `/delivered`; `users.notify_max` выключает целиком
 - **Email** (опциональный, `notify_email`), **браузер** (хранятся в БД), ожидание overdue, `Notification.dedupe_key` (уникален с `user_id`)
 - Настройки юзера: `notify_email`, `notify_browser`, `notify_max`
+- Планировщик (письма, overdue, сводка) запускается только в одном процессе-лидере: PostgreSQL advisory-лок (`SCHEDULER_LOCK_KEY` в `notifications.py`), остальные воркеры uvicorn джобы не дублируют
 
 ## MAX-бот и голосовые
 
@@ -217,12 +218,9 @@ Python `smtplib` (stdlib). Транспорт по порту: `465` — `SMTP_S
 
 | # | Проблема | Файл |
 |---|---|---|
-| 11 | Миграций нет: `create_all()` не меняет таблицы | `backend/app/database.py` |
-| 12 | Планировщик на 1 процесс uvicorn | `backend/app/routers/notifications.py` |
-| 10 | `pydantic-settings` и `PyYAML` установлены, но не используются | `backend/requirements.txt` |
 | 13 | MAX не доставляет боту голосовые: `message_created` приходит без `message` | `bot/services/voice.py` |
 
-Про 12: `docker-compose` запускает один `uvicorn`, поэтому джобы не дублируются. При нескольких воркерах каждый поднимет свой APScheduler — поставь `ENABLE_SCHEDULER=false` лишним либо вынеси джобы в отдельный процесс.
+Исправлены ранее и убраны из таблицы: №10 — `pydantic-settings`/`PyYAML` удалены из `backend/requirements.txt`; №11 — ограничения моделей догоняются идемпотентным DDL в `_apply_schema_updates()` (полноценных миграций по-прежнему нет); №12 — планировщик выбирает один процесс-лидер через PostgreSQL advisory-лок (`SCHEDULER_LOCK_KEY` в `notifications.py`), при рестарте лидера остальные воркеры джобы не подхватывают — нужен рестарт.
 
 Про 13: ограничение на стороне MAX ([maxapi#191](https://github.com/love-apples/maxapi/issues/191), не исправлено). Воспроизводится и в long polling, и в webhook. Обработка готова (см. «MAX-бот и голосовые» выше) — ждать только, пока MAX начнёт отдавать аудио.
 

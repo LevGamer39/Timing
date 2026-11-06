@@ -11,10 +11,11 @@ from email.mime.text import MIMEText
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app import config
-from app.database import SessionLocal, get_db
+from app.database import SessionLocal, engine, get_db
 from app.dependencies import get_current_user
 from app.models import (
     Notification,
@@ -35,6 +36,14 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 # остановки продолжал держать ссылку на закрытый цикл, и следующий старт
 # приложения (или следующий тест) падал с "Event loop is closed".
 scheduler: AsyncIOScheduler | None = None
+
+# Ключ сессионного advisory-лока, выбирающего один процесс-лидер среди
+# воркеров uvicorn. Без него каждый воркер поднимал свой APScheduler и
+# джобы (письма, overdue, сводка) запускались N раз.
+SCHEDULER_LOCK_KEY = 20261106
+# Соединение, держащее лок. None — лок не брали (не Postgres или джобы
+# выключены), True — лок не нужен (не Postgres).
+_scheduler_lock_connection = None
 
 NOTIFICATION_PAGE_LIMIT = 100
 
@@ -572,13 +581,41 @@ async def _job_weekly_summary() -> None:
         db.close()
 
 
+def _try_acquire_scheduler_lock():
+    """Пытается взять сессионный advisory-лок лидера планировщика.
+
+    Возвращает соединение, держащее лок, True, если лок не нужен
+    (не Postgres), или None, если лидером уже является другой процесс.
+    Лок живёт, пока открыто соединение, и отпускается сам при падении
+    процесса; соединение держит вызывающий (см. ``stop_scheduler``).
+    """
+    if engine.dialect.name != "postgresql":
+        return True
+    connection = engine.connect()
+    acquired = connection.execute(
+        text("SELECT pg_try_advisory_lock(:key)"),
+        {"key": SCHEDULER_LOCK_KEY},
+    ).scalar()
+    if not acquired:
+        connection.close()
+        return None
+    return connection
+
+
 def start_scheduler() -> None:
     """Регистрирует и запускает фоновые джобы для текущего цикла событий."""
-    global scheduler
+    global scheduler, _scheduler_lock_connection
 
     if not config.ENABLE_SCHEDULER:
         return
     if scheduler is not None and scheduler.running:
+        return
+
+    # Несколько воркеров uvicorn: планировщик поднимает только лидер.
+    # Остальные процессы работают без джобов, пока лидер жив.
+    _scheduler_lock_connection = _try_acquire_scheduler_lock()
+    if _scheduler_lock_connection is None:
+        logger.info("scheduler: лидер уже выбран, джобы не запускаю")
         return
 
     scheduler = AsyncIOScheduler()
@@ -612,11 +649,14 @@ def start_scheduler() -> None:
 
 
 def stop_scheduler() -> None:
-    global scheduler
+    global scheduler, _scheduler_lock_connection
 
     if scheduler is not None and scheduler.running:
         scheduler.shutdown(wait=False)
     scheduler = None
+    if _scheduler_lock_connection not in (None, True):
+        _scheduler_lock_connection.close()
+    _scheduler_lock_connection = None
 
 
 # ---------------------------------------------------------------------------

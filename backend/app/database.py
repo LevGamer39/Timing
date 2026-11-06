@@ -157,6 +157,28 @@ def _apply_schema_updates() -> None:
         # Счётчик попыток доставки письма: без колонки backoff не рос.
         "ALTER TABLE notifications "
         "ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0",
+        # Ограничения из моделей: create_all создаёт их только на новой
+        # базе, на старой таблиц они отсутствуют. DO-блок — идемпотентно.
+        # Внимание: на базе с дублями/оценками вне 1..5 старт упадёт —
+        # сначала почистить данные (это и есть цель ограничения).
+        "DO $$ BEGIN IF NOT EXISTS ("
+        "SELECT 1 FROM pg_constraint "
+        "WHERE conname = 'uq_class_memberships_student') THEN "
+        "ALTER TABLE class_memberships "
+        "ADD CONSTRAINT uq_class_memberships_student "
+        "UNIQUE (student_id); END IF; END $$",
+        "DO $$ BEGIN IF NOT EXISTS ("
+        "SELECT 1 FROM pg_constraint "
+        "WHERE conname = 'uq_grades_student_assignment') THEN "
+        "ALTER TABLE grades "
+        "ADD CONSTRAINT uq_grades_student_assignment "
+        "UNIQUE (student_id, assignment_id); END IF; END $$",
+        "DO $$ BEGIN IF NOT EXISTS ("
+        "SELECT 1 FROM pg_constraint "
+        "WHERE conname = 'ck_grades_value_range') THEN "
+        "ALTER TABLE grades "
+        "ADD CONSTRAINT ck_grades_value_range "
+        "CHECK (value >= 1 AND value <= 5); END IF; END $$",
         # Аватар приходит data URL на несколько килобайт, varchar(500) падал.
         "ALTER TABLE users ALTER COLUMN avatar_url TYPE TEXT",
         # Код привязки родителя стал восьмизначным.

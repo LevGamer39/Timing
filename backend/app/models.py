@@ -191,8 +191,7 @@ class ClassMembership(Base):
     __table_args__ = (
         # Ученик состоит ровно в одном классе: в User.grade лежит одно
         # значение, и все запросы считают, что строка на ученика одна.
-        # create_all() создаёт только отсутствующие таблицы, поэтому на базе,
-        # созданной до этого ограничения, его не будет.
+        # На старой базе ограничение догоняет _apply_schema_updates().
         UniqueConstraint("student_id", name="uq_class_memberships_student"),
     )
 
@@ -310,7 +309,7 @@ class Grade(Base):
         nullable=True,
     )
     subject = Column(String(100), nullable=False)
-    value = Column(Float, nullable=False)  # 1-5 или 100-балльная
+    value = Column(Float, nullable=False)  # всегда 1..5; шкалы 10/20/100 — только UI фронта (grading.js, conversion в journal)
     comment = Column(Text, nullable=True)
     graded_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     graded_at = Column(DateTime(timezone=True), server_default=func.now())
