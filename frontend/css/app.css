@@ -538,7 +538,7 @@ select.input { appearance: none; -webkit-appearance: none; padding-right: 32px; 
   .tabs .badge { min-width: 20px; height: 20px; padding: 0 8px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 11px; line-height: 20px; text-align: center; }
 
   /* В активной вкладке фон совпадает с акцентом — счётчик выворачиваем. */
-  .tabs a.on .badge { background: var(--nav-on-text); color: var(--nav-on); }
+  .tabs a.on .badge { background: #FFFFFF; color: var(--nav-on); }
 
   .top-act { min-width: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 
