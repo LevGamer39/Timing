@@ -29,7 +29,6 @@ async def create_from_text(
     ctx: AppContext, event: Any, token: str, text: str
 ) -> None:
     """Разбирает текст и создаёт задание."""
-    await respond(event, "Разбираю задание…")
     parsed = await ai.parse_task(text)
     if not parsed.get("is_homework"):
         await respond(

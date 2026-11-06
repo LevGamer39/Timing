@@ -11,10 +11,11 @@ from texts.formatters import (
     task_line,
     tasks_block,
 )
-from texts.messages import HELP_TEXT, UNLINKED_TEXT
+from texts.messages import HELP_TEXT, PROCESSING_TEXT, UNLINKED_TEXT
 
 __all__ = [
     "HELP_TEXT",
+    "PROCESSING_TEXT",
     "UNLINKED_TEXT",
     "averages_block",
     "children_block",

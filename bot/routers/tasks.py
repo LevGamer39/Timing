@@ -14,7 +14,7 @@ from keyboards import tasks_keyboard
 from services import views
 from services.backend import BackendError
 from services.tasks import create_from_text
-from texts import esc, task_line, tasks_block
+from texts import PROCESSING_TEXT, esc, task_line, tasks_block
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -44,6 +44,7 @@ def build_router(ctx: AppContext) -> Router:
             return
         token = await require_token(ctx, event)
         if token is not None:
+            await respond(event, PROCESSING_TEXT)
             await create_from_text(ctx, event, token, text)
 
     @router.message_created(Command("done"))

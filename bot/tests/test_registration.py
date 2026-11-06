@@ -121,7 +121,7 @@ def _ctx() -> AppContext:
         backend=FakeBackend(),
         store=FakeStore(),
         sessions=FakeSessions(),
-        parser=SimpleNamespace(feed=None),
+        parser=SimpleNamespace(feed=None, remember=lambda *a: None),
     )
 
 

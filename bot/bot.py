@@ -18,6 +18,7 @@ from routers import include_routers
 from services.backend import Backend
 from services.homework import HomeworkParser
 from services.reminders import ReminderScheduler
+from services.voice import Transcriber
 
 logger = logging.getLogger("vector_bot")
 
@@ -59,7 +60,20 @@ async def main() -> None:
 
     sessions = SessionManager(backend, store)
     backend.set_unauthorized_handler(sessions.refresh)
-    parser = HomeworkParser(bot, store)
+    transcriber = Transcriber(
+        model=settings.whisper_model,
+        model_dir=settings.whisper_model_dir,
+        device=settings.whisper_device,
+        compute_type=settings.whisper_compute_type,
+        language=settings.whisper_language,
+        temp_dir=settings.audio_temp_dir,
+        timeout=settings.voice_download_timeout,
+    )
+    try:
+        await transcriber.warmup()
+    except Exception:  # noqa: BLE001 — голосовые не критичны для остального
+        logger.warning("faster-whisper не загрузился", exc_info=True)
+    parser = HomeworkParser(bot, store, transcriber)
     scheduler = ReminderScheduler(bot, backend, sessions, store)
     ctx = AppContext(
         bot=bot,
@@ -67,6 +81,7 @@ async def main() -> None:
         store=store,
         sessions=sessions,
         parser=parser,
+        transcriber=transcriber,
     )
 
     include_routers(dp, ctx)

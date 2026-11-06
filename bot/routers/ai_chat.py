@@ -9,6 +9,7 @@ from maxapi.types.updates.message_created import MessageCreated
 from core.context import AppContext
 from core.ui import event_user, require_token, respond
 from services.ai_chat import answer
+from texts import PROCESSING_TEXT
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -27,6 +28,7 @@ def build_router(ctx: AppContext) -> Router:
             return
         token = await require_token(ctx, event)
         if token is not None:
+            await respond(event, PROCESSING_TEXT)
             await answer(ctx, event, token, text)
 
     return router

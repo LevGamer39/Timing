@@ -79,6 +79,16 @@ class Settings:
     parser_batch_interval_minutes: int
     parser_keyword_filter: bool
     parser_max_batch: int
+    parser_voice_enabled: bool
+
+    # Голосовые сообщения (faster-whisper)
+    whisper_model: str
+    whisper_model_dir: str
+    whisper_device: str
+    whisper_compute_type: str
+    whisper_language: str
+    audio_temp_dir: str
+    voice_download_timeout: float
 
     # Напоминания и недельная сводка
     reminders_enabled: bool
@@ -128,6 +138,14 @@ def load_settings() -> Settings:
         parser_batch_interval_minutes=_int("PARSER_BATCH_INTERVAL_MINUTES", 15),
         parser_keyword_filter=_bool("PARSER_KEYWORD_FILTER", True),
         parser_max_batch=_int("PARSER_MAX_BATCH", 20),
+        parser_voice_enabled=_bool("PARSER_VOICE_ENABLED", True),
+        whisper_model=_str("WHISPER_MODEL", "small"),
+        whisper_model_dir=_str("WHISPER_MODEL_DIR", "models"),
+        whisper_device=_str("WHISPER_DEVICE", "cpu"),
+        whisper_compute_type=_str("WHISPER_COMPUTE_TYPE", "int8"),
+        whisper_language=_str("WHISPER_LANGUAGE", "ru"),
+        audio_temp_dir=_str("AUDIO_TEMP_DIR", "data/tmp"),
+        voice_download_timeout=_float("VOICE_DOWNLOAD_TIMEOUT", 60.0),
         reminders_enabled=_bool("REMINDERS_ENABLED", True),
         reminder_interval_minutes=_int("REMINDER_INTERVAL_MINUTES", 30),
         weekly_summary_enabled=_bool("WEEKLY_SUMMARY_ENABLED", True),
