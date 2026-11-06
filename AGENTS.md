@@ -77,7 +77,8 @@ VectorVK/
 │   │   ├── reminders.py         # Напоминания и недельная сводка
 │   │   ├── notifications.py     # Доставка очереди MAX в чат
 │   │   ├── tasks.py             # Создание заданий
-│   │   └── views.py             # Готовые ответы для команд и меню
+│   │   ├── views.py             # Готовые ответы для команд и меню
+│   │   └── voice.py             # faster-whisper: голосовое -> текст
 │   ├── routers/                 # Обработчики команд и кнопок
 │   │   ├── ai_chat.py           # /ai
 │   │   ├── common.py            # /start, /help, /cancel, события бота

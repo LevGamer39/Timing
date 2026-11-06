@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from core.context import AppContext
-from core.ui import respond
-from keyboards import task_actions
+from core.ui import is_dialog, respond
+from keyboards import home_keyboard, task_actions
 from services import ai
 from services.backend import BackendError
 from texts import esc, fmt_deadline, task_line
@@ -29,7 +29,6 @@ async def create_from_text(
     ctx: AppContext, event: Any, token: str, text: str
 ) -> None:
     """Разбирает текст и создаёт задание."""
-    await respond(event, "Разбираю задание…")
     parsed = await ai.parse_task(text)
     if not parsed.get("is_homework"):
         await respond(
@@ -77,4 +76,8 @@ async def add_homework(
     except BackendError as exc:
         await respond(event, f"Не получилось: {esc(exc.detail)}")
         return
-    await respond(event, f"✅ Добавлено: {task_line(task)}")
+    await respond(
+        event,
+        f"✅ Добавлено: {task_line(task)}",
+        keyboard=home_keyboard() if is_dialog(event) else None,
+    )

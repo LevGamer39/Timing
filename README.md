@@ -818,10 +818,22 @@ DNS-хостингом.
 | 10 | `pydantic-settings` и `PyYAML` установлены, но не используются | `backend/requirements.txt` |
 | 11 | Фреймворка миграций нет: `create_all()` не меняет созданные таблицы | `backend/app/database.py` |
 | 12 | Планировщик рассчитан на один процесс uvicorn | `backend/app/routers/notifications.py` |
+| 13 | MAX не доставляет боту голосовые: `message_created` приходит без `message` | `bot/services/voice.py` |
 
 Про 12: `docker-compose` запускает один `uvicorn`, поэтому джобы не дублируются.
 При нескольких воркерах каждый поднимет свой APScheduler — поставь
 `ENABLE_SCHEDULER=false` лишним либо вынеси джобы в отдельный процесс.
+
+Про 13: ограничение на стороне MAX (issue
+[maxapi#191](https://github.com/love-apples/maxapi/issues/191), не исправлено).
+Голосовое приходит как `{"update_type": "message_created"}` без поля `message`
+— ни чата, ни `mid`, ни вложения `audio`; `GET /messages` аудио тоже не отдаёт,
+поэтому догрузить или ответить бот не может. Воспроизводится и в long polling,
+и в webhook; кружки и видео при этом работают. Обработка на нашей стороне
+готова: `bot/services/voice.py` берёт `attachment.transcription` от MAX, а при
+его отсутствии распознаёт файл через faster-whisper; `/hw`, «Добавить», личный
+чат и парсер класса вызывают её через `body_text()`. Как только MAX начнёт
+отдавать `message` с аудио, голосовые заработают без правок кода.
 
 ---
 

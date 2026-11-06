@@ -1,6 +1,7 @@
 """Клавиатуры бота."""
 
 from keyboards.menus import (
+    home_keyboard,
     homework_keyboard,
     main_menu,
     name_confirm_keyboard,
@@ -10,6 +11,7 @@ from keyboards.menus import (
 )
 
 __all__ = [
+    "home_keyboard",
     "homework_keyboard",
     "main_menu",
     "name_confirm_keyboard",

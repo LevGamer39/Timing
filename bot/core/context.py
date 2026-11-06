@@ -11,6 +11,7 @@ from core.sessions import SessionManager
 from core.state import StateStore
 from services.backend import Backend
 from services.homework import HomeworkParser
+from services.voice import Transcriber
 
 
 @dataclass(slots=True)
@@ -22,6 +23,7 @@ class AppContext:
     store: StateStore
     sessions: SessionManager
     parser: HomeworkParser
+    transcriber: Transcriber | None = None
     ai_mode: set[int] = field(default_factory=set)
     notified_unlinked: set[int] = field(default_factory=set)
     registration: dict[int, dict[str, Any]] = field(default_factory=dict)

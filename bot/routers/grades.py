@@ -8,6 +8,7 @@ from maxapi.types.updates.message_created import MessageCreated
 
 from core.context import AppContext
 from core.ui import require_token, respond, role_of
+from keyboards import main_menu
 from services import views
 
 
@@ -21,7 +22,11 @@ def build_router(ctx: AppContext) -> Router:
             return
         result = await views.safe_view(event, views.grades(ctx.backend, token))
         if result is not None:
-            await respond(event, result[0])
+            await respond(
+                event,
+                result[0],
+                keyboard=main_menu(role_of(ctx, event)),
+            )
 
     @router.message_created(Command("summary"))
     async def summary(event: MessageCreated) -> None:
@@ -32,6 +37,10 @@ def build_router(ctx: AppContext) -> Router:
             event, views.summary(ctx.backend, token, role_of(ctx, event))
         )
         if result is not None:
-            await respond(event, result[0])
+            await respond(
+                event,
+                result[0],
+                keyboard=main_menu(role_of(ctx, event)),
+            )
 
     return router

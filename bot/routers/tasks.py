@@ -9,12 +9,12 @@ from maxapi.types.updates.message_created import MessageCreated
 
 from core.context import AppContext
 from core.filters import PayloadPrefix
-from core.ui import event_user, require_token, respond
-from keyboards import tasks_keyboard
+from core.ui import event_user, require_token, respond, role_of
+from keyboards import home_keyboard, main_menu, tasks_keyboard
 from services import views
 from services.backend import BackendError
 from services.tasks import create_from_text
-from texts import esc, task_line, tasks_block
+from texts import PROCESSING_TEXT, esc, task_line, tasks_block
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -40,10 +40,12 @@ def build_router(ctx: AppContext) -> Router:
                 event,
                 "Пришлите текст задания: «Математика, №42, к пятнице» "
                 "или отправьте голосовое.",
+                keyboard=home_keyboard("🚫 Отмена"),
             )
             return
         token = await require_token(ctx, event)
         if token is not None:
+            await respond(event, PROCESSING_TEXT)
             await create_from_text(ctx, event, token, text)
 
     @router.message_created(Command("done"))
@@ -58,7 +60,11 @@ def build_router(ctx: AppContext) -> Router:
             return
         active = [task for task in tasks if task.get("status") != "done"]
         if not active:
-            await respond(event, "Активных заданий нет 🎉")
+            await respond(
+                event,
+                "Активных заданий нет 🎉",
+                keyboard=main_menu(role_of(ctx, event)),
+            )
             return
         await respond(
             event,
@@ -79,13 +85,21 @@ def build_router(ctx: AppContext) -> Router:
             except BackendError as exc:
                 await respond(event, f"Не получилось: {esc(exc.detail)}")
                 return
-            await respond(event, f"✅ Выполнено: {task_line(task)}")
+            await respond(
+                event,
+                f"✅ Выполнено: {task_line(task)}",
+                keyboard=main_menu(role_of(ctx, event)),
+            )
             return
         try:
             await ctx.backend.delete_task(token, task_id)
         except BackendError as exc:
             await respond(event, f"Не получилось: {esc(exc.detail)}")
             return
-        await respond(event, "🗑 Задание удалено.")
+        await respond(
+            event,
+            "🗑 Задание удалено.",
+            keyboard=main_menu(role_of(ctx, event)),
+        )
 
     return router

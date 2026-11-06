@@ -7,8 +7,10 @@ from maxapi.filters.command import Command
 from maxapi.types.updates.message_created import MessageCreated
 
 from core.context import AppContext
-from core.ui import event_user, require_token, respond
+from core.ui import event_user, require_token, respond, role_of
+from keyboards import main_menu
 from services.ai_chat import answer
+from texts import PROCESSING_TEXT
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -23,10 +25,15 @@ def build_router(ctx: AppContext) -> Router:
             user = event_user(event)
             if user is not None:
                 ctx.ai_mode.add(user.user_id)
-            await respond(event, "Напишите вопрос — отвечу как ИИ-помощник.")
+            await respond(
+                event,
+                "Напишите вопрос — отвечу как ИИ-помощник.",
+                keyboard=main_menu(role_of(ctx, event)),
+            )
             return
         token = await require_token(ctx, event)
         if token is not None:
+            await respond(event, PROCESSING_TEXT)
             await answer(ctx, event, token, text)
 
     return router

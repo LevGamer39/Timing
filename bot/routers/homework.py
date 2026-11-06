@@ -10,7 +10,14 @@ from maxapi.types.updates.message_created import MessageCreated
 from config import settings
 from core.context import AppContext
 from core.filters import PayloadPrefix
-from core.ui import event_chat_id, event_user, require_token, respond
+from core.ui import (
+    event_chat_id,
+    event_user,
+    is_dialog,
+    require_token,
+    respond,
+)
+from keyboards import home_keyboard
 from services.tasks import add_homework
 
 
@@ -64,7 +71,11 @@ def build_router(ctx: AppContext) -> Router:
         uid = int(payload.rsplit(":", 1)[1])
         if payload.startswith("hw:skip:"):
             ctx.parser.pop_pending(uid)
-            await respond(event, "Ок, пропустил.")
+            await respond(
+                event,
+                "Ок, пропустил.",
+                keyboard=home_keyboard() if is_dialog(event) else None,
+            )
             return
 
         item = ctx.parser.pop_pending(uid)

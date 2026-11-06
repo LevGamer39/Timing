@@ -9,7 +9,7 @@ from core.context import AppContext
 from core.filters import PayloadPrefix
 from core.security import hash_user_id
 from core.ui import event_user, require_token, respond, role_of
-from keyboards import main_menu
+from keyboards import home_keyboard, main_menu
 from services import registration, views
 from services.backend import BackendError
 from texts import HELP_TEXT
@@ -38,17 +38,36 @@ def build_router(ctx: AppContext) -> Router:
                     new_text=REGISTER_LOGIN_TEXT, attachments=[]
                 )
             return
+        if action == "home":
+            if user is not None:
+                # «На главную» выходит из ИИ-чата, иначе следующий текст
+                # снова уйдёт в модель.
+                ctx.ai_mode.discard(user.user_id)
+            await respond(
+                event,
+                "🏠 Главное меню",
+                keyboard=main_menu(role_of(ctx, event)),
+            )
+            return
         if action == "add":
             if user is not None:
                 # «Добавить» должно выходить из ИИ-чата, иначе следующий
                 # текст снова уйдёт в модель вместо создания задания.
                 ctx.ai_mode.discard(user.user_id)
-            await respond(event, "Пришлите текст задания или голосовое сообщение.")
+            await respond(
+                event,
+                "Пришлите текст задания или голосовое сообщение.",
+                keyboard=home_keyboard("🚫 Отмена"),
+            )
             return
         if action == "ai":
             if user is not None:
                 ctx.ai_mode.add(user.user_id)
-            await respond(event, "ИИ-чат включён. Напишите вопрос. /cancel — выход.")
+            await respond(
+                event,
+                "ИИ-чат включён. Напишите вопрос. /cancel — выход.",
+                keyboard=main_menu(role_of(ctx, event)),
+            )
             return
         if action == "help":
             await respond(
@@ -73,6 +92,7 @@ def build_router(ctx: AppContext) -> Router:
                 + str(payload.get("code", ""))
                 + "</code>\nДействует 10 минут. Введите его на странице входа "
                 "«Войти через MAX».",
+                keyboard=main_menu(role_of(ctx, event)),
             )
             return
 
