@@ -1,7 +1,7 @@
 services:
   backend:
     build: ./backend
-    container_name: vector_backend
+    container_name: timing_backend
     restart: unless-stopped
     volumes:
       - ./frontend:/frontend:ro
@@ -13,27 +13,27 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      DB_HOST: vector_db
+      DB_HOST: timing_db
       DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-vectordb}
+      DB_NAME: ${DB_NAME:-timingdb}
     depends_on:
       ollama:
         condition: service_started
       db:
         condition: service_healthy
     networks:
-      - vector_net
+      - timing_net
 
   ollama:
     image: ollama/ollama:latest
-    container_name: vector_ollama
+    container_name: timing_ollama
     restart: unless-stopped
     volumes:
       - ollama_data:/root/.ollama
     expose:
       - "11434"
     networks:
-      - vector_net
+      - timing_net
 
   # Одноразовая задача: тянет модель при первом запуске, чтобы не искать её
   # руками. Выключается флагом OLLAMA_AUTO_PULL - по умолчанию модель не
@@ -42,7 +42,7 @@ services:
   # завершается мгновенно и ни на что не влияет.
   ollama-init:
     image: ollama/ollama:latest
-    container_name: vector_ollama_init
+    container_name: timing_ollama_init
     restart: "no"
     environment:
       OLLAMA_HOST: http://ollama:11434
@@ -72,11 +72,11 @@ services:
     depends_on:
       - ollama
     networks:
-      - vector_net
+      - timing_net
 
   nginx:
     build: ./nginx
-    container_name: vector_nginx
+    container_name: timing_nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -89,11 +89,11 @@ services:
     depends_on:
       - backend
     networks:
-      - vector_net
+      - timing_net
 
   certbot:
     image: certbot/certbot
-    container_name: vector_certbot
+    container_name: timing_certbot
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN must be set}
     volumes:
@@ -106,13 +106,13 @@ services:
                sleep 12h;
              done"
     networks:
-      - vector_net
+      - timing_net
 
   bot:
     build:
       context: ./bot
       dockerfile: dockerfile
-    container_name: vector_bot
+    container_name: timing_bot
     restart: unless-stopped
     depends_on:
       - backend
@@ -125,29 +125,29 @@ services:
     volumes:
       - ./bot/data:/app/data
     networks:
-      - vector_net
+      - timing_net
 
   db:
     image: postgres:latest
-    container_name: vector_db
+    container_name: timing_db
     env_file: ".env"
     # Только loopback: снаружи БД недоступна, но локальные тесты и psql
     # могут подключиться к localhost:5432.
     ports:
       - 127.0.0.1:5432:5432
     environment:
-      POSTGRES_DB: ${DB_NAME:-vectordb}
+      POSTGRES_DB: ${DB_NAME:-timingdb}
       POSTGRES_LOG_FILE: /var/log/postgres.log
       POSTGRES_USER: ${DB_USER:-user}
       POSTGRES_PASSWORD: ${DB_PASS:?db password must be set}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user} -d ${DB_NAME:-vectordb}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user} -d ${DB_NAME:-timingdb}"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
     networks:
-      - vector_net
+      - timing_net
     volumes:
       - ./pg_data:/var/lib/postgresql
 
@@ -155,5 +155,5 @@ volumes:
   ollama_data:
 
 networks:
-  vector_net:
+  timing_net:
     driver: bridge

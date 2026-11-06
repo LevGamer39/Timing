@@ -1,4 +1,4 @@
-# Vector — детальное описание
+# Timing — детальное описание
 
 > Подробная документация после урезания README. Оглавление ниже — все разделы на месте.
 
@@ -20,6 +20,7 @@
 - [База данных](#база-данных)
 - [Отправка писем](#отправка-писем)
 - [Уведомления](#уведомления)
+- [MAX-бот и голосовые](#max-бот-и-голосовые)
 - [Известные проблемы](#известные-проблемы)
 - [Лицензия](#лицензия)
 
@@ -53,15 +54,17 @@
   certbot (renew каждые 12ч)
 ```
 
-- Все сервисы в `vector_net`. Наружу: `80`/`443` (nginx), `5432` (БД, loopback, для отладки).
+- Все сервисы в `timing_net`. Наружу: `80`/`443` (nginx), `5432` (БД, loopback, для отладки).
 - Бот (`bot/`) не ходит в PostgreSQL — дергает backend по `MAX_BOT_URL`.
 - `APP_DOMAIN` в `.env` — единственное место домена; через `envsubst` (`nginx/docker-entrypoint.sh`) подставляется в `nginx.conf.template` (явным списком переменных, чтобы не съесть `$host`).
 - Без сертификата entrypoint генерирует самоподписанный. Настоящий: `certbot certonly --webroot -w /var/www/certbot -d <домен>` (сначала `--dry-run`), порт 80 должен быть снаружи.
+- Выпуск настоящего сертификата — через `docker compose run --rm --entrypoint certbot certbot certonly --webroot -w /var/www/certbot -d <домен> --agree-tos --no-eff-email --dry-run`. `--entrypoint certbot` обязателен: у сервиса certbot в compose свой `entrypoint` (цикл `certbot renew`), без подмены аргументы игнорируются. ACME-проверка ходит снаружи на порт 80 — если он не проброшен (`80 → <IP машины>:80`, `443 → <IP>:443`), Let's Encrypt получает `Connection refused`. Пока порт 80 закрыт, работает только самоподписанный (браузер ругается — осознанный режим для локали).
+- `frontend/` монтируется в backend как `/frontend:ro`; `frontend_path` в `main.py` = `../../frontend` от `app/` — в контейнере это `/frontend`, локально — корень репозитория. Логика одна и та же.
 
 ## Структура проекта
 
 ```
-VectorVK/
+TimingVK/
 ├── backend/            # FastAPI: app/ (config, main, database, models, routers/*) + tests/
 ├── bot/                # MAX-бот: bot.py, core/, services/, routers/, keyboards/, texts/
 ├── frontend/           # SPA без сборки: index.html, css/, js/, html/, schemas/
@@ -110,12 +113,17 @@ pytest против настоящего PostgreSQL (SQLite не поддерж�
 
 ```powershell
 docker compose up -d db
-docker exec vector_db psql -U vector -d vectordb -c "CREATE DATABASE vectordb_test;"
+docker exec timing_db psql -U timing -d timingdb -c "CREATE DATABASE timingdb_test;"
 cd backend; pip install -r requirements-dev.txt
 python run_tests.py   # берёт DB_* из ../.env, подставляет 127.0.0.1
 ```
 
 Без `TEST_DATABASE_URL` conftest падает сразу (тихой подмены БД нет). На Windows используйте `127.0.0.1`, не `localhost`.
+
+Тесты бота — отдельно, без БД (клавиатуры, регистрация, голос):
+```powershell
+cd bot; pytest
+```
 
 ## Локальный запуск
 
@@ -129,17 +137,35 @@ python run_tests.py   # берёт DB_* из ../.env, подставляет 127
 - Сервер: Yandex Compute Cloud Ubuntu 22.04, 4 vCPU, 8 GB RAM, 40 GB диск; DNS A-запись, статический IP.
 - Проброс портов `80`、`443` обязателен для Let's Encrypt.
 - Переменные домена — только в `.env` (`APP_DOMAIN`, `APP_URL`, `YANDEX_*_CALLBACK`), совпадают с консолью Яндекса.
+- Порядок первого деплоя: Docker → `git clone` + `cp .env.example .env` → SSL-сертификат standalone (пока nginx не запущен, порт 80 свободен) → `docker compose up -d ollama && docker exec timing_ollama ollama pull qwen2.5:7b` → `docker compose up -d --build`.
+- В Docker модель качается **вручную** из-за ~4.7 ГБ: `OLLAMA_AUTO_PULL=true` в `.env` включает одноразовую задачу `ollama-init` (тянет `OLLAMA_MODEL` при старте и завершается). Без флага она мгновенно выходит — модель потом можно дотянуть вручную той же командой `docker exec`.
 
 ## Переменные окружения
 
 Ключевые: `APP_DOMAIN`, `DB_*` (или `DATABASE_URL`), `ADMIN_*`, `SECRET_KEY`, `SMTP_*`, `OLLAMA_*`, `AI_*` (контекст/таймауты), `TIMEZONE` (в БД UTC), `WEEKLY_SUMMARY_*`, `ENABLE_SCHEDULER`, `YANDEX_*`, `MAX_BOT_TOKEN`, `MAX_BOT_URL`, `BOT_UPDATE_MODE`. Полный список — в `.env.example`.
 
+Бот (`bot/`, см. также `bot/README.md`):
+
+| Переменная | Значение по умолчанию | Смысл |
+|---|---|---|
+| `COMPOSE_PROJECT_NAME` | `timing` | Префикс volume/сети Compose (`timing_ollama_data`, `timing_timing_net`), а не имя папки |
+| `MAX_BOT_TOKEN` | — | Токен MAX-бота; им же подписываются его запросы к API (`X-Bot-Signature`) |
+| `MAX_BOT_URL` | `http://backend:8000` | Адрес API для бота (в Docker) |
+| `BOT_UPDATE_MODE` | `long_polling` | `long_polling` или `webhook` |
+| `WEBHOOK_URL` / `WEBHOOK_SECRET` | — | Только при `BOT_UPDATE_MODE=webhook` |
+| `BOT_STATE_PATH` | `data/bot_state.json` | Файл состояния бота (volume `./bot/data`) |
+| `BOT_USER_ID_SALT` | из `MAX_BOT_TOKEN` | Соль хеширования MAX user_id; смена соли инвалидирует привязки |
+| `OLLAMA_AUTO_PULL` | `false` | Тянуть модель при первом старте (см. «Деплой») |
+
 ## Система авторизации
 
 - Регистрация → подтверждение email 6-значным кодом (15 мин)
 - MAX-регистрация: логин + инвайт-код, без email/пароля; код класса → ученик, одноразовый код из `invite_codes` → учитель
+- Учитель регистрируется **только по инвайт-коду** (16 символов, выдаёт админ); код списывается при подтверждении email
+- Вход в класс ученика — по инвайт-коду класса (**12 символов**)
 - JWT HS256, 7 дней, `localStorage.token`
 - Сброс пароля/смена email — ссылка (1 час), привязка родителя — код 8 цифр (1 час)
+- OAuth Яндекса: `/api/auth/yandex/login-url` → `/callback`; привязка веб-аккаунта к MAX — через `/link` в боте
 
 ## ИИ-ассистент
 
@@ -151,15 +177,27 @@ Qwen2.5:7b через Ollama, системный промпт запрещает
 
 ## Перенос учеников между школами
 
-Один сервер — одна школа. `GET/POST /api/admin/migration/students` (JSON, схема в `frontend/schemas/student-migration.schema.json`). Переносятся профиль, класс по названию, оценки, итоговые. Импорт идемпотентен по логину.
+Один сервер — одна школа. `GET/POST /api/admin/migration/students` (JSON, схема в `frontend/schemas/student-migration.schema.json`). Переносятся профиль, класс по названию, оценки, итоговые. Классы принимающей стороны остаются локальными, **журнал не переносится**. Импорт идемпотентен по логину. Внутри школы ученика переносит админ в карточке класса (`app/enrollment.py` — членство и `User.grade` вместе, задачи по заданиям нового класса досоздаются).
 
 ## База данных
 
 PostgreSQL, 28 таблиц. `create_all()` создаёт только отсутствующие таблицы — колонки требуют `ALTER TABLE`; идемпотентный DDL в `_apply_schema_updates()` (`backend/app/database.py`), enum-значения — через autocommit (`_add_enum_values()`). Каскады в `models.py` (удаление класса/задания уносит зависимые строки).
 
+Ограничения целостности (в моделях, попадают в схему при создании):
+
+| Ограничение | Смысл |
+|---|---|
+| `uq_grades_student_assignment` | Одна оценка на ученика на задание (`NULL` не ограничены — отдельные оценки работают) |
+| `uq_class_memberships_student` | Ученик ровно в одном классе (это же предполагает `User.grade`) |
+| `ck_grades_value_range` | Оценка 1..5 |
+
+На базе, поднятой до этих ограничений, их не будет (проверка уходит в приложение) — добавить вручную `ALTER TABLE grades / class_memberships` или пересоздать схему на пустой базе.
+
 ## Отправка писем
 
-Python `smtplib` (stdlib). Транспорт по порту: `465` — `SMTP_SSL`, `587` — `SMTP+STARTTLS`, остальные — без TLS. Очередь (раз в минуту), джоб overdue (10 мин), недельная сводка; backoff 5→15→60→240→720 мин, списание через 24ч. Проверка: `python test_mail.py --check`. Свой SMTP невозможен (домен на `no-ip.com`, нет DNS-контроля).
+Python `smtplib` (stdlib). Транспорт по порту: `465` — `SMTP_SSL`, `587` — `SMTP+STARTTLS`, остальные — без TLS. Очередь (раз в минуту), джоб overdue (10 мин), недельная сводка; backoff 5→15→60→240→720 мин, списание через 24ч. Проверка: `python test_mail.py --check` (без отправки), `python test_mail.py someone@example.com [--template overdue]` — шаблоны `plain|verify|reset|overdue`. Санитизация заголовков и HTML-экранирование — в `notifications.py` (`_header`/`_escape`), транспорт по порту — `config.starttls_for_port()`.
+Яндекс SMTP: нужен **пароль приложения** (не пароль от аккаунта) — https://id.yandex.ru/security/apppasswords. `EMAIL_FROM` должен совпадать с `SMTP_USER`, иначе Яндекс отклоняет.
+Свой SMTP невозможен: домен на `no-ip.com` (зона не делегирована — TXT/SPF/DKIM не добавить), у IP нет PTR, адрес динамический, порт 25 фильтруется. Нужен VPS со статическим IP и домен с обычным DNS.
 
 ## Уведомления
 
@@ -167,13 +205,26 @@ Python `smtplib` (stdlib). Транспорт по порту: `465` — `SMTP_S
 - **Email** (опциональный, `notify_email`), **браузер** (хранятся в БД), ожидание overdue, `Notification.dedupe_key` (уникален с `user_id`)
 - Настройки юзера: `notify_email`, `notify_browser`, `notify_max`
 
+## MAX-бот и голосовые
+
+Бот (`bot/`) не ходит в PostgreSQL: он вызывает backend по `MAX_BOT_URL` (`http://backend:8000` в Docker) и подписывает запросы токеном (`X-Bot-Signature`, из `MAX_BOT_TOKEN`). Режимы: `long_polling` (по умолчанию) или `webhook` (`WEBHOOK_URL`/`WEBHOOK_SECRET`). Состояние — `data/bot_state.json` (volume). Детали команд, клавиатур и регистрации — `bot/README.md`.
+
+Голосовые: обработка на нашей стороне готова — `bot/services/voice.py` берёт `attachment.transcription` от MAX, а при его отсутствии скачивает аудио и распознаёт через faster-whisper. Через `body_text()` её вызывают `/hw`, «Добавить», личный чат и парсер ДЗ в чатах класса.
+
+**Но MAX голосовые боту не доставляет** (проблема №13 ниже): `message_created` приходит без поля `message` — ни чата, ни `mid`, ни вложения `audio`; `GET /messages` аудио тоже не отдаёт. Поэтому голос сейчас не работает ни в polling, ни в webhook (кружки и видео при этом работают). Как только MAX начнёт отдавать `message` с аудио, всё заработает без правок кода.
+
 ## Известные проблемы
 
 | # | Проблема | Файл |
 |---|---|---|
 | 11 | Миграций нет: `create_all()` не меняет таблицы | `backend/app/database.py` |
 | 12 | Планировщик на 1 процесс uvicorn | `backend/app/routers/notifications.py` |
-| 10, 13 | Мелкие: неиспользуемые зависимости; свой SMTP | requirements / DNS |
+| 10 | `pydantic-settings` и `PyYAML` установлены, но не используются | `backend/requirements.txt` |
+| 13 | MAX не доставляет боту голосовые: `message_created` приходит без `message` | `bot/services/voice.py` |
+
+Про 12: `docker-compose` запускает один `uvicorn`, поэтому джобы не дублируются. При нескольких воркерах каждый поднимет свой APScheduler — поставь `ENABLE_SCHEDULER=false` лишним либо вынеси джобы в отдельный процесс.
+
+Про 13: ограничение на стороне MAX ([maxapi#191](https://github.com/love-apples/maxapi/issues/191), не исправлено). Воспроизводится и в long polling, и в webhook. Обработка готова (см. «MAX-бот и голосовые» выше) — ждать только, пока MAX начнёт отдавать аудио.
 
 ## Лицензия
 

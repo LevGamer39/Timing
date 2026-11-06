@@ -6,7 +6,7 @@
 ## Project Structure
 
 ```
-VectorVK/
+TimingVK/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py
@@ -256,7 +256,7 @@ nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend чер
 
 - Секреты — только из `.env`. Никаких значений по умолчанию для
   `SECRET_KEY`, `DB_PASS`, `ADMIN_PASSWORD`.
-- `DB_HOST` в Docker переопределяется на `vector_db` в `docker-compose.yml`.
+- `DB_HOST` в Docker переопределяется на `timing_db` в `docker-compose.yml`.
   Не хардкодь имя хоста в коде.
 - `docker-compose.yml` требует `DB_PASS` (`:?db password must be set`) —
   падает без него намеренно.
@@ -286,12 +286,12 @@ nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend чер
 - Единственная точка работы с данными — `js/store.js`; сеть — только через
   `js/api.js`. Ответы API раскладываются в структуры экранов в `js/server.js`.
 - Демо-данные — в `js/data.js`, `js/teacher-data.js`, `js/admin-data.js`.
-- Без токена (`localStorage['vector-token']`) работает демо-режим; с токеном
+- Без токена (`localStorage['timing-token']`) работает демо-режим; с токеном
   `store.bootstrap()` поднимает сессию через `/api/users/me`.
 - В серверном режиме журнал, почта, посещаемость и расписание класса живут
-  в `server.session` (память), а не в `vector-demo-v1`: `save()` их не пишет.
+  в `server.session` (память), а не в `timing-demo-v1`: `save()` их не пишет.
 - Прямой `fetch` в экранах не пиши.
-- Демо хранится в `localStorage` под ключом `vector-demo-v1`.
+- Демо хранится в `localStorage` под ключом `timing-demo-v1`.
 
 ### 3. Экраны и шаблоны
 
@@ -356,8 +356,8 @@ nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend чер
 docker compose up -d db
 
 # 2. Создать отдельную базу под тесты (схему тесты пересоздают сами)
-docker exec vector_db psql -U vector -d vectordb `
-    -c "CREATE DATABASE vectordb_test;"
+docker exec timing_db psql -U timing -d timingdb `
+    -c "CREATE DATABASE timingdb_test;"
 
 # 3. Зависимости
 pip install -r requirements-dev.txt
@@ -370,7 +370,7 @@ python run_tests.py
 Вручную (переменная живёт только в этом окне):
 
 ```powershell
-$env:TEST_DATABASE_URL="postgresql://vector:<pw>@127.0.0.1:5432/vectordb_test"
+$env:TEST_DATABASE_URL="postgresql://timing:<pw>@127.0.0.1:5432/timingdb_test"
 pytest
 ```
 
@@ -431,7 +431,7 @@ ollama serve && ollama pull qwen2.5:7b
 
 # Docker
 docker compose up -d --build
-docker exec vector_ollama ollama pull qwen2.5:7b
+docker exec timing_ollama ollama pull qwen2.5:7b
 ```
 
 Для навигации по связям используй граф знаний: `graphify query "<вопрос>"`
@@ -471,17 +471,17 @@ docker exec vector_ollama ollama pull qwen2.5:7b
 
 ```env
 # PostgreSQL. DATABASE_URL перекрывает все четыре значения ниже.
-# DATABASE_URL=postgresql://user:pw@localhost:5432/vectordb
+# DATABASE_URL=postgresql://user:pw@localhost:5432/timingdb
 DB_USER=user
 DB_PASS=your-database-password
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=vectordb
+DB_NAME=timingdb
 
-ADMIN_EMAIL=admin@vector.local
+ADMIN_EMAIL=admin@timing.local
 ADMIN_PASSWORD=changeme
 ADMIN_FIRST_NAME=Admin
-ADMIN_LAST_NAME=Vector
+ADMIN_LAST_NAME=Timing
 
 SECRET_KEY=your-secret-key-here
 ALGORITHM=HS256
@@ -517,7 +517,7 @@ AI_SUMMARY_CHARS=2000
 AI_CHAT_TITLE_CHARS=60
 AI_PROMPT_EXTRA=
 
-APP_URL=https://vector.myftp.org
+APP_URL=https://timing.myftp.org
 DEBUG=false
 
 # Выключает фоновые джобы (тесты, одноразовые команды)
@@ -531,8 +531,8 @@ WEEKLY_SUMMARY_ENABLED=true
 
 YANDEX_CLIENT_ID=your-yandex-client-id
 YANDEX_CLIENT_SECRET=your-yandex-client-secret
-YANDEX_LOGIN_CALLBACK=https://vector.myftp.org/api/auth/yandex/callback
-YANDEX_LINK_CALLBACK=https://vector.myftp.org/api/auth/yandex/confirm-link
+YANDEX_LOGIN_CALLBACK=https://timing.myftp.org/api/auth/yandex/callback
+YANDEX_LINK_CALLBACK=https://timing.myftp.org/api/auth/yandex/confirm-link
 ```
 
 Переменной `DB_PATH` больше нет: код её никогда не читал, это остаток от SQLite.

@@ -1,4 +1,4 @@
-# Vector — умный планировщик для школьников
+# Timing — умный планировщик для школьников
 
 Веб-приложение для управления учебными задачами с ИИ-ассистентом: ученик, учитель, родитель, администратор. Подробнее — в [DETAILS.md](DETAILS.md).
 
@@ -7,10 +7,10 @@
 ```bash
 cp .env.example .env   # заполнить DB_PASS, SECRET_KEY, ADMIN_PASSWORD, APP_DOMAIN
 docker compose up -d --build
-docker exec vector_ollama ollama pull qwen2.5:7b   # модель ИИ (один раз)
+docker exec timing_ollama ollama pull qwen2.5:7b   # модель ИИ (один раз)
 ```
 
-Сайт — `http://127.0.0.1:8000` (Direct backend) или `https://vector.myftp.org` (через nginx). Документация API — `http://localhost:8000/docs`.
+Сайт — `http://127.0.0.1:8000` (Direct backend) или `https://timing.myftp.org` (через nginx). Документация API — `http://localhost:8000/docs`.
 
 ## Локальный запуск (без Docker)
 

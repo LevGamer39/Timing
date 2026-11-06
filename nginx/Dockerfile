@@ -5,10 +5,10 @@ FROM nginx:alpine
 RUN apk add --no-cache openssl
 
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
-COPY docker-entrypoint.sh /usr/local/bin/vector-nginx-entrypoint.sh
-RUN chmod +x /usr/local/bin/vector-nginx-entrypoint.sh
+COPY docker-entrypoint.sh /usr/local/bin/timing-nginx-entrypoint.sh
+RUN chmod +x /usr/local/bin/timing-nginx-entrypoint.sh
 
 EXPOSE 80 443
 
-ENTRYPOINT ["/usr/local/bin/vector-nginx-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/timing-nginx-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
