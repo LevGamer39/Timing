@@ -1,10 +1,18 @@
-"""Роутер заданий: раскладка по ученикам, вычисляемые поля, каскадное удаление."""
+"""Задания учителя: раскладка по ученикам, вычисляемые поля, приём работ."""
+from datetime import date, datetime, timezone
+
 import pytest
 from fastapi import HTTPException
 
-from app.models import ClassMembership, Task, TaskPriority, UserRole
+from app.models import (
+    ClassMembership,
+    Task,
+    TaskPriority,
+    TaskStatus,
+    UserRole,
+)
 from app.routers import assignments as assign_router
-from app.routers.assignments import AssignmentCreate
+from app.routers.assignments import AcceptBody, AssignmentCreate
 
 from .conftest import NOW
 
@@ -325,3 +333,119 @@ def test_progress_includes_grade_when_present(
     )
     graded = next(s for s in progress.students if s.student_id == student.id)
     assert graded.grade == 4.0
+
+
+# ---------------------------------------------------------------------------
+# Приём работ
+# ---------------------------------------------------------------------------
+
+
+def test_accept_closes_done_and_counts_it(
+    db, teacher, member, student, make_assignment, make_task
+):
+    assignment = make_assignment()
+    task = make_task(
+        student.id,
+        assignment_id=assignment.id,
+        is_personal=False,
+        status=TaskStatus.done,
+    )
+
+    progress = assign_router.accept_assignment(
+        assignment.id, None, current_user=teacher, db=db
+    )
+    db.refresh(task)
+    assert task.status == TaskStatus.accepted
+    assert task.accepted_at is not None
+    assert progress.accepted == 1
+    assert progress.completed == 1
+
+    # Повторный приём ничего не дублирует и не меняет время закрытия.
+    stamp = task.accepted_at
+    assign_router.accept_assignment(
+        assignment.id, None, current_user=teacher, db=db
+    )
+    db.refresh(task)
+    assert task.accepted_at == stamp
+
+
+def test_return_sends_work_back(
+    db, teacher, member, student, make_assignment, make_task
+):
+    assignment = make_assignment()
+    task = make_task(
+        student.id,
+        assignment_id=assignment.id,
+        is_personal=False,
+        status=TaskStatus.done,
+    )
+    assign_router.accept_assignment(
+        assignment.id, None, current_user=teacher, db=db
+    )
+
+    progress = assign_router.accept_assignment(
+        assignment.id,
+        AcceptBody(accepted=False),
+        current_user=teacher,
+        db=db,
+    )
+    db.refresh(task)
+    assert task.status == TaskStatus.in_progress
+    assert task.accepted_at is None
+    assert progress.accepted == 0
+
+
+def test_accept_ignores_other_teachers(
+    db, other_teacher, member, student, make_assignment, make_task
+):
+    assignment = make_assignment()
+    make_task(
+        student.id,
+        assignment_id=assignment.id,
+        is_personal=False,
+        status=TaskStatus.done,
+    )
+    with pytest.raises(HTTPException) as error:
+        assign_router.accept_assignment(
+            assignment.id, None, current_user=other_teacher, db=db
+        )
+    assert error.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Нагрузка класса
+# ---------------------------------------------------------------------------
+
+
+def test_workload_counts_day_and_flags_heavy(
+    db, teacher, klass, make_assignment
+):
+    day = date(2026, 11, 6)
+    make_assignment(
+        deadline=datetime(2026, 11, 6, 9, 0, tzinfo=timezone.utc),
+        subject="Math",
+    )
+    make_assignment(
+        deadline=datetime(2026, 11, 6, 12, 0, tzinfo=timezone.utc),
+        subject="History",
+        priority=TaskPriority.high,
+    )
+
+    data = assign_router.class_workload(
+        klass.id, day, current_user=teacher, db=db
+    )
+    assert data.count == 2
+    assert data.minutes == 90
+    assert data.subjects == ["History", "Math"]
+    assert data.heavy is True
+    assert len(data.nearby) == 7
+    assert data.nearby[0].minutes == 0
+
+
+def test_workload_empty_day(db, teacher, klass):
+    data = assign_router.class_workload(
+        klass.id, date(2026, 11, 6), current_user=teacher, db=db
+    )
+    assert data.count == 0
+    assert data.minutes == 0
+    assert data.heavy is False

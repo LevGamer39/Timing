@@ -19,10 +19,13 @@ from app.dependencies import get_current_user
 from app.models import (
     Notification,
     NotificationChannel,
+    ParentStudent,
     Task,
     TaskStatus,
     User,
+    UserRole,
 )
+from app.stats import summary, waiting, week_bounds, zone
 
 logger = logging.getLogger("vector.notifications")
 
@@ -159,30 +162,30 @@ def _password_reset_html(reset_link: str) -> str:
 
 def _overdue_task_html(task_title: str, deadline_str: str) -> str:
     content = f"""
-      <h1 style="margin:0 0 8px;color:#fff;font-size:24px;font-weight:700;">Просроченная задача</h1>
+      <h1 style="margin:0 0 8px;color:#fff;font-size:24px;font-weight:700;">Задание ждёт закрытия</h1>
       <p style="margin:0 0 24px;color:rgba(255,255,255,0.5);font-size:15px;line-height:1.6;">
-        Время дедлайна вышло. Не затягивай — сдай как можно скорее.
+        Срок прошёл. Это не провал: закрой задание, когда сможешь.
       </p>
-      <div style="background:rgba(255,60,60,0.08);border:1px solid rgba(255,60,60,0.25);border-radius:14px;padding:20px 24px;margin-bottom:24px;">
+      <div style="background:rgba(255,196,64,0.08);border:1px solid rgba(255,196,64,0.25);border-radius:14px;padding:20px 24px;margin-bottom:24px;">
         <div style="color:#fff;font-size:16px;font-weight:600;margin-bottom:4px;">{_escape(task_title)}</div>
-        <div style="color:rgba(255,80,80,0.8);font-size:13px;">Дедлайн: {_escape(deadline_str)}</div>
+        <div style="color:rgba(255,196,64,0.85);font-size:13px;">Срок был: {_escape(deadline_str)}</div>
       </div>
       <div style="text-align:center;">
-        <a href="{_escape(config.APP_URL)}/student/tasks" style="display:inline-block;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:14px;text-decoration:none;padding:12px 28px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);">
+        <a href="{_escape(config.APP_URL)}/#/tasks" style="display:inline-block;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:14px;text-decoration:none;padding:12px 28px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);">
           Открыть задачи
         </a>
       </div>
     """
-    return _base_template("Просроченная задача — Vector", content)
+    return _base_template("Задание ждёт закрытия — Vector", content)
 
 
 def _notification_html(title: str, body: str) -> str:
     content = f"""
       <h1 style="margin:0 0 8px;color:#fff;font-size:22px;font-weight:700;">{_escape(title)}</h1>
-      <p style="margin:0 0 24px;color:rgba(255,255,255,0.6);font-size:15px;line-height:1.7;">{_escape(body)}</p>
+      <p style="margin:0 0 24px;color:rgba(255,255,255,0.6);font-size:15px;line-height:1.7;white-space:pre-line;">{_escape(body)}</p>
       <div style="text-align:center;">
-        <a href="{_escape(config.APP_URL)}/dashboard" style="display:inline-block;background:linear-gradient(135deg,#8B79FF,#6b5ce7);color:#fff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:10px;">
-          Открыть дашборд
+        <a href="{_escape(config.APP_URL)}/#/stats" style="display:inline-block;background:linear-gradient(135deg,#8B79FF,#6b5ce7);color:#fff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:10px;">
+          Открыть статистику
         </a>
       </div>
     """
@@ -267,20 +270,41 @@ def create_notification(
     body: str,
     channel: NotificationChannel = NotificationChannel.browser,
     scheduled_at: datetime | None = None,
+    dedupe_key: str | None = None,
     commit: bool = True,
-) -> Notification:
+) -> Notification | None:
     """Ставит уведомление в очередь.
 
     ``commit=False`` позволяет объединить несколько записей в одну
     транзакцию; раньше сигнатура всегда коммитила, и вызывающий код
     коммитил дважды.
+
+    Возвращает ``None``, если событие уже было (совпал ``dedupe_key``)
+    или получатель выключил MAX. Проверка канала живёт здесь, а не в
+    источниках событий: одно место — одно правило.
     """
+    if channel is NotificationChannel.max:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is not None and user.notify_max is False:
+            return None
+    if dedupe_key is not None:
+        duplicate = (
+            db.query(Notification.id)
+            .filter(
+                Notification.user_id == user_id,
+                Notification.dedupe_key == dedupe_key,
+            )
+            .first()
+        )
+        if duplicate:
+            return None
     notification = Notification(
         user_id=user_id,
         title=title,
         body=body,
         channel=channel,
         scheduled_at=scheduled_at,
+        dedupe_key=dedupe_key,
     )
     db.add(notification)
     if commit:
@@ -419,10 +443,10 @@ async def _job_check_overdue() -> None:
             create_notification(
                 db=db,
                 user_id=task.student_id,
-                title="Просроченная задача",
+                title="Задание ждёт закрытия",
                 body=(
-                    f"«{task.title}» просрочена. "
-                    f"Дедлайн был {deadline_str}."
+                    f"«{task.title}» — срок прошёл ({deadline_str}). "
+                    "Отметь его, когда выполнишь."
                 ),
                 channel=NotificationChannel.browser,
                 commit=False,
@@ -434,7 +458,7 @@ async def _job_check_overdue() -> None:
                     await asyncio.to_thread(
                         send_email,
                         user.email,
-                        f"Просрочена задача: {task.title} — Vector",
+                        f"Задание ждёт закрытия: {task.title} — Vector",
                         _overdue_task_html(task.title, deadline_str),
                     )
                     mailed += 1
@@ -450,6 +474,100 @@ async def _job_check_overdue() -> None:
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         logger.exception("check_overdue error: %s", exc)
+    finally:
+        db.close()
+
+
+def weekly_email_text(db: Session, student: User) -> str | None:
+    """Тело письма по одному ребёнку; ``None`` — за неделю ничего не было."""
+    tz_name = config.TIMEZONE
+    now = datetime.now(timezone.utc)
+    today = now.astimezone(zone(tz_name)).date()
+    start, end = week_bounds(today)
+    data = summary(db, student.id, start, end, tz_name, now=now)
+    if data["total"] == 0:
+        return None
+
+    lines = [
+        f"{student.last_name} {student.first_name}: заданий {data['total']}, "
+        f"в срок {data['on_time']}, позже {data['late']}, "
+        f"открыто {data['open']}."
+    ]
+    debts = waiting(db, student.id, today, tz_name, now=now, limit=5)
+    if debts:
+        lines.append("Ждут закрытия:")
+        for item in debts:
+            subject = item["subject"] or "без предмета"
+            lines.append(
+                f"— {item['title']} ({subject}), {item['age_days'] or 0} дн."
+            )
+    return "\n".join(lines)
+
+
+async def _job_weekly_summary() -> None:
+    """Почтовая копия недельной сводки родителям. В MAX её шлёт бот."""
+    db = SessionLocal()
+    try:
+        parents = (
+            db.query(User)
+            .filter(
+                User.role == UserRole.parent,
+                User.notify_email.is_(True),
+                User.email.isnot(None),
+            )
+            .all()
+        )
+        if not parents:
+            return
+
+        week = week_bounds(datetime.now(zone(config.TIMEZONE)).date())[0]
+        by_parent: dict[int, list[int]] = {}
+        for parent_id, student_id in db.query(
+            ParentStudent.parent_id, ParentStudent.student_id
+        ).all():
+            by_parent.setdefault(parent_id, []).append(student_id)
+
+        student_ids = {sid for ids in by_parent.values() for sid in ids}
+        students = (
+            {
+                user.id: user
+                for user in db.query(User)
+                .filter(User.id.in_(student_ids))
+                .all()
+            }
+            if student_ids
+            else {}
+        )
+
+        created = 0
+        for parent in parents:
+            blocks = []
+            for student_id in by_parent.get(parent.id, [])[:3]:
+                student = students.get(student_id)
+                if student is None:
+                    continue
+                text = weekly_email_text(db, student)
+                if text:
+                    blocks.append(text)
+            if not blocks:
+                continue
+            made = create_notification(
+                db=db,
+                user_id=parent.id,
+                title="Сводка за неделю",
+                body="\n\n".join(blocks),
+                channel=NotificationChannel.email,
+                dedupe_key=f"weekly:{week.isoformat()}",
+                commit=False,
+            )
+            if made is not None:
+                created += 1
+        if created:
+            db.commit()
+            logger.info("weekly summary queued=%d", created)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        logger.exception("weekly_summary error: %s", exc)
     finally:
         db.close()
 
@@ -476,6 +594,18 @@ def start_scheduler() -> None:
         "interval",
         minutes=10,
         id="check_overdue",
+        replace_existing=True,
+    )
+    # Почтовая копия недельной сводки. Основной канал — MAX: его рассылает
+    # бот по тем же настройкам из общего .env.
+    scheduler.add_job(
+        _job_weekly_summary,
+        "cron",
+        day_of_week=config.WEEKLY_SUMMARY_WEEKDAY,
+        hour=config.WEEKLY_SUMMARY_HOUR,
+        minute=0,
+        timezone=zone(config.TIMEZONE),
+        id="weekly_summary",
         replace_existing=True,
     )
     scheduler.start()
@@ -554,4 +684,59 @@ def mark_read(
     if not notification:
         raise HTTPException(404, "Notification not found")
     notification.is_read = True
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Очередь доставки в MAX
+# ---------------------------------------------------------------------------
+
+# Сколько сообщений бот забирает за один цикл.
+MAX_BATCH_LIMIT = 20
+# Бот лежал дольше — вчерашние напоминания уже не нужны.
+MAX_QUEUE_TTL_DAYS = 2
+
+
+class DeliveredBody(BaseModel):
+    ids: list[int]
+
+
+@router.get("/max/pending", response_model=list[NotificationResponse])
+def max_pending(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Очередь для бота: что ещё не доставлено в MAX этому пользователю."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=MAX_QUEUE_TTL_DAYS)
+    return (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == current_user.id,
+            Notification.channel == NotificationChannel.max,
+            Notification.is_sent.is_(False),
+            Notification.created_at >= cutoff,
+        )
+        .order_by(Notification.created_at.asc())
+        .limit(MAX_BATCH_LIMIT)
+        .all()
+    )
+
+
+@router.post("/max/delivered", status_code=204)
+def max_delivered(
+    body: DeliveredBody,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Бот подтверждает доставку; чужие id молча игнорируются."""
+    if not body.ids:
+        return
+    db.query(Notification).filter(
+        Notification.user_id == current_user.id,
+        Notification.id.in_(body.ids),
+        Notification.channel == NotificationChannel.max,
+    ).update(
+        {"is_sent": True, "sent_at": datetime.now(timezone.utc)},
+        synchronize_session=False,
+    )
     db.commit()

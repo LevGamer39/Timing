@@ -89,7 +89,7 @@ class ReminderScheduler:
 
             sent = 0
             for task in tasks:
-                if task.get("status") == "done":
+                if task.get("status") in {"done", "accepted"}:
                     continue
                 key = self._reminder_key(task, today)
                 if key is None or self.store.was_sent(user_id, key):
@@ -179,18 +179,31 @@ class ReminderScheduler:
             logger.info("Недельная сводка отправлена %s", user_id)
         await self.store.save()
 
+    @staticmethod
+    def _week_line(data: dict[str, Any]) -> str | None:
+        """Одна строка недели с теми же цифрами, что в письме и на сайте."""
+        if not data or not data.get("total"):
+            return None
+        return (
+            f"За неделю: в срок {data['on_time']}, позже {data['late']}, "
+            f"открыто {data['open']}."
+        )
+
     async def _weekly_text(self, token: str, role: str) -> str | None:
         if role == "student":
             try:
                 summary = await self.backend.my_grade_summary(token)
                 tasks = await self.backend.list_tasks(token)
+                week = await self.backend.weekly_stats(token)
             except BackendError:
                 return None
-            active = [task for task in tasks if task.get("status") != "done"]
+            active = [task for task in tasks if task.get("status") not in {"done", "accepted"}]
+            week_line = self._week_line(week)
             return (
                 "<b>Недельная сводка</b>\n"
                 f"{summary_block(summary)}\n\n"
-                f"<b>Активные задания</b>\n{tasks_block(active, limit=5)}"
+                + (f"{week_line}\n\n" if week_line else "")
+                + f"<b>Активные задания</b>\n{tasks_block(active, limit=5)}"
             )
 
         try:
@@ -205,6 +218,9 @@ class ReminderScheduler:
             try:
                 grades = await self.backend.child_grades(token, int(child["id"]))
                 tasks = await self.backend.child_tasks(token, int(child["id"]))
+                week = await self.backend.child_weekly_stats(
+                    token, int(child["id"])
+                )
             except BackendError:
                 continue
             average = (
@@ -212,11 +228,14 @@ class ReminderScheduler:
                 if grades
                 else None
             )
-            active = [task for task in tasks if task.get("status") != "done"]
+            active = [task for task in tasks if task.get("status") not in {"done", "accepted"}]
             lines.append(f"\n<b>{esc(child.get('first_name', ''))}</b>")
             lines.append(
                 "Средний балл: "
                 + (f"{average:.2f}" if average is not None else "нет оценок")
             )
+            week_line = self._week_line(week)
+            if week_line:
+                lines.append(week_line)
             lines.append(f"Активных заданий: {len(active)}")
         return "\n".join(lines)

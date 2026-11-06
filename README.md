@@ -35,10 +35,11 @@
 | Технология | Назначение |
 |---|---|
 | **HTML / CSS / JS** | Без фреймворков и сборки |
-| **Chart.js** (CDN) | График динамики успеваемости |
-| **Inter / Nunito** (Google Fonts CDN) | Типографика |
-| **Canvas API** | Кольцо прогресса |
+| **Inter** (Google Fonts CDN) | Типографика |
 | **LocalStorage** | JWT-токен и профиль сессии |
+
+> Графики (динамика недель, кольцо прогресса) — на div и CSS, без
+> графических библиотек и CDN.
 
 > Статику раздаёт сам FastAPI: каталог `frontend/` смонтирован в корень
 > (и в `/static` для совместимости). Фронтенд — SPA на `frontend/index.html`,
@@ -75,6 +76,10 @@
 
 Все сервисы — в сети `vector_net` (bridge). Наружу открыты только `80` и `443`
 через nginx, плюс `5432` у БД (bind на хост — для отладки).
+
+Отдельный контейнер `bot` держит MAX-бота: он не ходит в PostgreSQL, а вызывает
+тот же backend по `MAX_BOT_URL` (`http://backend:8000`). Команды и настройка —
+`bot/README.md`.
 
 ### Домен настраивается в одном месте
 
@@ -151,12 +156,15 @@ VectorVK/
 │   │   ├── config.py            # Единая конфигурация: парсинг и валидация .env
 │   │   ├── main.py              # Точка входа: API-роутеры + раздача страниц
 │   │   ├── database.py          # Engine (PostgreSQL), сессии, create_tables
-│   │   ├── models.py            # 13 моделей + ограничения целостности
-│   │   ├── dependencies.py      # get_current_user, require_role
+│   │   ├── models.py            # 28 таблиц + ограничения целостности
+│   │   ├── dependencies.py      # get_current_user, require_role, assert_parent_of
+│   │   ├── enrollment.py        # Класс ученика, задачи по заданиям, предметы
 │   │   ├── ai_text.py           # Чистая логика ИИ: парсинг, матчинг задач
-│   │   └── routers/             # users, admin, classes, assignments, tasks,
-│   │                            #   grades, schedule, ai, notifications,
-│   │                            #   yandex_auth
+│   │   ├── stats.py             # Агрегаты задач: срез, ожидание, динамика
+│   │   └── routers/             # users, admin, migration, stats, classes,
+│   │                            #   assignments, tasks, grades, schedule,
+│   │                            #   journal, attendance, messages, school, ai,
+│   │                            #   notifications, yandex_auth
 │   ├── tests/                   # pytest (нужен PostgreSQL)
 │   ├── Dockerfile
 │   ├── pytest.ini
@@ -167,17 +175,26 @@ VectorVK/
 ├── frontend/                    # SPA без сборки: index.html + css/ js/ html/
 │   ├── index.html               # единственная оболочка, навигация по #/...
 │   ├── css/                     # app, palettes + <экран>.css
-│   ├── js/                      # main, store, data, ui, <экран>.js
+│   ├── js/                      # main, store, api, server, <экран>.js
 │   │   ├── shared/              # общая логика экранов
 │   │   └── vendor/qr/           # генератор QR (MIT)
 │   ├── html/                    # <экран>.html + manifest.json
+│   ├── schemas/                 # JSON Schema переноса учеников
 │   └── README.md                # документация фронтенда
+│
+├── bot/                         # MAX-бот: клиент к API, не к БД
+│   ├── bot.py                   # Bot + Dispatcher, polling или webhook
+│   ├── services/                # бэкенд-клиент, ИИ, ДЗ, напоминания, релей MAX
+│   ├── routers/                 # команды и кнопки
+│   ├── texts/                   # тексты и форматирование
+│   ├── keyboards/               # inline-клавиатуры
+│   └── README.md                # документация бота
 │
 ├── nginx/
 │   ├── nginx.conf.template      # Шаблон: домен подставляется через envsubst
 │   ├── docker-entrypoint.sh     # Подстановка APP_DOMAIN + самоподписанный cert
 │   └── Dockerfile               # nginx:alpine + openssl
-├── docker-compose.yml           # backend, ollama, nginx, certbot, db
+├── docker-compose.yml           # backend, ollama, nginx, certbot, bot, db
 ├── .env.example
 └── README.md
 ```
@@ -186,17 +203,18 @@ VectorVK/
 
 | Роль | Возможности | Интерфейс |
 |---|---|---|
-| **Ученик** | Задачи и подзадачи, дневник, оценки, почта, ИИ-чат, профиль | SPA: `#/home`, `#/tasks`, `#/diary`, `#/grades`, `#/mail`, `#/ai` |
-| **Учитель** | Журнал и анализ, посещаемость, задания классу с прогрессом и оценками, почта | SPA: `#/journal`, `#/myclass`, `#/mail` |
-| **Родитель** | Просмотр задач, оценок, расписания и пропусков ребёнка (только чтение), привязка по коду | SPA: те же экраны с переключателем ребёнка |
-| **Администратор** | Классы, учителя и коды, расписание, пропуски, настройки школы, почта | SPA: `#/classes`, `#/teachers`, `#/schedule`, `#/attendance` |
+| **Ученик** | Задачи и подзадачи, дневник, оценки, статистика, почта, ИИ-чат, профиль | SPA: `#/home`, `#/tasks`, `#/diary`, `#/grades`, `#/stats`, `#/mail`, `#/ai` |
+| **Учитель** | Журнал и анализ, посещаемость, задания классу с прогрессом, оценки, приём работ, почта | SPA: `#/journal`, `#/myclass`, `#/mail` |
+| **Родитель** | Просмотр задач, оценок, статистики, расписания и пропусков ребёнка (только чтение), привязка по коду | SPA: те же экраны с переключателем ребёнка |
+| **Администратор** | Классы, учителя и коды, расписание, пропуски, настройки школы, экспорт/импорт учеников, почта | SPA: `#/classes`, `#/teachers`, `#/schedule`, `#/attendance` |
 
 Вход общий: логин + пароль, код из MAX-бота или Яндекс ID. Ученик и родитель
 могут зарегистрироваться сами (подтверждение почты), учитель — по одноразовому
 коду из админки. Ученик вступает в класс по 12-символьному коду.
 
 API родителя работает полностью (`/api/grades/child/{id}`,
-`/api/tasks/child/{id}`, `/api/schedule/child/{id}`, `/api/users/me/children`).
+`/api/tasks/child/{id}`, `/api/schedule/child/{id}`,
+`/api/stats/*/child/{id}`, `/api/users/me/children`).
 В SPA роль `parent` подключена к API: ребёнок выбирается переключателем.
 
 ---
@@ -209,6 +227,8 @@ API родителя работает полностью (`/api/grades/child/{id
 |---|---|
 | users | `/api/users` |
 | admin | `/api/admin` |
+| migration | `/api/admin/migration` |
+| stats | `/api/stats` |
 | classes | `/api/classes` |
 | assignments | `/api/assignments` |
 | tasks | `/api/tasks` |
@@ -253,8 +273,10 @@ python run_tests.py
 `Remove-Item Env:TEST_DATABASE_URL` — `run_tests.py` берёт `.env` только
 когда переменной нет.
 
-239 тестов: `test_ai_text`, `test_tasks`, `test_assignments`, `test_grades`,
-`test_schedule`, `test_classes_admin`, `test_users`, `test_db_constraints`.
+337 тестов: `test_ai_text`, `test_ai`, `test_tasks`, `test_assignments`,
+`test_stats`, `test_grades`, `test_schedule`, `test_classes_admin`,
+`test_journal`, `test_messages`, `test_notifications`, `test_retry_policy`,
+`test_admin_migration`, `test_users`, `test_db_constraints`.
 Без переменной `TEST_DATABASE_URL` conftest падает сразу — молча подменить БД
 нельзя. На Windows используйте `127.0.0.1`, а не `localhost`: Docker Desktop
 слушает IPv4, и подключение по `localhost` может зависнуть; conftest сам
@@ -431,9 +453,17 @@ nginx (через `envsubst` в `docker-entrypoint.sh`) и в CORS бэкенд�
 | `DEBUG` | `false` | Флаг отладки |
 | `DATABASE_URL` | — | Перекрывает `DB_USER/PASS/HOST/PORT/NAME` целиком |
 | `ENABLE_SCHEDULER` | `true` | Фоновые джобы (выключаются в тестах) |
+| `TIMEZONE` | `Europe/Moscow` | Пояс границ дня и расписания. В БД время UTC; браузер присылает свой пояс, он важнее |
+| `WEEKLY_SUMMARY_WEEKDAY` / `WEEKLY_SUMMARY_HOUR` | `6` / `18` | День (`0`=пн) и час недельной сводки. Одна настройка на оба канала: письмо и MAX |
+| `WEEKLY_SUMMARY_ENABLED` | `true` | Только бот: включает сводку в MAX |
+| `AI_*` (`AI_NUM_CTX`, `AI_TIMEOUT`, `AI_TEMPERATURE`, `AI_NUM_PREDICT`, `AI_HISTORY_CHARS`, `AI_COMPACT_KEEP`, …) | см. `.env.example` | Параметры Ollama и бюджета истории; в коде не зашиты |
 | `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` | — | OAuth Яндекса |
 | `YANDEX_LOGIN_CALLBACK` / `YANDEX_LINK_CALLBACK` | из `APP_URL` | Redirect URI Яндекса |
 | `MAX_BOT_TOKEN` | — | Токен MAX-бота; им же подписываются его запросы к API (`X-Bot-Signature`) |
+| `MAX_BOT_URL` | `http://backend:8000` | Адрес API для бота (в Docker) |
+| `BOT_UPDATE_MODE` | `long_polling` | `long_polling` или `webhook` |
+| `WEBHOOK_URL` / `WEBHOOK_SECRET` | — | Нужны только при `BOT_UPDATE_MODE=webhook` |
+| `BOT_STATE_PATH` | `data/bot_state.json` | Файл состояния бота (volume) |
 | `BOT_USER_ID_SALT` | из `MAX_BOT_TOKEN` | Соль хеширования MAX user_id. Смена соли инвалидирует привязки |
 
 ---
@@ -464,15 +494,73 @@ nginx (через `envsubst` в `docker-entrypoint.sh`) и в CORS бэкенд�
 - Анализ нагрузки на неделю
 - Разбивка задачи на подзадачи (сохраняются в БД как `Task` с `parent_task_id`)
 - Определение приоритетов и подсказка времени работы
+- Вывод по динамике недель для `#/stats` — считается один раз, кэш в
+  `stats_summaries` (в джоб недельной сводки Qwen не вызывается)
+
+---
+
+## Статистика и приём работ
+
+Экран `#/stats` (меню «Оценки» → «Статистика недели») и те же цифры в боте и
+в письме-сводке. Считает `app/stats.py`, отдаёт `/api/stats/*`, у родителя —
+`/child/{id}`.
+
+- **Срез дня**: задания на сегодня и «ждёт закрытия» — без оценок и сравнений.
+- **Неделя**: сколько закрыто в срок, позже срока, ещё открыто, принято
+  учителем. «Позже срока» — это `completed_at > deadline`, отдельного статуса
+  нет.
+- **Динамика**: 8 недель, полосы на div, без библиотек.
+- Считаются только задания учителя (`assignment_id` не пуст): личные задачи
+  ученика в статистику не попадают.
+- Никаких рейтингов класса, серий и скрытых метрик — ученик видит всё, что
+  видит учитель.
+
+Приём работ: ученик отмечает «выполнено» (`TaskStatus.done`), учитель в
+«Мой класс → Задания → Кто сдал» жмёт «Принять» или «Принять всех». Принятая
+работа получает `TaskStatus.accepted` и `accepted_at`, чекбокс у ученика
+блокируется. Отказ возвращает работу в работу: `in_progress`, а если срок уже
+прошёл — в `overdue` («ждёт закрытия»); причина не обязательна.
+
+При выдаче задания форма показывает подсказку нагрузки на выбранный день
+(`GET /api/assignments/workload/{class_id}?date=`): сколько заданий и минут
+уже стоит, с кнопками перехода на свободный день. Это подсказка, а не запрет:
+выдать можно всегда.
+
+---
+
+## Перенос учеников между школами
+
+Один сервер — одна школа. Перенос между установками — файлом, не синхронизацией
+базы:
+
+- `GET /api/admin/migration/students` — экспорт всех учеников в JSON;
+- `POST /api/admin/migration/students` — импорт;
+- схема — `frontend/schemas/student-migration.schema.json`
+  (`/static/schemas/student-migration.schema.json`);
+- в админке кнопки живут в `#/classes` («Экспорт учеников (JSON)» /
+  «Импорт учеников (JSON)»).
+
+Переносятся профиль, класс по названию, оценки и итоговые. Классы принимающей
+стороны остаются локальными, журнал не переносится. Импорт идемпотентен: по
+логину ученик находится и обновляется, дублей не появляется.
+
+Внутри школы ученика переносит администратор в карточке класса — членство и
+`User.grade` меняются вместе (`app/enrollment.py`), задачи по уже выданным
+заданиям нового класса досоздаются.
 
 ---
 
 ## База данных
 
-**PostgreSQL**. 15 таблиц: `users`, `invite_codes`, `email_verifications`,
-`classes`, `class_memberships`, `parent_students`, `parent_link_tokens`,
-`assignments`, `tasks`, `grades`, `schedule`, `notifications`,
-`email_change_tokens`, `password_reset_tokens`, `ai_messages`.
+**PostgreSQL**. 28 таблиц: пользователи и доступ (`users`, `invite_codes`,
+`email_verifications`, `password_reset_tokens`, `email_change_tokens`,
+`max_login_codes`, `teacher_subjects`, `parent_students`,
+`parent_link_tokens`), школа (`classes`, `class_memberships`,
+`school_settings`, `class_schedule`), учёба (`assignments`, `tasks`, `grades`,
+`schedule`, `journal_lessons`, `journal_absences`, `journal_finals`,
+`journal_work_types`, `attendance_marks`), общение (`messages`, `mail_files`,
+`notifications`), ИИ и аналитика (`ai_chats`, `ai_messages`,
+`stats_summaries`).
 
 Таблицы создаются автоматически через `Base.metadata.create_all()` при старте.
 **Фреймворка миграций нет.** Важно: `create_all` создаёт только отсутствующие
@@ -525,9 +613,10 @@ SMTP-сервер.
 | Отправка с выбором транспорта по порту | `app/config.py` → `starttls_for_port()` |
 | Санитизация заголовков (CRLF в теме не ломает письмо) | `notifications.py` → `_header()` |
 | Экранирование HTML в письмах | `notifications.py` → `_escape()` |
-| Четыре шаблона | код, сброса, просрочки, уведомления |
+| Четыре шаблона | код, сброса, ожидания закрытия, уведомления |
 | Очередь уведомлений | джоб раз в минуту |
-| Пометка просроченных | джоб раз в 10 минут |
+| Пометка ждущих закрытия | джоб раз в 10 минут |
+| Недельная сводка | джоб по `WEEKLY_SUMMARY_WEEKDAY`/`_HOUR` |
 | **Ограниченные повторы** | backoff 5→15→60→240→720 мин, отказ через 24 ч |
 
 Повторы — важная деталь: раньше при ошибке доставки письмо оставалось
@@ -602,7 +691,8 @@ DNS-хостингом.
 | Код подтверждения | при регистрации и повторной отправке | на email пользователя |
 | Сброс пароля | по запросу | на email пользователя |
 | Уведомление | из очереди, раз в минуту | `user.email` |
-| Просроченная задача | раз в 10 минут | `user.email` |
+| Задание ждёт закрытия | раз в 10 минут | `user.email` |
+| Недельная сводка | раз в неделю (`WEEKLY_SUMMARY_*`) | `user.email`, если он есть |
 
 Если у пользователя `notify_email = False`, запись сразу помечается
 обработанной, чтобы очередь не копилась.
@@ -619,11 +709,23 @@ DNS-хостингом.
 | 587 | `SMTP` + `STARTTLS` |
 | прочие (2525 и т.п.) | `SMTP` без TLS |
 
-- **Email** — SMTP, очередь (`is_sent = False`) разбирается **каждую минуту**
-- **Браузер** — хранятся в БД, фронт запрашивает при загрузке страницы
-- **Просрочка** — джоб `_job_check_overdue` каждые **10 минут**
-- Каналы настраиваются пользователем: `notify_email`, `notify_browser`,
-  `notify_telegram` (telegram — заглушка), `notify_digest_time`
+Каналы:
+
+- **MAX — основной.** Уведомление кладётся в `notifications` с
+  `channel = max`, бот забирает его `GET /api/notifications/max/pending` и
+  подтверждает `POST /api/notifications/max/delivered`. `users.notify_max`
+  выключает канал целиком (`/notify` в боте или галочка в настройках).
+- **Email — необязательный**, включается настройкой `notify_email`; очередь
+  (`is_sent = False`) разбирается **каждую минуту**.
+- **Браузер** — хранятся в БД, фронт запрашивает при загрузке страницы.
+- **Ожидание** — джоб `_job_check_overdue` каждые **10 минут** ставит статус
+  `overdue`: в интерфейсе и письмах это «ждёт закрытия», без упрёков.
+- `Notification.dedupe_key` (уникален в паре с `user_id`) гасит повторы:
+  тридцать учеников, отметивших одну работу, дают одно сообщение учителю.
+- **Недельная сводка** — `WEEKLY_SUMMARY_WEEKDAY` / `WEEKLY_SUMMARY_HOUR`;
+  цифры те же, что на экране `#/stats`, потому что считает их `app/stats.py`.
+
+Настройки пользователя: `notify_email`, `notify_browser`, `notify_max`.
 
 ---
 
@@ -654,7 +756,7 @@ DNS-хостингом.
 | ИИ-матчинг задач падал с `IndexError` при пустом списке | ✅ `app/ai_text.py` |
 | Дашборд учителя показывал 0 учеников, если нет заданий | ✅ роустр всегда |
 | Переход ученика в новый класс менял `grade`, но не членство | ✅ перенос явный |
-| Нет ограничений целостности | ✅ модели + миграция 001 |
+| Нет ограничений целостности | ✅ модели + идемпотентный DDL при старте |
 | `uvloop` не ставится на Windows | ✅ маркеры платформы |
 
 ### Фронтенд

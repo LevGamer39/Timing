@@ -150,7 +150,7 @@ def _score_from_grade(
     """Приводит к шкале 0-100; оценки ограничены диапазоном 1-5."""
     if grade_value is not None:
         return round((grade_value / 5) * 100, 1)
-    if status == TaskStatus.done:
+    if status in {TaskStatus.done, TaskStatus.accepted}:
         return 100.0
     return None
 
@@ -341,7 +341,7 @@ def teacher_dashboard_data(
         grade = grade_by_student.get(student_id)
         status = task.status if task else None
 
-        if status == TaskStatus.done:
+        if status in {TaskStatus.done, TaskStatus.accepted}:
             completed += 1
         elif status in {TaskStatus.in_progress, TaskStatus.overdue}:
             started += 1

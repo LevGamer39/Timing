@@ -16,18 +16,20 @@ const dateLabel = (value) => {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) + ', ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 };
 
-const overdue = (t) => t.deadline && t.status !== 'done' && new Date(t.deadline).getTime() < Date.now();
+const overdue = (t) => t.deadline && t.status !== 'done' && t.status !== 'accepted' && new Date(t.deadline).getTime() < Date.now();
+const closed = (t) => t.status === 'done' || t.status === 'accepted';
 
 function taskCard(t, i) {
-  return '<article class="card pad task-card' + (t.status === 'done' ? ' done' : '') + '" data-task="' + i + '">'
+  return '<article class="card pad task-card' + (closed(t) ? ' done' : '') + '" data-task="' + i + '">'
     + '<label class="row" style="gap: 10px; align-items: flex-start; min-height: 28px">'
-    + '<input type="checkbox" data-done="' + i + '" ' + (t.status === 'done' ? 'checked' : '') + ' aria-label="Готово">'
+    + '<input type="checkbox" data-done="' + i + '" ' + (closed(t) ? 'checked' : '') + (t.status === 'accepted' ? ' disabled' : '') + ' aria-label="Готово">'
     + '<span class="grow"><b class="task-title">' + esc(t.title) + '</b>'
     + (t.subject ? '<br><span class="muted small">' + esc(t.subject) + '</span>' : '')
+    + (t.status === 'accepted' ? '<br><span class="muted small">Принято учителем</span>' : '')
     + '</span>'
     + '<span class="task-prio prio-' + esc(t.priority || 'medium') + '">' + (PRIORITY[t.priority] || 'Обычная') + '</span>'
     + '</label>'
-    + '<p class="hint task-date' + (overdue(t) ? ' late' : '') + '">' + (overdue(t) ? 'Просрочено: ' : 'Срок: ') + dateLabel(t.deadline) + '</p>'
+    + '<p class="hint task-date' + (overdue(t) ? ' late' : '') + '">' + (overdue(t) ? 'Ждёт закрытия: ' : 'Срок: ') + dateLabel(t.deadline) + '</p>'
     + (t.description ? '<p class="task-desc">' + esc(t.description) + '</p>' : '')
     + '<div class="row" style="gap: 6px; justify-content: flex-end">'
     + '<button class="text-action" type="button" data-sub="' + i + '">Подзадачи</button>'
@@ -110,8 +112,8 @@ function tasksView({ rerender }) {
         box.innerHTML = '<div class="card pad"><p class="muted" style="margin: 0">Личные задачи доступны после входа в аккаунт. В демо-режиме задания смотрите в дневнике.</p></div>';
         return;
       }
-      const open = items.filter((t) => t.status !== 'done');
-      const done = items.filter((t) => t.status === 'done');
+      const open = items.filter((t) => !closed(t));
+      const done = items.filter((t) => closed(t));
       box.innerHTML = (open.length ? open.map(taskCard).join('') : '<div class="card pad"><p class="muted" style="margin: 0">Активных задач нет. Добавьте первую — она появится здесь и в дневнике.</p></div>')
         + (done.length ? '<h2 class="h2" style="font-size: 18px; margin: 8px 0 0">Выполнено</h2>' + done.map(taskCard).join('') : '');
       box.querySelectorAll('[data-done]').forEach((cb) => cb.addEventListener('change', () => {

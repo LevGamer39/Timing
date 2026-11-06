@@ -14,12 +14,15 @@ VectorVK/
 │   │   ├── main.py              # Точка входа: API-роутеры + раздача страниц
 │   │   ├── database.py          # Engine (PostgreSQL), сессии, create_tables
 │   │   ├── models.py            # SQLAlchemy ORM + ограничения
-│   │   ├── dependencies.py      # get_current_user, require_role
+│   │   ├── dependencies.py      # get_current_user, require_role, assert_parent_of
+│   │   ├── enrollment.py        # Класс ученика, задачи по заданиям, предметы
 │   │   ├── ai_text.py           # Чистая логика ИИ: парсинг, матчинг задач
+│   │   ├── stats.py             # Агрегаты задач: срез, ожидание, динамика
 │   │   └── routers/
 │   │       ├── users.py            # Регистрация, auth, профиль, сброс пароля
 │   │       ├── admin.py            # Пользователи, классы, инвайт-коды
 │   │       ├── migration.py        # Перенос учеников: экспорт/импорт JSON
+│   │       ├── stats.py            # Срез, неделя, динамика, вывод ИИ
 │   │       ├── classes.py          # Классы учителя, дашборд, вступление
 │   │       ├── assignments.py      # Задания учителя, прогресс
 │   │       ├── tasks.py            # Задачи ученика, подзадачи
@@ -30,7 +33,7 @@ VectorVK/
 │   │       ├── messages.py         # Внутренняя почта школы
 │   │       ├── school.py           # Настройки школы (звонки, периоды, шкала)
 │   │       ├── ai.py               # ИИ: инструменты Ollama, чаты, сжатие истории
-│   │       ├── notifications.py    # SMTP, APScheduler
+│   │       ├── notifications.py    # SMTP, APScheduler, очередь MAX
 │   │       └── yandex_auth.py      # OAuth Яндекса
 │   ├── tests/                   # pytest, требует PostgreSQL
 │   ├── Dockerfile
@@ -72,6 +75,7 @@ VectorVK/
 │   │   ├── ai_chat.py           # ИИ-чат
 │   │   ├── homework.py          # Парсер ДЗ в чатах класса
 │   │   ├── reminders.py         # Напоминания и недельная сводка
+│   │   ├── notifications.py     # Доставка очереди MAX в чат
 │   │   ├── tasks.py             # Создание заданий
 │   │   └── views.py             # Готовые ответы для команд и меню
 │   ├── routers/                 # Обработчики команд и кнопок
@@ -90,7 +94,7 @@ VectorVK/
 │   ├── dockerfile
 │   └── requirements.txt
 │
-├── docker-compose.yml           # backend, ollama, nginx, certbot, db
+├── docker-compose.yml           # backend, ollama, nginx, certbot, bot, db
 ├── .env.example
 └── AGENTS.md
 ```
@@ -181,6 +185,14 @@ parent_task = relationship("Task", back_populates="subtasks", remote_side="[Task
 - ИИ-чаты: `ai_chats` + `ai_messages.chat_id`. `AIChat.summary` и
   `summary_upto_id` — сжатая старая часть диалога; всё, что новее этого id,
   уходит модели как есть. История одного чата не растёт в промпте бесконечно.
+- `StatsSummary` — кэш вывода ИИ по динамике недель, одна строка на ученика.
+  Нужен, чтобы письмо-сводка не ждало Qwen; при новых данных пересчитывается.
+- `Task.status`: `done` — заявление ученика, `accepted` — учитель проверил,
+  `overdue` — срок прошёл (в интерфейсе «ожидает закрытия»). «Закрыто позже
+  срока» не хранится: это `completed_at > deadline`.
+- `Notification.dedupe_key` — ключ идемпотентности, уникален в паре с
+  `user_id`. Канал `max` — очередь для бота; `notify_max` в `users`
+  выключает её целиком. Свои напоминания о сроках бот шлёт сам.
 
 ### 3. Роутеры (routers/*.py)
 
@@ -211,9 +223,12 @@ def complete_task(task_id: int, db: Session = Depends(get_db),
   (`notifications.attempts`, `users.avatar_url` → `TEXT`,
   `parent_link_tokens.code` → `VARCHAR(8)`, `users.login` с бэкфиллом из
   `email`, `email`/`password_hash` → nullable, `ai_messages.chat_id` с
-  переносом старой переписки в чат «История») применяются в
-  `_apply_schema_updates()` при старте; всё остальное по-прежнему требует
-  ручного `ALTER TABLE` — предупреди об этом явно.
+  переносом старой переписки в чат «История», `tasks.accepted_at`,
+  `users.notify_max`, `notifications.dedupe_key` с уникальным индексом)
+  применяются в `_apply_schema_updates()` при старте; новые значения
+  PG-enum (`taskstatus.accepted`, `notificationchannel.max`) добавляет
+  `_add_enum_values()` отдельным autocommit-соединением. Всё остальное
+  по-прежнему требует ручного `ALTER TABLE` — предупреди об этом явно.
 - `create_tables()` объявлена в `database.py` один раз (с `_ensure_admin_user()`).
   Не добавляй вторую — сначала почини существующую.
 
@@ -293,9 +308,12 @@ nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend чер
 
 | Роль | Меню |
 |---|---|
-| student / parent | главная, дневник, оценки, задачи, почта |
+| student / parent | главная, дневник, оценки (внутри — статистика `#/stats`), задачи, почта |
 | teacher | главная, журнал, мой класс, почта |
 | admin | главная, классы, учителя, расписание, пропуски, почта |
+
+Статистика живёт под разделом «Оценки» и только на сервере: без сессии
+блоки просто не рисуются.
 
 Клиентская роль — только для интерфейса; серверная проверка `require_role`
 обязательна.
@@ -373,13 +391,17 @@ pytest
 | `test_ai_text.py` | Чистые хелперы ИИ, матчинг задач, план на неделю, часовые пояса |
 | `test_ai.py` | Чаты и их владелец, история, сжатие, инструменты, подтверждения, фантомные действия |
 | `test_tasks.py` | Владение, запрет правки заданий учителя, каскады |
-| `test_assignments.py` | Раскладка по ученикам, вычисляемые поля, каскадное удаление |
+| `test_assignments.py` | Раскладка по ученикам, вычисляемые поля, каскадное удаление, приём работ, нагрузка класса |
+| `test_stats.py` | Срез дня и недели, часовой пояс, ожидание, динамика, кэш вывода ИИ |
 | `test_grades.py` | Авторизация, массовая выставка, сводки |
+| `test_journal.py` | Уроки, «Н», итоговые, права учителя |
 | `test_schedule.py` | Валидация `HH:MM`, границы `weekday` |
 | `test_classes_admin.py` | Классы, дашборд учителя, админ-панель |
 | `test_admin_migration.py` | Экспорт/импорт учеников JSON: идемпотентность, перенос с сохранением оценок |
 | `test_users.py` | HTTP-флоу регистрация→подтверждение→вход, auth-зависимости |
 | `test_messages.py` | Получатели почты: неподтверждённые видны, заблокированные — нет |
+| `test_notifications.py` | Очередь писем, повторы доставки, очередь MAX и дедупликация, недельная сводка |
+| `test_retry_policy.py` | Backoff повторной отправки письма |
 | `test_db_constraints.py` | Ограничения БД реально отвергают плохие данные |
 
 ### Правила
@@ -429,7 +451,7 @@ docker exec vector_ollama ollama pull qwen2.5:7b
 ### JavaScript
 
 - ES6+, стрелочные функции, `camelCase`
-- Только vanilla JS — **кроме** Chart.js и Google Fonts, которые приходят с CDN
+- Только vanilla JS; из CDN — только Google Fonts (Inter). Графики — div/CSS
 - Никаких сборщиков, бандлеров и npm-зависимостей
 
 ---
@@ -501,6 +523,12 @@ DEBUG=false
 # Выключает фоновые джобы (тесты, одноразовые команды)
 ENABLE_SCHEDULER=true
 
+# Недельная сводка: 0=пн .. 6=вс, час в TIMEZONE. Читают бэкенд (письмо)
+# и бот (MAX) — одна настройка на оба канала. ENABLED — только бот.
+WEEKLY_SUMMARY_WEEKDAY=6
+WEEKLY_SUMMARY_HOUR=18
+WEEKLY_SUMMARY_ENABLED=true
+
 YANDEX_CLIENT_ID=your-yandex-client-id
 YANDEX_CLIENT_SECRET=your-yandex-client-secret
 YANDEX_LOGIN_CALLBACK=https://vector.myftp.org/api/auth/yandex/callback
@@ -514,6 +542,8 @@ YANDEX_LINK_CALLBACK=https://vector.myftp.org/api/auth/yandex/confirm-link
 
 ---
 
-**Last Updated**: 2026-11-01 (журнал, почта с вложениями, посещаемость,
-расписание, настройки школы, уведомления и ИИ подключены к API; админка
-управляет классами и учителями; `/link` привязывает веб-аккаунт к MAX)
+**Last Updated**: 2026-11-06 (статистика `#/stats` и приём работ, очередь
+уведомлений MAX с `/notify`, недельная сводка в письме и в боте, перенос
+учеников между школами через JSON; журнал, почта с вложениями, посещаемость,
+расписание, настройки школы и ИИ подключены к API; `/link` привязывает
+веб-аккаунт к MAX)

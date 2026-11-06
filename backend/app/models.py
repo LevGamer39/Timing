@@ -19,7 +19,10 @@ class UserRole(str, enum.Enum):
 class TaskStatus(str, enum.Enum):
     pending = "pending"
     in_progress = "in_progress"
+    # done — заявление ученика «я подготовился», accepted — учитель проверил.
     done = "done"
+    accepted = "accepted"
+    # Срок прошёл, никто не отметил. В интерфейсе называется «ожидает».
     overdue = "overdue"
 
 
@@ -33,6 +36,8 @@ class TaskPriority(str, enum.Enum):
 class NotificationChannel(str, enum.Enum):
     email = "email"
     browser = "browser"
+    # Доставка в MAX: бот забирает очередь и отправляет в чат.
+    max = "max"
 
 
 class User(Base):
@@ -58,6 +63,8 @@ class User(Base):
     # Настройки уведомлений
     notify_email = Column(Boolean, default=True)
     notify_browser = Column(Boolean, default=True)
+    # MAX — основной канал доставки; флаг выключает его целиком.
+    notify_max = Column(Boolean, default=True)
     notify_digest_time = Column(String(5), default="08:00")  # "HH:MM"
 
     classes_taught = relationship("Class", back_populates="teacher")
@@ -255,6 +262,8 @@ class Task(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    # Когда учитель принял «сделано». Приём финальный, возврат обнуляет.
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
 
     student = relationship("User", back_populates="tasks", foreign_keys=[student_id])
     assignment = relationship("Assignment", back_populates="tasks")
@@ -325,6 +334,8 @@ class Notification(Base):
     attempts = Column(Integer, nullable=False, default=0, server_default="0")
     scheduled_at = Column(DateTime(timezone=True), nullable=True)
     sent_at = Column(DateTime(timezone=True), nullable=True)
+    # Ключ идемпотентности: уникальный индекс не даёт продублировать событие.
+    dedupe_key = Column(String(120), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="notifications")
@@ -619,4 +630,21 @@ class MailFile(Base):
     uploader_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class StatsSummary(Base):
+    """Недельный вывод ИИ по ученику: генерируется раз и переиспользуется."""
+
+    __tablename__ = "stats_summaries"
+    __table_args__ = (
+        UniqueConstraint("student_id", "week", name="uq_stats_summaries"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    student_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    week = Column(Date, nullable=False)  # понедельник ISO-недели
+    text = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

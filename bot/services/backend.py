@@ -252,5 +252,39 @@ class Backend:
     async def my_classes(self, token: str) -> list[dict[str, Any]]:
         return await self._request("GET", "/api/classes", token=token)
 
+    async def pending_notifications(self, token: str) -> list[dict[str, Any]]:
+        """Очередь уведомлений для MAX (события из API)."""
+        return await self._request(
+            "GET", "/api/notifications/max/pending", token=token
+        )
+
+    async def mark_delivered(self, token: str, ids: list[int]) -> None:
+        await self._request(
+            "POST",
+            "/api/notifications/max/delivered",
+            token=token,
+            json={"ids": ids},
+        )
+
+    async def update_profile(
+        self, token: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await self._request(
+            "PATCH", "/api/users/me", token=token, json=payload
+        )
+
+    async def profile(self, token: str) -> dict[str, Any]:
+        return await self._request("GET", "/api/users/me", token=token)
+
+    async def weekly_stats(self, token: str) -> dict[str, Any]:
+        return await self._request("GET", "/api/stats/weekly/my", token=token)
+
+    async def child_weekly_stats(
+        self, token: str, student_id: int
+    ) -> dict[str, Any]:
+        return await self._request(
+            "GET", f"/api/stats/weekly/child/{student_id}", token=token
+        )
+
 
 __all__ = ["Backend", "BackendError", "Unauthorized"]

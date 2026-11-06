@@ -13,7 +13,14 @@ from maxapi.types.updates.message_edited import MessageEdited
 
 from core.context import AppContext
 from core.security import hash_user_id
-from core.ui import event_user, get_token, respond, role_of
+from core.ui import (
+    event_user,
+    get_token,
+    message_text,
+    require_token,
+    respond,
+    role_of,
+)
 from keyboards import main_menu, register_keyboard
 from services.backend import BackendError
 from services import link
@@ -134,6 +141,38 @@ def build_router(ctx: AppContext) -> Router:
             + str(payload.get("code", ""))
             + "</code>\nДействует 10 минут. Введите его на странице входа "
             "«Войти через MAX».",
+        )
+
+    @router.message_created(Command("notify"))
+    async def notify_command(event: MessageCreated) -> None:
+        """Включение и выключение уведомлений от учителя в MAX."""
+        token = await require_token(ctx, event)
+        if token is None:
+            return
+        parts = (message_text(event) or "").split(maxsplit=1)
+        arg = parts[1].strip().lower() if len(parts) > 1 else ""
+        try:
+            profile = await ctx.backend.profile(token)
+            enabled = bool(profile.get("notify_max", True))
+            if arg in {"вкл", "on"}:
+                target = True
+            elif arg in {"выкл", "off"}:
+                target = False
+            else:
+                target = not enabled
+            if target != enabled:
+                await ctx.backend.update_profile(
+                    token, {"notify_max": target}
+                )
+        except BackendError as exc:
+            await respond(event, f"Не получилось: {esc(exc.detail)}")
+            return
+
+        state = "включены" if target else "выключены"
+        await respond(
+            event,
+            f"Уведомления о работах: {state}.\n"
+            "Напоминания о сроках приходят всегда.",
         )
 
     @router.message_created(Command("help"))

@@ -198,6 +198,7 @@ export function accountFor(profile, children) {
     email: profile.email || '',
     notifyEmail: profile.notify_email !== false,
     notifyBrowser: profile.notify_browser !== false,
+    notifyMax: profile.notify_max !== false,
     digestTime: profile.notify_digest_time || '19:00'
   };
   if (profile.role === 'student') account.studentId = String(profile.id);
@@ -716,8 +717,17 @@ export const assignmentList = () => api.myAssignments();
 export const assignmentCreate = (body) => api.createAssignment(body);
 export const assignmentDelete = (id) => api.deleteAssignment(Number(id));
 export const assignmentProgress = (id) => api.assignmentProgress(Number(id));
+export const assignmentAccept = (id, body) => api.acceptAssignment(Number(id), body);
+export const classWorkload = (classId, date) => api.classWorkload(Number(classId), date);
 export const assignmentGrades = (id) => api.assignmentGrades(Number(id));
 export const assignmentGrade = (assignmentId, subject, items) => api.gradeBulk({ assignment_id: Number(assignmentId), subject, items });
+
+// --- Статистика -----------------------------------------------------------
+
+export const statsDaily = (childId) => api.statsDaily(childId);
+export const statsWeekly = (childId) => api.statsWeekly(childId);
+export const statsDynamics = (childId, weeks) => api.statsDynamics(childId, weeks);
+export const statsInsight = (childId) => api.statsInsight(childId);
 
 // --- Классы и учителя -----------------------------------------------------
 

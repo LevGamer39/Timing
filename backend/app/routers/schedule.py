@@ -6,12 +6,11 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import require_role
+from app.dependencies import assert_parent_of, require_role
 from app.models import (
     Class,
     ClassMembership,
     ClassSchedule,
-    ParentStudent,
     Schedule,
     User,
     UserRole,
@@ -130,19 +129,6 @@ def _own_entry(entry_id: int, student_id: int, db: Session) -> Schedule:
     return entry
 
 
-def _assert_parent_of(parent_id: int, student_id: int, db: Session) -> None:
-    link = (
-        db.query(ParentStudent)
-        .filter(
-            ParentStudent.parent_id == parent_id,
-            ParentStudent.student_id == student_id,
-        )
-        .first()
-    )
-    if not link:
-        raise HTTPException(403, "Not your child")
-
-
 def _class_access(class_id: int, user: User, db: Session) -> Class:
     """Класс доступен его классному руководителю или администратору."""
     query = db.query(Class).filter(Class.id == class_id)
@@ -254,7 +240,7 @@ def child_schedule(
     current_user: User = Depends(require_role(UserRole.parent)),
     db: Session = Depends(get_db),
 ):
-    _assert_parent_of(current_user.id, student_id, db)
+    assert_parent_of(current_user.id, student_id, db)
     class_id = _student_class_id(student_id, db)
     if class_id is not None:
         rows = _class_rows(class_id, db)

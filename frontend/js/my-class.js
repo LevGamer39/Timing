@@ -1,7 +1,7 @@
 import { fragment } from './templates.js';
 import * as store from './store.js';
 import { normalizedBounds } from "./grading.js";
-import { esc, zone, fmt, dayMonth, DAYS, weekday, plural, toast, iso, weighted, sheet } from "./ui.js";
+import { esc, zone, fmt, dayMonth, dayMonthShort, DAYS, weekday, plural, toast, iso, weighted, sheet } from "./ui.js";
 import { header } from './common.js';
 import { absenceBlock } from './shared/attendance.js';
 import { periodLabel, classTab, setClassTab } from "./shared/teacher.js";
@@ -42,6 +42,45 @@ function mountHomework(cls, root) {
     sheet(fragment('my-class', 'hw-form', [esc(store.account()?.subject || '')]), (el, close) => {
       const err = el.querySelector('#ah-err');
       const fail = (text) => { err.textContent = text; err.hidden = false; };
+      const deadline = el.querySelector('#ah-deadline');
+      const note = el.querySelector('#ah-load');
+      const minutesLabel = (m) => (m >= 60 ? ((m / 60) % 1 ? (m / 60).toFixed(1) : m / 60) + ' ч' : m + ' мин');
+      const paintLoad = () => {
+        if (!note) return;
+        if (!deadline.value) { note.hidden = true; return; }
+        store.classWorkload(cls.key, iso(new Date(deadline.value))).then((data) => {
+          if (!data) { note.hidden = true; return; }
+          const bits = [];
+          let state = 'load-ok';
+          if (data.count) {
+            state = data.heavy || data.count >= 3 ? 'load-heavy' : 'load-warn';
+            bits.push('Уже ' + data.count + ' ' + plural(data.count, 'задание', 'задания', 'заданий')
+              + (data.subjects.length ? ' (' + data.subjects.map(esc).join(', ') + ')' : '')
+              + ', ~' + minutesLabel(data.minutes) + '.');
+            if (data.heavy) bits.push('Рядом крупная сдача.');
+            const free = (data.nearby || []).filter((d) => d.minutes < data.minutes).slice(0, 3);
+            if (state === 'load-heavy' && free.length) {
+              bits.push('Свободнее: ' + free.map((d) => '<button type="button" class="text-action" data-load-day="'
+                + d.date + '">' + dayMonthShort(new Date(d.date + 'T00:00:00')) + '</button>').join(' · '));
+            }
+          } else {
+            bits.push('На этот день других заданий нет.');
+          }
+          note.className = 'load-note ' + state;
+          note.innerHTML = bits.join(' ');
+          note.hidden = false;
+          note.querySelectorAll('[data-load-day]').forEach((b) => b.addEventListener('click', () => {
+            const time = deadline.value.split('T')[1] || '23:59';
+            deadline.value = b.dataset.loadDay + 'T' + time;
+            paintLoad();
+          }));
+        }).catch(() => { note.hidden = true; });
+      };
+      let loadTimer;
+      deadline?.addEventListener('change', () => {
+        clearTimeout(loadTimer);
+        loadTimer = setTimeout(paintLoad, 300);
+      });
       el.querySelector('#ah-f').addEventListener('submit', (e) => {
         e.preventDefault();
         const title = el.querySelector('#ah-title').value.trim();
@@ -56,7 +95,7 @@ function mountHomework(cls, root) {
           description: el.querySelector('#ah-desc').value.trim() || null,
           deadline: new Date(raw).toISOString(),
           class_id: Number(cls.key),
-          priority: 'medium'
+          priority: el.querySelector('#ah-priority').value
         }).then((result) => {
           if (typeof result === 'string') return fail(result);
           close(); reload(); toast('Задание выдано');
@@ -70,14 +109,27 @@ function mountHomework(cls, root) {
       const existing = new Map((grades || []).map((g) => [String(g.student_id), g.value]));
       const students = data.students || [];
       const total = data.total ?? ((data.completed || 0) + (data.started || 0) + (data.not_started || 0) || students.length);
+      const doneCount = students.filter((s) => s.status === 'done').length;
+      const label = (status) => ({ accepted: 'Принято', done: 'Сдал', overdue: 'Ожидает', in_progress: 'В работе' }[status] || 'Нет');
       sheet('<h2 class="h2" style="font-size: 20px">' + esc(data.title) + '</h2>'
-        + '<p class="hint">' + (data.completed || 0) + ' из ' + total + ' сдали · ' + esc(data.subject) + '</p>'
+        + '<p class="hint">' + (data.completed || 0) + ' из ' + total + ' сдали · принято ' + (data.accepted || 0) + ' · ' + esc(data.subject) + '</p>'
         + '<div class="stack-sm">' + (students.length ? students.map((s) => '<div class="row" style="gap: 8px; min-height: 40px">'
           + '<span class="grow">' + esc(s.student_name) + '</span>'
-          + '<span class="hint" style="min-width: 44px">' + (s.status === 'done' ? 'Сдал' : 'Нет') + '</span>'
+          + '<span class="hint" style="min-width: 60px">' + label(s.status) + '</span>'
+          + (s.status === 'done' ? '<button class="text-action" type="button" data-accept="' + s.student_id + '">Принять</button>' : '')
           + '<input class="input" type="number" min="1" max="5" step="1" inputmode="numeric" data-g="' + s.student_id + '" value="' + (existing.get(String(s.student_id)) ?? '') + '" aria-label="Оценка ' + esc(s.student_name) + '" style="width: 64px; padding: 6px 8px">'
           + '</div>').join('') : '<p class="muted" style="margin: 0">В классе нет учеников.</p>') + '</div>'
+        + (doneCount ? '<button class="btn sm block" type="button" id="ah-accept" style="margin-top: 12px">Принять всех, кто отметил (' + doneCount + ')</button>' : '')
         + (students.length ? '<button class="btn sm block" type="button" id="ah-grades" style="margin-top: 12px">Сохранить оценки</button>' : ''), (el, close) => {
+        const accept = (ids) => {
+          store.assignmentAccept(id, ids ? { student_ids: ids } : {}).then((result) => {
+            if (typeof result === 'string') return toast(result);
+            close(); progressSheet(id); reload();
+            toast(ids ? 'Работа принята' : 'Отмеченные работы приняты');
+          }).catch(() => toast(store.SAVE_ERROR));
+        };
+        el.querySelector('#ah-accept')?.addEventListener('click', () => accept(null));
+        el.querySelectorAll('[data-accept]').forEach((b) => b.addEventListener('click', () => accept([Number(b.dataset.accept)])));
         el.querySelector('#ah-grades')?.addEventListener('click', () => {
           const items = [...el.querySelectorAll('[data-g]')]
             .filter((i) => i.value !== '')

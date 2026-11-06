@@ -104,6 +104,31 @@ def _bootstrap_password_hash() -> str:
     return hash_password(config.ADMIN_PASSWORD)
 
 
+def _add_enum_values() -> None:
+    """Досыпает новые значения в PG-enum вне транзакции.
+
+    ``ALTER TYPE ... ADD VALUE`` нельзя выполнять внутри транзакционного
+    блока (до PostgreSQL 12 — совсем, позже — нельзя использовать новое
+    значение в той же транзакции). Поэтому отдельное autocommit-соединение.
+    """
+    values = (("taskstatus", "accepted"), ("notificationchannel", "max"))
+    with engine.connect() as raw:
+        connection = raw.execution_options(isolation_level="AUTOCOMMIT")
+        for type_name, value in values:
+            present = connection.execute(
+                text("SELECT 1 FROM pg_type WHERE typname = :name"),
+                {"name": type_name},
+            ).first()
+            if not present:
+                continue
+            connection.execute(
+                text(
+                    f"ALTER TYPE {type_name} "
+                    f"ADD VALUE IF NOT EXISTS '{value}'"
+                )
+            )
+
+
 def _apply_schema_updates() -> None:
     """Идемпотентно догоняет схему до текущих моделей.
 
@@ -114,7 +139,19 @@ def _apply_schema_updates() -> None:
     """
     if engine.dialect.name != "postgresql":
         return
+    _add_enum_values()
     statements = (
+        # Приём задания учителем: статус accepted и время приёма.
+        "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ",
+        # MAX — основной канал уведомлений, выключается в настройках.
+        "ALTER TABLE users "
+        "ADD COLUMN IF NOT EXISTS notify_max BOOLEAN NOT NULL DEFAULT TRUE",
+        # Ключ идемпотентности событий (приём, недельная сводка).
+        "ALTER TABLE notifications "
+        "ADD COLUMN IF NOT EXISTS dedupe_key VARCHAR(120)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_notifications_user_key "
+        "ON notifications (user_id, dedupe_key) "
+        "WHERE dedupe_key IS NOT NULL",
         # Счётчик попыток доставки письма: без колонки backoff не рос.
         "ALTER TABLE notifications "
         "ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0",

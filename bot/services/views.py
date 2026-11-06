@@ -32,13 +32,13 @@ def is_due(task: dict[str, Any]) -> bool:
 async def today(backend: Backend, token: str) -> tuple[str, Any | None]:
     tasks = await backend.list_tasks(token)
     active = [task for task in tasks if task.get("status") != "done"]
-    # «Что на сегодня» показывает только сегодняшние и просроченные задачи.
+    # «Что на сегодня» показывает сегодняшние задачи и то, что ждёт закрытия.
     # Раньше при их отсутствии выводился весь список активных.
     due = [task for task in active if is_due(task)]
     if not due:
         return "На сегодня заданий нет 🎉", None
     return (
-        f"<b>На сегодня и просрочено</b>\n{tasks_block(due)}",
+        f"<b>На сегодня и то, что ждёт закрытия</b>\n{tasks_block(due)}",
         tasks_keyboard(due),
     )
 

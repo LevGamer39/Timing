@@ -7,13 +7,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import require_role
+from app.dependencies import assert_parent_of, require_role
 from app.models import (
     Assignment,
     Class,
     ClassMembership,
     Grade,
-    ParentStudent,
     User,
     UserRole,
 )
@@ -429,16 +428,7 @@ def child_grades(
     current_user: User = Depends(require_role(UserRole.parent)),
     db: Session = Depends(get_db),
 ):
-    link = (
-        db.query(ParentStudent)
-        .filter(
-            ParentStudent.parent_id == current_user.id,
-            ParentStudent.student_id == student_id,
-        )
-        .first()
-    )
-    if not link:
-        raise HTTPException(403, "Not your child")
+    assert_parent_of(current_user.id, student_id, db)
     return (
         db.query(Grade)
         .filter(Grade.student_id == student_id)

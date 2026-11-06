@@ -785,6 +785,19 @@ export const assignmentDelete = (id) => serverSession ? server.assignmentDelete(
 export const assignmentProgress = (id) => serverSession ? server.assignmentProgress(id) : Promise.reject(new Error('Задания доступны только на сервере.'));
 export const assignmentGrades = (id) => serverSession ? server.assignmentGrades(id) : Promise.reject(new Error('Задания доступны только на сервере.'));
 export const assignmentGrade = (id, subject, items) => serverSession ? server.assignmentGrade(id, subject, items) : Promise.reject(new Error('Задания доступны только на сервере.'));
+export const assignmentAccept = (id, body) => serverSession ? server.assignmentAccept(id, body) : Promise.reject(new Error('Задания доступны только на сервере.'));
+export const classWorkload = (classId, date) => serverSession ? server.classWorkload(classId, date) : Promise.resolve(null);
+
+// --- Статистика (сервер) --------------------------------------------------
+// Родитель смотрит своего ребёнка, ученик — себя. Демо-режима нет:
+// цифры должны быть настоящими.
+
+const statsTarget = () => (serverSession && serverSession.role === 'parent' ? serverSession.childId : null);
+const statsGuard = (run) => serverSession ? run() : Promise.reject(new Error('Статистика доступна только на сервере.'));
+export const statsDaily = () => statsGuard(() => server.statsDaily(statsTarget()));
+export const statsWeekly = () => statsGuard(() => server.statsWeekly(statsTarget()));
+export const statsDynamics = (weeks) => statsGuard(() => server.statsDynamics(statsTarget(), weeks));
+export const statsInsight = () => statsGuard(() => server.statsInsight(statsTarget()));
 
 // --- Управление классами и учителями (сервер) -----------------------------
 

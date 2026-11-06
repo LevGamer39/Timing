@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app import config
 from app.database import get_db
-from app.models import User, UserRole
+from app.models import ParentStudent, User, UserRole
 
 SECRET_KEY = config.SECRET_KEY
 ALGORITHM = config.ALGORITHM
@@ -74,3 +74,24 @@ def require_role(*roles: UserRole) -> Callable[..., User]:
         return current_user
 
     return dependency
+
+
+def assert_parent_of(parent_id: int, student_id: int, db: Session) -> None:
+    """403, если ``student_id`` — не ребёнок ``parent_id``.
+
+    Раньше проверка была скопирована в задачи, расписание и оценки;
+    четвёртая копия в статистике разошлась бы с ними.
+    """
+    link = (
+        db.query(ParentStudent)
+        .filter(
+            ParentStudent.parent_id == parent_id,
+            ParentStudent.student_id == student_id,
+        )
+        .first()
+    )
+    if not link:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not your child",
+        )

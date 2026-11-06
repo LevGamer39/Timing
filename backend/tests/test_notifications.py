@@ -245,3 +245,105 @@ def test_reset_template_escapes_the_link():
 def test_escaped_payload_is_still_readable():
     html = _overdue_task_html("Физика & математика", "15.10.2026")
     assert "Физика &amp; математика" in html
+
+
+# ---------------------------------------------------------------------------
+# Очередь MAX и недельная сводка
+# ---------------------------------------------------------------------------
+
+
+def test_notification_dedupes_by_key(db, student):
+    from app.models import Notification, NotificationChannel
+
+    first = notifications.create_notification(
+        db,
+        student.id,
+        "Ждут проверки",
+        "есть работы",
+        channel=NotificationChannel.max,
+        dedupe_key="waiting:1:2026-11-05-10",
+    )
+    second = notifications.create_notification(
+        db,
+        student.id,
+        "Ждут проверки",
+        "есть работы",
+        channel=NotificationChannel.max,
+        dedupe_key="waiting:1:2026-11-05-10",
+    )
+
+    assert first is not None
+    assert second is None
+    assert db.query(Notification).count() == 1
+
+
+def test_notify_max_off_skips_event(db, student):
+    from app.models import Notification, NotificationChannel
+
+    student.notify_max = False
+    db.commit()
+
+    created = notifications.create_notification(
+        db,
+        student.id,
+        "Работа принята",
+        "«§12» — Math.",
+        channel=NotificationChannel.max,
+    )
+    assert created is None
+    assert db.query(Notification).count() == 0
+
+
+def test_pending_returns_only_own_max_queue(db, student, student2):
+    from app.models import NotificationChannel
+
+    mine = notifications.create_notification(
+        db, student.id, "Принято", "задание", channel=NotificationChannel.max
+    )
+    notifications.create_notification(
+        db, student.id, "Письмо", "текст", channel=NotificationChannel.email
+    )
+    notifications.create_notification(
+        db, student2.id, "Принято", "задание", channel=NotificationChannel.max
+    )
+
+    pending = notifications.max_pending(student, db)
+    assert [row.id for row in pending] == [mine.id]
+
+
+def test_delivered_marks_rows_sent(db, student):
+    from app.models import NotificationChannel
+
+    row = notifications.create_notification(
+        db, student.id, "Принято", "задание", channel=NotificationChannel.max
+    )
+    notifications.max_delivered(
+        notifications.DeliveredBody(ids=[row.id]), student, db
+    )
+    db.refresh(row)
+    assert row.is_sent is True
+    assert row.sent_at is not None
+
+
+def test_weekly_email_text_uses_week_numbers(
+    db, student, make_assignment, make_task
+):
+    from datetime import datetime, timedelta, timezone
+
+    assignment = make_assignment()
+    task = make_task(
+        student.id,
+        assignment_id=assignment.id,
+        is_personal=False,
+        deadline=datetime.now(timezone.utc) - timedelta(hours=2),
+    )
+    task.completed_at = task.deadline
+    db.commit()
+
+    text = notifications.weekly_email_text(db, student)
+    assert "заданий 1" in text
+    assert "в срок 1" in text
+
+
+def test_weekly_email_text_is_empty_without_tasks(db, student):
+    assert notifications.weekly_email_text(db, student) is None

@@ -125,6 +125,8 @@ export const aiAnalyzeLoad = () => request('/api/ai/analyze-load', { method: 'PO
 export const myAssignments = () => request('/api/assignments');
 export const createAssignment = (body) => request('/api/assignments', { method: 'POST', body });
 export const assignmentProgress = (id) => request('/api/assignments/' + id + '/progress');
+export const acceptAssignment = (id, body) => request('/api/assignments/' + id + '/accept', { method: 'POST', body: body || {} });
+export const classWorkload = (classId, date) => request('/api/assignments/workload/' + classId + '?date=' + encodeURIComponent(date));
 export const assignmentGrades = (id) => request('/api/grades/assignment/' + id);
 export const deleteAssignment = (id) => request('/api/assignments/' + id, { method: 'DELETE' });
 export const myClasses = () => request('/api/classes');
@@ -235,3 +237,13 @@ export const aiChat = (message, options = {}) => request('/api/ai/chat', {
 });
 export const aiAction = (body) => request('/api/ai/actions', { method: 'POST', body: { ...body, timezone: timezone() } });
 export const aiClearHistory = () => request('/api/ai/history', { method: 'DELETE' });
+
+// --- Статистика ------------------------------------------------------------
+// Ученик ходит в /my, родитель — в /child/{id}: одни и те же данные.
+
+const statsPath = (kind, childId) => '/api/stats/' + kind + (childId ? '/child/' + childId : '/my');
+
+export const statsDaily = (childId) => request(statsPath('daily', childId));
+export const statsWeekly = (childId) => request(statsPath('weekly', childId));
+export const statsDynamics = (childId, weeks) => request(statsPath('dynamics', childId) + (weeks ? '?weeks=' + weeks : ''));
+export const statsInsight = (childId) => request(statsPath('insight', childId));

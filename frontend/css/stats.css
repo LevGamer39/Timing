@@ -1,0 +1,38 @@
+/* Экран статистики: карточки среза, неделя и бары по неделям. */
+
+.stat-card { display: flex; flex-direction: column; gap: 8px; }
+
+.stat-card .stat-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+
+.stat-card h2 { margin: 0; font-size: 18px; }
+
+.stat-card .stat-num { font-size: 22px; font-weight: 800; }
+
+.stat-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+
+.stat-list li { display: flex; gap: 8px; align-items: baseline; font-size: 14px; }
+
+.stat-list .stat-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.stat-list .stat-state { color: var(--muted); font-size: 13px; white-space: nowrap; }
+
+.week-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; width: fit-content; }
+
+.week-pill.ok { background: var(--g5-bg); color: var(--g5); }
+
+.week-pill.wait { background: var(--g3-bg); color: var(--g3); }
+
+/* Три сегмента в одном баре: в срок / позже / открыто. */
+.bar-stack { display: flex; }
+
+.bar-stack i { border-radius: 0; }
+
+.bar-stack i:first-child { border-radius: 6px 0 0 6px; }
+
+.bar-stack i:last-child { border-radius: 0 6px 6px 0; }
+
+.stat-ai { margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-line; }
+
+@media (max-width: 640px) {
+  .bar-row { grid-template-columns: 52px minmax(0, 1fr) 84px; font-size: 13px; }
+}

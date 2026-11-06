@@ -43,3 +43,11 @@
 .dt.compact th, .dt.compact td { padding: 0 8px; }
 
 .dt.compact th:first-child, .dt.compact td:first-child { padding-left: 16px; }
+
+/* Подсказка о нагрузке в форме задания: цвет — не приговор, а факт. */
+.load-note { margin: 0; font-size: 14px; line-height: 1.5; padding: 10px 12px; border-radius: 12px; }
+.load-note[hidden] { display: none; }
+.load-note.load-ok { background: var(--g4-bg); color: var(--g4); }
+.load-note.load-warn { background: var(--g3-bg); color: var(--g3); }
+.load-note.load-heavy { background: var(--g2-bg); color: var(--g2); }
+.load-note .text-action { color: inherit; }

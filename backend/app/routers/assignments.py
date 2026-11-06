@@ -1,11 +1,12 @@
 """Задания учителя и прогресс по ним у каждого ученика."""
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app import config
 from app.database import get_db
 from app.dependencies import require_role
 from app.models import (
@@ -13,12 +14,15 @@ from app.models import (
     Class,
     ClassMembership,
     Grade,
+    NotificationChannel,
     Task,
     TaskPriority,
     TaskStatus,
     User,
     UserRole,
 )
+from app.routers.notifications import create_notification
+from app.stats import day_bounds, zone
 
 router = APIRouter(prefix="/api/assignments", tags=["assignments"])
 
@@ -84,6 +88,13 @@ class AssignmentCreate(BaseModel):
         return value
 
 
+class AcceptBody(BaseModel):
+    """Кого принять: без списка — всех, кто отметил «сделано»."""
+
+    student_ids: list[int] | None = None
+    accepted: bool = True
+
+
 class AssignmentResponse(BaseModel):
     """``total_count`` / ``submitted_count`` / ``class_name`` вычисляются.
 
@@ -122,9 +133,27 @@ class AssignmentProgressResponse(BaseModel):
     deadline: datetime
     priority: TaskPriority
     completed: int
+    accepted: int
     started: int
     not_started: int
     students: list[AssignmentStudentProgress]
+
+
+class WorkloadNearby(BaseModel):
+    date: date
+    count: int
+    minutes: int
+
+
+class WorkloadResponse(BaseModel):
+    """Нагрузка класса на дату — подсказка, а не запрет."""
+
+    date: date
+    count: int
+    minutes: int
+    subjects: list[str]
+    heavy: bool  # рядом крупная сдача: priority high/critical в день ±1
+    nearby: list[WorkloadNearby]  # 7 следующих дней, от лёгких к тяжёлым
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +202,15 @@ def _completion_counts(
             Task.assignment_id,
             func.count(Task.id),
             func.sum(
-                case((Task.status == TaskStatus.done, 1), else_=0)
+                case(
+                    (
+                        Task.status.in_(
+                            [TaskStatus.done, TaskStatus.accepted]
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
             ),
         )
         .filter(
@@ -382,14 +419,17 @@ def get_assignment_progress(
             for user in db.query(User).filter(User.id.in_(student_ids)).all()
         }
 
-    completed = started = not_started = 0
+    completed = accepted = started = not_started = 0
     for student_id in student_ids:
         student = students_by_id.get(student_id)
         task = task_by_student.get(student_id)
         grade = grade_by_student.get(student_id)
         status = task.status if task else None
 
-        if status == TaskStatus.done:
+        if status == TaskStatus.accepted:
+            completed += 1
+            accepted += 1
+        elif status == TaskStatus.done:
             completed += 1
         elif status in {TaskStatus.in_progress, TaskStatus.overdue}:
             started += 1
@@ -421,9 +461,152 @@ def get_assignment_progress(
         deadline=assignment.deadline,
         priority=assignment.priority,
         completed=completed,
+        accepted=accepted,
         started=started,
         not_started=not_started,
         students=students,
+    )
+
+
+@router.post(
+    "/{assignment_id}/accept", response_model=AssignmentProgressResponse
+)
+def accept_assignment(
+    assignment_id: int,
+    body: AcceptBody | None = None,
+    current_user: User = Depends(require_role(UserRole.teacher)),
+    db: Session = Depends(get_db),
+):
+    """Приём работ: «сделано» ученика становится «принято».
+
+    ``accepted=false`` возвращает работу: иначе фальшивая отметка висела бы
+    вечно и в статистике считалась бы подготовкой.
+    """
+    assignment = _teacher_assignment(assignment_id, current_user.id, db)
+    payload = body or AcceptBody()
+
+    query = db.query(Task).filter(
+        Task.assignment_id == assignment.id,
+        Task.parent_task_id.is_(None),
+    )
+    if payload.student_ids is not None:
+        query = query.filter(Task.student_id.in_(payload.student_ids))
+
+    now = datetime.now(timezone.utc)
+    changed = []
+    for task in query.all():
+        if payload.accepted and task.status == TaskStatus.done:
+            task.status = TaskStatus.accepted
+            task.accepted_at = now
+        elif not payload.accepted and task.status == TaskStatus.accepted:
+            task.accepted_at = None
+            task.status = (
+                TaskStatus.overdue
+                if task.deadline is not None and task.deadline < now
+                else TaskStatus.in_progress
+            )
+        else:
+            continue
+        changed.append(task)
+        # Событие шлём только на реальный переход статуса, поэтому
+        # повторный приём того же задания ничего не дублирует.
+        create_notification(
+            db=db,
+            user_id=task.student_id,
+            title=(
+                "Работа принята"
+                if payload.accepted
+                else "Работа возвращена"
+            ),
+            body=f"«{task.title}» — {assignment.subject}.",
+            channel=NotificationChannel.max,
+            commit=False,
+        )
+
+    if changed:
+        db.commit()
+    return get_assignment_progress(assignment_id, current_user, db)
+
+
+# Пауза на одно задание: high/critical считаем крупной сдачей.
+WORKLOAD_MINUTES = {
+    TaskPriority.critical: 60,
+    TaskPriority.high: 60,
+    TaskPriority.medium: 30,
+    TaskPriority.low: 15,
+}
+HEAVY_PRIORITIES = {TaskPriority.high, TaskPriority.critical}
+WORKLOAD_DAYS = 7
+
+
+@router.get("/workload/{class_id}", response_model=WorkloadResponse)
+def class_workload(
+    class_id: int,
+    day: date = Query(alias="date"),
+    current_user: User = Depends(require_role(UserRole.teacher)),
+    db: Session = Depends(get_db),
+):
+    """Что уже задано классу на эту дату — подсказка в форме выдачи."""
+    class_ = (
+        db.query(Class)
+        .filter(Class.id == class_id, Class.teacher_id == current_user.id)
+        .first()
+    )
+    if not class_:
+        raise HTTPException(404, "Class not found")
+
+    tz_name = config.TIMEZONE
+    first = day - timedelta(days=1)
+    last = day + timedelta(days=WORKLOAD_DAYS + 1)
+    start_utc, _ = day_bounds(first, tz_name)
+    _, end_utc = day_bounds(last, tz_name)
+
+    rows = (
+        db.query(Assignment.deadline, Assignment.subject, Assignment.priority)
+        .filter(
+            Assignment.class_id == class_id,
+            Assignment.deadline >= start_utc,
+            Assignment.deadline < end_utc,
+        )
+        .all()
+    )
+
+    buckets: dict[date, list[tuple[str, TaskPriority]]] = {}
+    for deadline, subject, priority in rows:
+        local_day = deadline.astimezone(zone(tz_name)).date()
+        buckets.setdefault(local_day, []).append((subject, priority))
+
+    def day_stats(target: date) -> tuple[int, int]:
+        items = buckets.get(target, [])
+        minutes = sum(
+            WORKLOAD_MINUTES.get(priority, 30) for _, priority in items
+        )
+        return len(items), minutes
+
+    count, minutes = day_stats(day)
+    heavy = any(
+        priority in HEAVY_PRIORITIES
+        for offset in (-1, 0, 1)
+        for _, priority in buckets.get(day + timedelta(days=offset), [])
+    )
+    nearby: list[WorkloadNearby] = []
+    for offset in range(WORKLOAD_DAYS):
+        target = day + timedelta(days=offset)
+        target_count, target_minutes = day_stats(target)
+        nearby.append(
+            WorkloadNearby(
+                date=target, count=target_count, minutes=target_minutes
+            )
+        )
+    nearby.sort(key=lambda item: (item.minutes, item.date))
+
+    return WorkloadResponse(
+        date=day,
+        count=count,
+        minutes=minutes,
+        subjects=sorted({subject for subject, _ in buckets.get(day, [])}),
+        heavy=heavy,
+        nearby=nearby,
     )
 
 

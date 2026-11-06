@@ -15,6 +15,7 @@ import { composeView } from './compose.js';
 import { aiView } from './ai.js';
 import { settingsView } from './settings.js';
 import { tasksView } from './tasks.js';
+import { statsView } from './stats.js';
 import { teacherHomeView } from './teacher-home.js';
 import { journalView } from './journal.js';
 import { analysisView } from './analysis.js';
@@ -57,6 +58,7 @@ const ROUTES = [
   [/^grades$/, gradesView, 'grades', false, LEARNER, true],
   [/^grades\/(\w+)$/, subjectView, 'grades', false, LEARNER, true],
   [/^tasks$/, tasksView, 'tasks', false, LEARNER, true],
+  [/^stats$/, statsView, 'grades', false, LEARNER, true],
   [/^ai$/, aiView, null, false, LEARNER, false],
   [/^journal(?:\/([\w-]+)(?:\/([\d-]+))?(?:\/(\d+))?)?$/, journalView, 'journal', false, TEACHER, true],
   [/^journal\/analysis\/([\w-]+)\/([\d-]+)(?:\/(\d+))?$/, analysisView, 'journal', false, TEACHER, false],

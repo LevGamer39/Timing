@@ -27,7 +27,7 @@ function settingsView({ go, rerender }) {
   const right = fragment("settings", "access", [esc(login), icon('logout', 18)])
     + (server ? fragment("settings", "profile", [esc(acc.first || ''), esc(acc.last || '')]) + fragment("settings", "password", []) : '')
     + (server ? fragment("settings", "email", [esc(acc.email || 'не задан')]) : '')
-    + (server ? fragment("settings", "notify", [acc.notifyEmail ? 'checked' : '', acc.notifyBrowser ? 'checked' : '', esc(acc.digestTime || '19:00')]) : '')
+    + (server ? fragment("settings", "notify", [acc.notifyEmail ? 'checked' : '', acc.notifyBrowser ? 'checked' : '', esc(acc.digestTime || '19:00'), acc.notifyMax ? 'checked' : '']) : '')
     + (server && role === 'student' ? fragment("settings", "join-class", []) : '')
     + (server && role === 'student' ? fragment("settings", "parent-code", []) : '')
     + (server && role === 'parent' ? fragment("settings", "parent-link", []) : '');
@@ -96,6 +96,7 @@ function settingsView({ go, rerender }) {
         const patch = {
           notify_email: root.querySelector('#nt-email').checked,
           notify_browser: root.querySelector('#nt-browser').checked,
+          notify_max: root.querySelector('#nt-max').checked,
           notify_digest_time: root.querySelector('#nt-time').value || '19:00'
         };
         if (!store.updateProfile(patch)) { err.textContent = store.SAVE_ERROR; err.hidden = false; return; }

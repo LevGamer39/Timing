@@ -6,8 +6,17 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import require_role
-from app.models import ParentStudent, Task, TaskPriority, TaskStatus, User, UserRole
+from app.dependencies import assert_parent_of, require_role
+from app.models import (
+    Assignment,
+    NotificationChannel,
+    Task,
+    TaskPriority,
+    TaskStatus,
+    User,
+    UserRole,
+)
+from app.routers.notifications import create_notification
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -123,6 +132,7 @@ class TaskResponse(BaseModel):
     ai_suggested_time: str | None
     created_at: datetime
     completed_at: datetime | None
+    accepted_at: datetime | None
 
     class Config:
         from_attributes = True
@@ -157,21 +167,6 @@ def _sync_completion(task: Task) -> None:
             task.completed_at = datetime.now(timezone.utc)
     else:
         task.completed_at = None
-
-
-def _assert_parent_of(
-    parent_id: int, student_id: int, db: Session
-) -> None:
-    link = (
-        db.query(ParentStudent)
-        .filter(
-            ParentStudent.parent_id == parent_id,
-            ParentStudent.student_id == student_id,
-        )
-        .first()
-    )
-    if not link:
-        raise HTTPException(403, "Not your child")
 
 
 def _base_task_query(student_id: int):
@@ -237,7 +232,7 @@ def get_child_tasks(
     db: Session = Depends(get_db),
 ):
     """Объявлен раньше ``/{task_id}``, чтобы выиграл литеральный путь."""
-    _assert_parent_of(current_user.id, student_id, db)
+    assert_parent_of(current_user.id, student_id, db)
     owner, top_level = _base_task_query(student_id)
     return (
         db.query(Task)
@@ -282,9 +277,13 @@ def update_task(
     _assert_mutable(task)
 
     updates = body.model_dump(exclude_unset=True)
-    # Клиент не может сам проставить overdue — это делает планировщик.
+    # Клиент не может сам проставить overdue (это делает планировщик)
+    # и accepted (это делает учитель через /api/assignments/{id}/accept).
     updates.pop("status", None)
-    if body.status is not None and body.status != TaskStatus.overdue:
+    if body.status is not None and body.status not in {
+        TaskStatus.overdue,
+        TaskStatus.accepted,
+    }:
         task.status = body.status
     for field, value in updates.items():
         setattr(task, field, value)
@@ -293,6 +292,37 @@ def update_task(
     db.commit()
     db.refresh(task)
     return task
+
+
+def _notify_waiting(task: Task, db: Session) -> None:
+    """Учителю: по заданию есть отмеченные работы, ждут проверки.
+
+    Ключ дедупликации — час: тридцать учеников, отметивших одну работу,
+    не должны превратиться в тридцать сообщений.
+    """
+    if task.assignment_id is None:
+        return
+    assignment = (
+        db.query(Assignment)
+        .filter(Assignment.id == task.assignment_id)
+        .first()
+    )
+    if assignment is None:
+        return
+    create_notification(
+        db=db,
+        user_id=assignment.teacher_id,
+        title="Ждут проверки",
+        body=(
+            f"«{assignment.title}» — {assignment.subject}: "
+            "отмечены работы, которые ждут проверки."
+        ),
+        channel=NotificationChannel.max,
+        dedupe_key=(
+            f"waiting:{assignment.id}:{datetime.now(timezone.utc):%Y-%m-%d-%H}"
+        ),
+        commit=False,
+    )
 
 
 @router.post("/{task_id}/complete", response_model=TaskResponse)
@@ -307,6 +337,7 @@ def complete_task(
 
     task.status = TaskStatus.done
     task.completed_at = now
+    _notify_waiting(task, db)
 
     subtasks = db.query(Task).filter(Task.parent_task_id == task.id).all()
     for subtask in subtasks:

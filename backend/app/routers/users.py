@@ -198,6 +198,7 @@ class ProfileResponse(BaseModel):
     yandex_id: str | None
     notify_email: bool
     notify_browser: bool
+    notify_max: bool
     notify_digest_time: str
 
     class Config:
@@ -211,6 +212,7 @@ class ProfileUpdateRequest(BaseModel):
     avatar_url: str | None = None
     notify_email: bool | None = None
     notify_browser: bool | None = None
+    notify_max: bool | None = None
     notify_digest_time: str | None = None
 
     @field_validator("notify_digest_time")
@@ -342,6 +344,9 @@ def _normalize_profile_defaults(user: User, db: Session | None = None) -> User:
         changed = True
     if user.notify_browser is None:
         user.notify_browser = True
+        changed = True
+    if user.notify_max is None:
+        user.notify_max = True
         changed = True
     if not user.notify_digest_time:
         user.notify_digest_time = "08:00"
@@ -479,6 +484,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         is_verified=False,
         notify_email=True,
         notify_browser=True,
+        notify_max=True,
         notify_digest_time="08:00",
         teacher_invite_code=body.invite_code.upper() if invite else None,
     )
@@ -1256,6 +1262,7 @@ def max_register(
         # Почты нет, поэтому и письма отправлять некуда.
         notify_email=False,
         notify_browser=True,
+        notify_max=True,
         notify_digest_time="08:00",
     )
     db.add(user)

@@ -50,7 +50,7 @@ def fmt_deadline(value: str | None) -> str:
     delta = (local_date - today).days
 
     if delta < 0:
-        return f"просрочено ({local_date.strftime('%d.%m')})"
+        return f"ждёт закрытия ({local_date.strftime('%d.%m')})"
     if delta == 0:
         return "сегодня"
     if delta == 1:

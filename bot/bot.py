@@ -17,6 +17,7 @@ from core.state import StateStore
 from routers import include_routers
 from services.backend import Backend
 from services.homework import HomeworkParser
+from services.notifications import NotificationRelay
 from services.reminders import ReminderScheduler
 
 logger = logging.getLogger("vector_bot")
@@ -31,6 +32,7 @@ COMMANDS = [
     BotCommand(name="ai", description="ИИ-помощник"),
     BotCommand(name="done", description="Отметить выполненное"),
     BotCommand(name="hw", description="Парсер домашних заданий"),
+    BotCommand(name="notify", description="Уведомления в MAX"),
     BotCommand(name="help", description="Помощь"),
 ]
 
@@ -61,6 +63,7 @@ async def main() -> None:
     backend.set_unauthorized_handler(sessions.refresh)
     parser = HomeworkParser(bot, store)
     scheduler = ReminderScheduler(bot, backend, sessions, store)
+    relay = NotificationRelay(bot, backend, sessions, store)
     ctx = AppContext(
         bot=bot,
         backend=backend,
@@ -72,6 +75,7 @@ async def main() -> None:
     include_routers(dp, ctx)
     await parser.start_existing()
     await scheduler.start()
+    await relay.start()
 
     try:
         await bot.set_commands(*COMMANDS)
@@ -105,6 +109,7 @@ async def main() -> None:
         else:
             await dp.start_polling(bot)
     finally:
+        await relay.stop()
         await scheduler.stop()
         await parser.stop()
         await backend.aclose()

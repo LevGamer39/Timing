@@ -173,6 +173,11 @@ MAX_BOT_TOKEN = _str("MAX_BOT_TOKEN", "")
 # именно так запускается docker-compose.
 ENABLE_SCHEDULER = _bool("ENABLE_SCHEDULER", True)
 
+# ─── Недельная сводка ─────────────────────────────────────────────────────────
+# Те же имена читает бот (bot/config.py): одна настройка на оба канала.
+WEEKLY_SUMMARY_WEEKDAY = _int("WEEKLY_SUMMARY_WEEKDAY", 6)  # 0=пн .. 6=вс
+WEEKLY_SUMMARY_HOUR = _int("WEEKLY_SUMMARY_HOUR", 18)
+
 _REQUIRED = [
     ("SECRET_KEY", SECRET_KEY),
     ("ADMIN_PASSWORD", ADMIN_PASSWORD),
