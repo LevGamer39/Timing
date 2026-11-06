@@ -36,7 +36,9 @@ async def today(backend: Backend, token: str) -> tuple[str, Any | None]:
     # Раньше при их отсутствии выводился весь список активных.
     due = [task for task in active if is_due(task)]
     if not due:
-        return "На сегодня заданий нет 🎉", None
+        # Пустая клавиатура не годится: под сообщением остался бы старый
+        # ряд кнопок. Оставляем хотя бы выход в главное меню.
+        return "На сегодня заданий нет 🎉", tasks_keyboard([])
     return (
         f"<b>На сегодня и просрочено</b>\n{tasks_block(due)}",
         tasks_keyboard(due),

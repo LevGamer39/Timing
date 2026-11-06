@@ -148,7 +148,7 @@ def test_manual_hw_reply_transcribes_voice(monkeypatch):
 
     sent = []
 
-    async def fake_send_card(item, source):
+    async def fake_send_card(item, source, home=False):
         sent.append((item, source))
 
     async def fake_parse(text):
@@ -186,7 +186,7 @@ def test_manual_hw_fetches_linked_voice_without_attachments(monkeypatch):
     sent = []
     fetched = []
 
-    async def fake_send_card(item, source):
+    async def fake_send_card(item, source, home=False):
         sent.append(source)
 
     async def fake_parse(text):
@@ -235,7 +235,7 @@ def test_manual_hw_uses_remembered_voice_text(monkeypatch):
 
     sent = []
 
-    async def fake_send_card(item, source):
+    async def fake_send_card(item, source, home=False):
         sent.append(source)
 
     async def fake_parse(text):

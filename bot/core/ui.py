@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from maxapi.enums.chat_type import ChatType
 from maxapi.enums.parse_mode import Format
 from maxapi.types.updates.message_callback import MessageCallback
 from maxapi.types.updates.message_created import MessageCreated
 
-from core.context import AppContext
 from services.voice import body_text
 from texts.messages import UNLINKED_TEXT
+
+if TYPE_CHECKING:
+    from core.context import AppContext
 
 
 def event_user(event: Any) -> Any | None:
@@ -39,9 +41,14 @@ async def message_text(
     return await body_text(event.message.body, ctx.transcriber, user_id)
 
 
-def is_dialog(event: MessageCreated) -> bool:
-    """True, если сообщение пришло в личный чат с ботом."""
-    return event.message.recipient.chat_type == ChatType.DIALOG
+def is_dialog(event: Any) -> bool:
+    """True, если событие пришло в личный чат с ботом.
+
+    Подходит и для callback: у него ``message`` может отсутствовать.
+    """
+    message = getattr(event, "message", None)
+    recipient = getattr(message, "recipient", None)
+    return getattr(recipient, "chat_type", None) == ChatType.DIALOG
 
 
 async def respond(event: Any, text: str, keyboard: Any | None = None) -> None:

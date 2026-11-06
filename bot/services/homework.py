@@ -14,6 +14,7 @@ from maxapi.types.updates.message_created import MessageCreated
 
 from config import settings
 from core.state import StateStore
+from core.ui import is_dialog
 from keyboards import homework_keyboard
 from services.ai import looks_like_homework, parse_batch, parse_task
 from services.voice import Transcriber, audio_url, body_text
@@ -207,7 +208,7 @@ class HomeworkParser:
             await message.answer(PROCESSING_TEXT)
         parsed = await parse_task(text)
         parsed["chat_id"] = message.recipient.chat_id
-        await self._send_card(parsed, source=text)
+        await self._send_card(parsed, source=text, home=is_dialog(event))
 
     async def _loop(self, chat_id: int) -> None:
         interval = max(1, settings.parser_batch_interval_minutes) * 60
@@ -236,7 +237,9 @@ class HomeworkParser:
             item["chat_id"] = chat_id
             await self._send_card(item, source=item.get("source", ""))
 
-    async def _send_card(self, item: dict[str, Any], source: str) -> None:
+    async def _send_card(
+        self, item: dict[str, Any], source: str, home: bool = False
+    ) -> None:
         chat_id = item.get("chat_id")
         if chat_id is None:
             return
@@ -263,7 +266,7 @@ class HomeworkParser:
             await self._bot.send_message(
                 chat_id=int(chat_id),
                 text="\n".join(lines),
-                attachments=[homework_keyboard(uid)],
+                attachments=[homework_keyboard(uid, home=home)],
                 format=Format.HTML,
             )
         except Exception:  # noqa: BLE001

@@ -134,6 +134,7 @@ def build_router(ctx: AppContext) -> Router:
             + str(payload.get("code", ""))
             + "</code>\nДействует 10 минут. Введите его на странице входа "
             "«Войти через MAX».",
+            keyboard=main_menu(role_of(ctx, event)),
         )
 
     @router.message_created(Command("help"))

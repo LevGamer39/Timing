@@ -36,6 +36,14 @@ def main_menu(role: str | None) -> AttachmentButton:
     return builder.as_markup()
 
 
+def home_keyboard(text: str = "🏠 На главную") -> AttachmentButton:
+    """Одна кнопка возврата в главное меню."""
+
+    builder = InlineKeyboardBuilder()
+    builder.row(_button(text, "menu:home"))
+    return builder.as_markup()
+
+
 def tasks_keyboard(tasks: list[dict]) -> AttachmentButton:
     """Кнопки «Сделал» под списком заданий."""
 
@@ -44,6 +52,7 @@ def tasks_keyboard(tasks: list[dict]) -> AttachmentButton:
         task_id = int(task["id"])
         title = str(task.get("title", "Задание"))[:32]
         builder.row(_button(f"✅ {title}", f"task:done:{task_id}"))
+    builder.row(_button("🏠 На главную", "menu:home"))
     return builder.as_markup()
 
 
@@ -52,15 +61,21 @@ def task_actions(task_id: int, done: bool) -> AttachmentButton:
     if not done:
         builder.row(_button("✅ Сделал", f"task:done:{task_id}"))
     builder.row(_button("🗑 Удалить", f"task:del:{task_id}"))
+    builder.row(_button("🏠 На главную", "menu:home"))
     return builder.as_markup()
 
 
-def homework_keyboard(index: int) -> AttachmentButton:
-    """Кнопки под карточкой найденного ДЗ."""
+def homework_keyboard(index: int, home: bool = False) -> AttachmentButton:
+    """Кнопки под карточкой найденного ДЗ.
+
+    В чате класса возврата в главное меню нет: это личный экран ученика.
+    """
 
     builder = InlineKeyboardBuilder()
     builder.row(_button("➕ Добавить себе", f"hw:add:{index}"))
     builder.row(_button("🚫 Не задание", f"hw:skip:{index}"))
+    if home:
+        builder.row(_button("🏠 На главную", "menu:home"))
     return builder.as_markup()
 
 
@@ -83,6 +98,7 @@ def name_confirm_keyboard() -> AttachmentButton:
 
 __all__ = [
     "main_menu",
+    "home_keyboard",
     "tasks_keyboard",
     "task_actions",
     "homework_keyboard",
