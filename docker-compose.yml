@@ -1,6 +1,7 @@
 services:
   backend:
     build: ./backend
+    image: ghcr.io/levgamer39/vectorvk/backend:latest
     container_name: timing_backend
     restart: unless-stopped
     volumes:
@@ -76,6 +77,7 @@ services:
 
   nginx:
     build: ./nginx
+    image: ghcr.io/levgamer39/vectorvk/nginx:latest
     container_name: timing_nginx
     restart: unless-stopped
     ports:
@@ -117,6 +119,7 @@ services:
         # Модель скачивается только при VOICE_ENABLED=true.
         PRELOAD_WHISPER: ${VOICE_ENABLED:-false}
         WHISPER_MODEL: ${WHISPER_MODEL:-small}
+    image: ghcr.io/levgamer39/vectorvk/bot:latest
     container_name: timing_bot
     restart: unless-stopped
     depends_on:
