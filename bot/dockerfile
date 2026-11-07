@@ -13,8 +13,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Модель кладём в образ при сборке: контейнер не качает её при старте.
+# PRELOAD_WHISPER берётся из VOICE_ENABLED в docker-compose.yml.
+ARG PRELOAD_WHISPER=true
 ARG WHISPER_MODEL=small
-RUN python -c "from faster_whisper import WhisperModel; WhisperModel('$WHISPER_MODEL', device='cpu', compute_type='int8', download_root='/app/models')"
+RUN if [ "$PRELOAD_WHISPER" = "true" ]; then \
+        python -c "from faster_whisper import WhisperModel; WhisperModel('$WHISPER_MODEL', device='cpu', compute_type='int8', download_root='/app/models')"; \
+    fi
 
 COPY . .
 

@@ -112,6 +112,10 @@ services:
     build:
       context: ./bot
       dockerfile: dockerfile
+      args:
+        # Модель скачивается только при VOICE_ENABLED=true.
+        PRELOAD_WHISPER: ${VOICE_ENABLED:-false}
+        WHISPER_MODEL: ${WHISPER_MODEL:-small}
     container_name: timing_bot
     restart: unless-stopped
     depends_on:

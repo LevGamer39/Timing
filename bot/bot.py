@@ -62,19 +62,23 @@ async def main() -> None:
 
     sessions = SessionManager(backend, store)
     backend.set_unauthorized_handler(sessions.refresh)
-    transcriber = Transcriber(
-        model=settings.whisper_model,
-        model_dir=settings.whisper_model_dir,
-        device=settings.whisper_device,
-        compute_type=settings.whisper_compute_type,
-        language=settings.whisper_language,
-        temp_dir=settings.audio_temp_dir,
-        timeout=settings.voice_download_timeout,
-    )
-    try:
-        await transcriber.warmup()
-    except Exception:  # noqa: BLE001 — голосовые не критичны для остального
-        logger.warning("faster-whisper не загрузился", exc_info=True)
+    transcriber = None
+    if settings.voice_enabled:
+        transcriber = Transcriber(
+            model=settings.whisper_model,
+            model_dir=settings.whisper_model_dir,
+            device=settings.whisper_device,
+            compute_type=settings.whisper_compute_type,
+            language=settings.whisper_language,
+            temp_dir=settings.audio_temp_dir,
+            timeout=settings.voice_download_timeout,
+        )
+        try:
+            await transcriber.warmup()
+        except Exception:  # noqa: BLE001 — голосовые не критичны
+            logger.warning("faster-whisper не загрузился", exc_info=True)
+    else:
+        logger.info("Голосовые отключены: VOICE_ENABLED=false")
     parser = HomeworkParser(bot, store, transcriber)
     scheduler = ReminderScheduler(bot, backend, sessions, store)
     relay = NotificationRelay(bot, backend, sessions, store)

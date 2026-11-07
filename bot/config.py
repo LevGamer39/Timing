@@ -82,6 +82,7 @@ class Settings:
     parser_voice_enabled: bool
 
     # Голосовые сообщения (faster-whisper)
+    voice_enabled: bool
     whisper_model: str
     whisper_model_dir: str
     whisper_device: str
@@ -139,6 +140,7 @@ def load_settings() -> Settings:
         parser_keyword_filter=_bool("PARSER_KEYWORD_FILTER", True),
         parser_max_batch=_int("PARSER_MAX_BATCH", 20),
         parser_voice_enabled=_bool("PARSER_VOICE_ENABLED", True),
+        voice_enabled=_bool("VOICE_ENABLED", False),
         whisper_model=_str("WHISPER_MODEL", "small"),
         whisper_model_dir=_str("WHISPER_MODEL_DIR", "models"),
         whisper_device=_str("WHISPER_DEVICE", "cpu"),
