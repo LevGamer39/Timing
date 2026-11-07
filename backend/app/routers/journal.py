@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_role
+from app.enrollment import clean_subject
 from app.models import (
     Assignment,
     Class,
@@ -34,7 +35,6 @@ from app.models import (
 
 router = APIRouter(prefix="/api/journal", tags=["journal"])
 
-MAX_SUBJECT_LENGTH = 100
 MAX_HOMEWORK_LENGTH = 4000
 MAX_COMMENT_LENGTH = 500
 MIN_GRADE = 1.0
@@ -267,6 +267,17 @@ def _teacher_class(class_id: int, user: User, db: Session) -> Class:
     return class_
 
 
+def _journal_subject(value: str) -> str:
+    """Предмет приходит путём в URL, поэтому Pydantic его не проверяет."""
+    try:
+        subject = clean_subject(value)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    if subject is None:
+        raise HTTPException(400, "Subject must not be blank")
+    return subject
+
+
 def _roster(class_id: int, db: Session) -> list[User]:
     student_ids = [
         row[0]
@@ -484,9 +495,7 @@ def get_journal(
     db: Session = Depends(get_db),
 ):
     class_ = _teacher_class(class_id, current_user, db)
-    subject = subject.strip()
-    if not subject:
-        raise HTTPException(400, "Subject must not be blank")
+    subject = _journal_subject(subject)
 
     students = _roster(class_id, db)
     student_ids = [student.id for student in students]
@@ -616,9 +625,7 @@ def save_journal(
     лишние уроки удаляются вместе с оценками, оценки перезаписываются.
     """
     class_ = _teacher_class(class_id, current_user, db)
-    subject = subject.strip()
-    if not subject:
-        raise HTTPException(400, "Subject must not be blank")
+    subject = _journal_subject(subject)
 
     students = _roster(class_id, db)
     student_ids = {student.id for student in students}

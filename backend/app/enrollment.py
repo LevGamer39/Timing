@@ -5,6 +5,8 @@
 ``grade`` оставался прежним, а ученик, вступивший в класс после создания
 задания, не получал задачу. Обе операции собраны здесь.
 """
+import unicodedata
+
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -17,6 +19,27 @@ from app.models import (
     User,
     UserRole,
 )
+
+MAX_SUBJECT_LENGTH = 100
+
+
+def clean_subject(value: str | None) -> str | None:
+    """Название предмета: trim, без управляющих символов, <= 100.
+
+    Пустая строка и ``None`` означают «предмет не указан». Управляющие
+    символы отвергаем: NUL PostgreSQL при вставке в VARCHAR не принимает
+    (500), а переводы строк ломают вывод в карточках.
+    """
+    if value is None:
+        return None
+    value = value.strip()
+    if any(unicodedata.category(ch) == "Cc" for ch in value):
+        raise ValueError("Subject must not contain control characters")
+    if not value:
+        return None
+    if len(value) > MAX_SUBJECT_LENGTH:
+        raise ValueError(f"Subject must be <= {MAX_SUBJECT_LENGTH} characters")
+    return value
 
 
 def set_teacher_subjects(

@@ -627,6 +627,11 @@ export async function uploadAttachment(file) {
   if (!serverSession) return { name: file.name, token: '' };
   return api.uploadAttachment(file);
 }
+export function deleteAttachment(fileToken) {
+  // Уборка best-effort: если сервер не ответил, файл снимет ночная чистка.
+  if (!serverSession || !fileToken) return Promise.resolve();
+  return api.deleteAttachment(fileToken).catch(() => {});
+}
 export function downloadAttachment(fileToken, name) {
   if (!serverSession || !fileToken) return Promise.reject(new Error('Файл недоступен'));
   return api.downloadAttachment(fileToken).then((blob) => {

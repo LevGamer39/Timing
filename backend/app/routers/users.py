@@ -21,6 +21,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_role
 from app.enrollment import (
     add_missing_assignment_tasks,
+    clean_subject,
     refresh_student_grade,
     set_teacher_subjects,
 )
@@ -105,7 +106,6 @@ def _reset_attempts(key: str) -> None:
 
 MIN_PASSWORD_LENGTH = 8
 MAX_NAME_LENGTH = 100
-MAX_SUBJECT_LENGTH = 100
 MAX_AVATAR_LENGTH = 2_000_000
 EMAIL_VERIFICATION_TTL = timedelta(minutes=15)
 RESET_TOKEN_TTL = timedelta(hours=1)
@@ -243,13 +243,9 @@ class ProfileUpdateRequest(BaseModel):
             return None
         cleaned: list[str] = []
         for raw in value:
-            subject = (raw or "").strip()
-            if not subject:
+            subject = clean_subject(raw)
+            if subject is None:
                 continue
-            if len(subject) > MAX_SUBJECT_LENGTH:
-                raise ValueError(
-                    f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
-                )
             if subject.lower() not in {item.lower() for item in cleaned}:
                 cleaned.append(subject)
         return cleaned

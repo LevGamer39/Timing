@@ -3,6 +3,17 @@
 .file-pill:hover { background: var(--accent-soft); }
 .file-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 
+/* Черновик вложения: загрузка и отмена добавления до отправки */
+.file-chip { padding-right: 6px; }
+.file-chip.is-pending { opacity: .6; }
+.file-x {
+  display: inline-flex; align-items: center; padding: 2px;
+  border: 0; border-radius: 999px; background: none;
+  color: var(--muted); cursor: pointer;
+}
+.file-x:hover { color: var(--danger); background: var(--soft); }
+.drop-over { outline: 2px dashed var(--accent); outline-offset: 4px; }
+
 .file-viewer {
   position: fixed; inset: 0; z-index: 200;
   display: flex; flex-direction: column;

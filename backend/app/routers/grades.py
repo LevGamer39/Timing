@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import assert_parent_of, require_role
+from app.enrollment import MAX_SUBJECT_LENGTH, clean_subject
 from app.models import (
     Assignment,
     Class,
@@ -21,7 +22,6 @@ router = APIRouter(prefix="/api/grades", tags=["grades"])
 
 MIN_GRADE = 1.0
 MAX_GRADE = 5.0
-MAX_SUBJECT_LENGTH = 100
 
 
 # ---------------------------------------------------------------------------
@@ -39,14 +39,10 @@ class GradeCreate(BaseModel):
     @field_validator("subject")
     @classmethod
     def _subject_length(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
+        subject = clean_subject(value)
+        if subject is None:
             raise ValueError("Subject must not be blank")
-        if len(value) > MAX_SUBJECT_LENGTH:
-            raise ValueError(
-                f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
-            )
-        return value
+        return subject
 
 
 class BulkGradeItem(BaseModel):
@@ -63,14 +59,10 @@ class BulkGradeCreate(BaseModel):
     @field_validator("subject")
     @classmethod
     def _subject_length(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
+        subject = clean_subject(value)
+        if subject is None:
             raise ValueError("Subject must not be blank")
-        if len(value) > MAX_SUBJECT_LENGTH:
-            raise ValueError(
-                f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
-            )
-        return value
+        return subject
 
 
 class GradeResponse(BaseModel):

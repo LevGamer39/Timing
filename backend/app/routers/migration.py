@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app import config
 from app.database import get_db
 from app.dependencies import require_role
-from app.enrollment import enroll_student
+from app.enrollment import clean_subject, enroll_student
 from app.models import (
     Class,
     ClassMembership,
@@ -34,7 +34,6 @@ SCHEMA_PATH = "/static/schemas/student-migration.schema.json"
 VERSION = 1
 MAX_GRADE = 5.0
 MAX_NAME_LENGTH = 100
-MAX_SUBJECT_LENGTH = 100
 MAX_PERIOD_LENGTH = 60
 MAX_LOGIN_LENGTH = 255
 MAX_EMAIL_LENGTH = 255
@@ -60,12 +59,10 @@ class GradeEntry(_Strict):
     @field_validator("subject")
     @classmethod
     def _subject(cls, value: str) -> str:
-        value = value.strip()
-        if not value or len(value) > MAX_SUBJECT_LENGTH:
-            raise ValueError(
-                f"Subject must be 1-{MAX_SUBJECT_LENGTH} characters"
-            )
-        return value
+        subject = clean_subject(value)
+        if subject is None:
+            raise ValueError("Subject must be 1-100 characters")
+        return subject
 
 
 class FinalEntry(_Strict):
@@ -76,12 +73,10 @@ class FinalEntry(_Strict):
     @field_validator("subject")
     @classmethod
     def _subject(cls, value: str) -> str:
-        value = value.strip()
-        if not value or len(value) > MAX_SUBJECT_LENGTH:
-            raise ValueError(
-                f"Subject must be 1-{MAX_SUBJECT_LENGTH} characters"
-            )
-        return value
+        subject = clean_subject(value)
+        if subject is None:
+            raise ValueError("Subject must be 1-100 characters")
+        return subject
 
     @field_validator("period")
     @classmethod

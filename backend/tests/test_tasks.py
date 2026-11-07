@@ -35,6 +35,21 @@ def test_create_task_rejects_overlong_title():
         TaskCreate(title="x" * 300)
 
 
+def test_create_task_rejects_overlong_subject():
+    with pytest.raises(ValueError):
+        TaskCreate(title="x", subject="я" * 101)
+
+
+def test_create_task_rejects_control_characters_in_subject():
+    # NUL раньше доезжал до VARCHAR и давал 500 вместо 422.
+    with pytest.raises(ValueError):
+        TaskCreate(title="x", subject="a\x00b")
+
+
+def test_create_task_blanks_empty_subject():
+    assert TaskCreate(title="x", subject="   ").subject is None
+
+
 # ---------------------------------------------------------------------------
 # Принадлежность
 # ---------------------------------------------------------------------------

@@ -94,6 +94,13 @@ def test_create_rejects_duplicate_student_ids():
         )
 
 
+def test_create_rejects_overlong_subject():
+    with pytest.raises(ValueError):
+        AssignmentCreate(
+            title="Essay", subject="я" * 101, deadline=NOW, class_id=1
+        )
+
+
 def test_create_rejects_foreign_class(db, teacher, member, other_teacher):
     with pytest.raises(HTTPException) as exc:
         assign_router.create_assignment(

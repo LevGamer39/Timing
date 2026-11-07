@@ -182,6 +182,8 @@ export const uploadAttachment = async (file) => {
   return data;
 };
 
+export const deleteAttachment = (fileToken) => request('/api/messages/attachments/' + encodeURIComponent(fileToken), { method: 'DELETE' });
+
 export const downloadAttachment = async (fileToken) => {
   const headers = {};
   if (token()) headers.Authorization = 'Bearer ' + token();

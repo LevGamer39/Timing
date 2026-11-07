@@ -200,3 +200,4 @@ bot/data/*.json
 
 # вложения внутренней почты
 backend/data/uploads/
+backend-data/

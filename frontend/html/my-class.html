@@ -97,8 +97,8 @@
   </select>
   <label class="label" for="ah-desc">Заметка</label>
   <textarea class="input" id="ah-desc" rows="3" maxlength="2000" style="resize: vertical"></textarea>
-  <label class="label" for="ah-file">Файлы (картинки и PDF можно просмотреть, Word — только скачать)</label>
-  <input class="input" id="ah-file" type="file" multiple>
+  <p class="hint" style="margin: 0">Файлы: картинки и PDF можно просмотреть, Word — только скачать. Можно перетащить в форму.</p>
+  <label class="btn ghost sm" style="align-self: flex-start; cursor: pointer">{{1}}Прикрепить файл<input type="file" id="ah-file" multiple class="sr-only"></label>
   <div id="ah-files" class="file-row"></div>
   <p class="error" id="ah-err" role="alert" hidden></p>
   <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">Выдать</button></div>

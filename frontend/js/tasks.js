@@ -6,10 +6,6 @@ import { fileChip, bindFilePreviews } from './shared/file-preview.js';
 
 const PRIORITY = { high: 'Высокая', medium: 'Обычная', low: 'Низкая' };
 
-const subjectOptions = () => store.subjects()
-  .map((s) => '<option value="' + esc(s.name) + '">' + esc(s.name) + '</option>')
-  .join('');
-
 const dateLabel = (value) => {
   if (!value) return 'Без срока';
   const d = new Date(value);
@@ -42,7 +38,7 @@ function taskCard(t, i) {
 }
 
 function formSheet(task, onSaved) {
-  sheet(fragment('tasks', 'form', [task ? 'Изменить задачу' : 'Новая задача', subjectOptions(), task ? 'Сохранить' : 'Добавить']), (el, close) => {
+  sheet(fragment('tasks', 'form', [task ? 'Изменить задачу' : 'Новая задача', task ? 'Сохранить' : 'Добавить']), (el, close) => {
     const err = el.querySelector('#tf-err');
     const fail = (text) => { err.textContent = text; err.hidden = false; };
     if (task) {
@@ -59,7 +55,7 @@ function formSheet(task, onSaved) {
       const raw = el.querySelector('#tf-deadline').value;
       const body = {
         title,
-        subject: el.querySelector('#tf-subject').value || null,
+        subject: el.querySelector('#tf-subject').value.trim() || null,
         description: el.querySelector('#tf-desc').value.trim() || null,
         deadline: raw ? new Date(raw).toISOString() : null,
         priority: el.querySelector('#tf-priority').value
