@@ -487,6 +487,22 @@ async def _job_check_overdue() -> None:
         db.close()
 
 
+async def _job_cleanup_orphan_attachments() -> None:
+    """Раз в сутки убирает загруженные, но не приложенные вложения почты."""
+    from app.routers.messages import cleanup_orphan_attachments
+
+    db = SessionLocal()
+    try:
+        removed = cleanup_orphan_attachments(db)
+        if removed:
+            logger.info("mail: removed %d orphan attachments", removed)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        logger.exception("cleanup_orphan_attachments error: %s", exc)
+    finally:
+        db.close()
+
+
 def weekly_email_text(db: Session, student: User) -> str | None:
     """Тело письма по одному ребёнку; ``None`` — за неделю ничего не было."""
     tz_name = config.TIMEZONE
@@ -631,6 +647,15 @@ def start_scheduler() -> None:
         "interval",
         minutes=10,
         id="check_overdue",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _job_cleanup_orphan_attachments,
+        "cron",
+        hour=3,
+        minute=30,
+        timezone=zone(config.TIMEZONE),
+        id="cleanup_orphan_attachments",
         replace_existing=True,
     )
     # Почтовая копия недельной сводки. Основной канал — MAX: его рассылает

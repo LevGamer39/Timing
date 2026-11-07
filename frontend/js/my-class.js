@@ -4,6 +4,7 @@ import { normalizedBounds } from "./grading.js";
 import { esc, icon, zone, fmt, dayMonth, dayMonthShort, DAYS, weekday, plural, toast, iso, weighted, sheet } from "./ui.js";
 import { header } from './common.js';
 import { fileChip, bindFilePreviews } from './shared/file-preview.js';
+import { createFileList } from './shared/file-upload.js';
 import { absenceBlock } from './shared/attendance.js';
 import { periodLabel, classTab, setClassTab } from "./shared/teacher.js";
 
@@ -42,32 +43,13 @@ function mountHomework(cls, root) {
     .catch(() => { box.innerHTML = '<div class="card pad"><p class="muted" style="margin: 0">Не удалось загрузить задания.</p></div>'; });
 
   const createSheet = () => {
-    sheet(fragment('my-class', 'hw-form', [esc(store.account()?.subject || '')]), (el, close) => {
+    sheet(fragment('my-class', 'hw-form', [esc(store.account()?.subject || ''), icon('clip', 18)]), (el, close) => {
       const err = el.querySelector('#ah-err');
       const fail = (text) => { err.textContent = text; err.hidden = false; };
-      const files = [];
-      const drawFiles = () => {
-        el.querySelector('#ah-files').innerHTML = files.map((f) => '<span class="pill">' + icon('clip', 14) + ' ' + esc(f.name) + '</span>').join('');
-      };
-      el.querySelector('#ah-file')?.addEventListener('change', (e) => {
-        const picked = [...e.target.files];
-        e.target.value = '';
-        if (!picked.length) return;
-        files.push(...picked.map((x) => ({ name: x.name, token: '', pending: true })));
-        drawFiles();
-        picked.forEach((x, i) => {
-          const item = files[files.length - picked.length + i];
-          store.uploadAttachment(x).then((result) => {
-            item.token = result.token || '';
-            item.name = result.name || x.name;
-            delete item.pending;
-            drawFiles();
-          }).catch((error) => {
-            files.splice(files.indexOf(item), 1);
-            drawFiles();
-            toast((error && error.message) || 'Не удалось загрузить файл');
-          });
-        });
+      const uploader = createFileList({
+        input: el.querySelector('#ah-file'),
+        drop: el.querySelector('#ah-f'),
+        list: el.querySelector('#ah-files'),
       });
       const deadline = el.querySelector('#ah-deadline');
       const note = el.querySelector('#ah-load');
@@ -116,7 +98,7 @@ function mountHomework(cls, root) {
         if (!title) return fail('Введите задание.');
         if (!subject) return fail('Укажите предмет.');
         if (!raw) return fail('Укажите срок сдачи.');
-        if (files.some((f) => f.pending)) return fail('Подождите, файлы ещё загружаются.');
+        if (uploader.pending()) return fail('Подождите, файлы ещё загружаются.');
         store.assignmentCreate({
           title,
           subject,
@@ -124,7 +106,7 @@ function mountHomework(cls, root) {
           deadline: new Date(raw).toISOString(),
           class_id: Number(cls.key),
           priority: el.querySelector('#ah-priority').value,
-          files: files.filter((f) => f.token).map((f) => f.token),
+          files: uploader.files.filter((f) => f.token).map((f) => f.token),
         }).then((result) => {
           if (typeof result === 'string') return fail(result);
           close(); reload(); toast('Задание выдано');

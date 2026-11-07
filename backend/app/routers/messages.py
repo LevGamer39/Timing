@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import MailFile, Message, User, UserRole
+from app.models import Assignment, MailFile, Message, User, UserRole
 
 router = APIRouter(prefix="/api/messages", tags=["messages"])
 
@@ -23,6 +23,9 @@ MAX_SUBJECT_LENGTH = 255
 MAX_BODY_LENGTH = 20000
 MAX_FILES = 10
 MAX_FILE_BYTES = 20 * 1024 * 1024
+# Сколько живёт загруженный, но так и не приложенный файл. Меньше суток
+# нельзя: человек может заполнять письмо долго.
+ORPHAN_TTL = timedelta(hours=24)
 UPLOAD_DIR = Path(__file__).resolve().parents[2] / "data" / "uploads" / "mail"
 
 
@@ -219,6 +222,76 @@ def upload_attachment(
     db.commit()
     db.refresh(row)
     return FileOut(token=row.token, name=row.name, size=row.size)
+
+
+def _tokens_from_json(raw: str | None) -> set[str]:
+    """Токены вложений из колонки ``files`` (JSON-список объектов)."""
+    if not raw:
+        return set()
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return set()
+    if not isinstance(data, list):
+        return set()
+    return {
+        item["token"]
+        for item in data
+        if isinstance(item, dict) and item.get("token")
+    }
+
+
+def _referenced_tokens(db: Session) -> set[str]:
+    """Токены, которые уже приложены к письму или заданию."""
+    tokens: set[str] = set()
+    for (raw,) in db.query(Message.files).all():
+        tokens |= _tokens_from_json(raw)
+    for (raw,) in db.query(Assignment.files).all():
+        tokens |= _tokens_from_json(raw)
+    return tokens
+
+
+@router.delete("/attachments/{token}", status_code=204)
+def delete_attachment(
+    token: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Отмена добавления: удаляет загруженный файл, пока он не приложен.
+
+    Токен уже в письме или задании — 409: иначе получатель потеряет
+    вложение, а строка письма останется битой.
+    """
+    row = db.query(MailFile).filter(MailFile.token == token).first()
+    if not row or row.uploader_id != current_user.id:
+        raise HTTPException(404, "File not found")
+    if token in _referenced_tokens(db):
+        raise HTTPException(409, "File is already attached")
+    path = Path(row.path)
+    db.delete(row)
+    db.commit()
+    path.unlink(missing_ok=True)
+
+
+def cleanup_orphan_attachments(
+    db: Session, older_than: timedelta = ORPHAN_TTL
+) -> int:
+    """Удаляет загруженные, но не приложенные файлы старше ``older_than``.
+
+    Фронтенд удаляет чип сразу через DELETE; эта уборка ловит то, что
+    осталось от закрытой вкладки и упавшей загрузки.
+    """
+    cutoff = datetime.now(timezone.utc) - older_than
+    used = _referenced_tokens(db)
+    removed = 0
+    for row in db.query(MailFile).filter(MailFile.created_at < cutoff).all():
+        if row.token in used:
+            continue
+        Path(row.path).unlink(missing_ok=True)
+        db.delete(row)
+        removed += 1
+    db.commit()
+    return removed
 
 
 @router.get("/attachments/{token}")

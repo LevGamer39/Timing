@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import assert_parent_of, require_role
+from app.enrollment import clean_subject
 from app.models import (
     Class,
     ClassMembership,
@@ -20,7 +21,6 @@ router = APIRouter(prefix="/api/schedule", tags=["schedule"])
 
 _HHMM_RE = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
-MAX_SUBJECT_LENGTH = 100
 MAX_TEACHER_LENGTH = 255
 MAX_ROOM_LENGTH = 50
 
@@ -59,12 +59,10 @@ class ScheduleEntryCreate(BaseModel):
     @field_validator("subject")
     @classmethod
     def _subject_not_blank(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
+        subject = clean_subject(value)
+        if subject is None:
             raise ValueError("Subject must not be blank")
-        if len(value) > MAX_SUBJECT_LENGTH:
-            raise ValueError(f"Subject must be <= {MAX_SUBJECT_LENGTH} characters")
-        return value
+        return subject
 
     @field_validator("start_time", "end_time")
     @classmethod

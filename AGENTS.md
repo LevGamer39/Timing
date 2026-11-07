@@ -182,6 +182,9 @@ parent_task = relationship("Task", back_populates="subtasks", remote_side="[Task
   `(class_id, subject, date, slot)` и `(student_id, subject, date, slot)`.
 - `Message.files` — JSON-список объектов `{token, name, size}`. Сами файлы
   лежат в `backend/data/uploads/mail/`, доступ — по токену `mail_files`.
+  Снятый в форме чип удаляет файл через `DELETE /api/messages/attachments/{token}`
+  (409, если он уже приложен); загруженные, но так и не приложенные файлы
+  старше суток убирает ночная джоба `cleanup_orphan_attachments`.
 - ИИ-чаты: `ai_chats` + `ai_messages.chat_id`. `AIChat.summary` и
   `summary_upto_id` — сжатая старая часть диалога; всё, что новее этого id,
   уходит модели как есть. История одного чата не растёт в промпте бесконечно.

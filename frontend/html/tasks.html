@@ -15,10 +15,8 @@
 <form class="stack" id="task-f" novalidate style="margin-top: 12px">
   <label class="label" for="tf-title">Что сделать</label>
   <input class="input" id="tf-title" maxlength="200" placeholder="Например, параграф 12">
-  <div class="field" id="tf-subject-field">
-    <label class="label" for="tf-subject">Предмет</label>
-    <select class="input" id="tf-subject">{{1}}</select>
-  </div>
+  <label class="label" for="tf-subject">Предмет</label>
+  <input class="input" id="tf-subject" maxlength="100" placeholder="Например, алгебра">
   <label class="label" for="tf-deadline">Срок</label>
   <input class="input" id="tf-deadline" type="datetime-local">
   <label class="label" for="tf-priority">Важность</label>
@@ -26,7 +24,7 @@
   <label class="label" for="tf-desc">Заметка</label>
   <textarea class="input" id="tf-desc" rows="3" maxlength="2000" style="resize: vertical"></textarea>
   <p class="error" id="tf-err" role="alert" hidden></p>
-  <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">{{2}}</button></div>
+  <div class="row" style="justify-content: flex-end; gap: 8px"><button class="btn ghost sm" type="button" data-close>Отмена</button><button class="btn sm" type="submit">{{1}}</button></div>
 </form>
 <!-- /fragment:form -->
 

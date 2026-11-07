@@ -73,6 +73,21 @@ def test_two_lessons_on_same_date_keep_their_marks(
     assert [(a.date, a.slot) for a in saved.absences] == [(DAY, 0)]
 
 
+def test_overlong_subject_is_rejected_before_the_database(
+    db, teacher, klass, students, work_types
+):
+    # Раньше путь /{subject} уходил в VARCHAR(100) как есть: DataError -> 500.
+    with pytest.raises(HTTPException) as exc:
+        journal_router.save_journal(
+            klass.id,
+            "я" * 150,
+            JournalSync(lessons=[JournalLessonIn(date=DAY, slot=0)]),
+            current_user=teacher,
+            db=db,
+        )
+    assert exc.value.status_code == 400
+
+
 def test_duplicate_lesson_slot_is_rejected(
     db, teacher, klass, students, work_types
 ):

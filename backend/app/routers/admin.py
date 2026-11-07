@@ -11,6 +11,7 @@ from app.database import get_db
 from app.dependencies import require_role
 from app.enrollment import (
     add_missing_assignment_tasks,
+    clean_subject,
     enroll_student,
     refresh_student_grade,
     set_teacher_subjects,
@@ -20,7 +21,6 @@ from app.models import Class, ClassMembership, InviteCode, User, UserRole
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 MAX_NAME_LENGTH = 100
-MAX_SUBJECT_LENGTH = 100
 
 
 # ---------------------------------------------------------------------------
@@ -128,13 +128,9 @@ class AdminUserUpdate(BaseModel):
             return None
         cleaned: list[str] = []
         for raw in value:
-            subject = (raw or "").strip()
-            if not subject:
+            subject = clean_subject(raw)
+            if subject is None:
                 continue
-            if len(subject) > MAX_SUBJECT_LENGTH:
-                raise ValueError(
-                    f"Subject must be <= {MAX_SUBJECT_LENGTH} characters"
-                )
             if subject.lower() not in {item.lower() for item in cleaned}:
                 cleaned.append(subject)
         return cleaned
