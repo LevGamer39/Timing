@@ -91,6 +91,7 @@ export const confirmEmailChange = (token) => request('/api/users/me/change-email
 export const joinClass = (code) => request('/api/classes/join?invite_code=' + encodeURIComponent(code), { method: 'POST' });
 
 export const yandexLoginUrl = () => request('/api/auth/yandex/login-url', { auth: false });
+export const yandexLinkUrl = () => request('/api/auth/yandex/link');
 
 export const me = () => request('/api/users/me');
 export const patchMe = (body) => request('/api/users/me', { method: 'PATCH', body });

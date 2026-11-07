@@ -33,6 +33,12 @@ else
     fi
 fi
 
+# Пароль панельки Mailpit (https://timing.myftp.org/mailpit/): htpasswd
+# генерируем при старте из MAILPIT_PANEL_PASSWORD, файл auth_basic в
+# конфиге обязателен — без него nginx не стартует.
+HASH=$(printf '%s' "${MAILPIT_PANEL_PASSWORD:-demo2024}" | openssl passwd -apr1 -stdin)
+printf 'timing:%s\n' "$HASH" > /etc/nginx/mailpit.htpasswd
+
 # envsubst читает окружение, а не shell-переменные: без export подстановка
 # дала бы пустую строку и nginx упал бы на "invalid number of arguments".
 export APP_DOMAIN SSL_CERT SSL_KEY

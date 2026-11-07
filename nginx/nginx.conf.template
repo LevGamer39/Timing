@@ -55,5 +55,20 @@ http {
             proxy_set_header   Upgrade $http_upgrade;
             proxy_set_header   Connection "upgrade";
         }
+
+        # Панелька Mailpit для показа проекта. Там коды подтверждения и
+        # ссылки сброса пароля, поэтому за basic-auth (пароль — из
+        # MAILPIT_PANEL_PASSWORD, htpasswd собирает entrypoint).
+        # Переменная + resolver, чтобы nginx не падал при выключенном mailpit.
+        location ^~ /mailpit/ {
+            auth_basic "Mailpit";
+            auth_basic_user_file /etc/nginx/mailpit.htpasswd;
+
+            resolver 127.0.0.11;
+            set $mailpit_upstream http://mailpit:8025;
+            proxy_pass $mailpit_upstream;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
     }
 }

@@ -83,6 +83,7 @@ services:
       - "443:443"
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN must be set}
+      MAILPIT_PANEL_PASSWORD: ${MAILPIT_PANEL_PASSWORD:-demo2024}
     volumes:
       - ./nginx/certbot/conf:/etc/letsencrypt
       - ./nginx/certbot/www:/var/www/certbot
@@ -128,6 +129,23 @@ services:
       - OLLAMA_URL=http://ollama:11434
     volumes:
       - ./bot/data:/app/data
+    networks:
+      - timing_net
+
+  # Локальный перехватчик писем для разработки: принимает всё, ничего не
+  # отправляет наружу. Запуск: docker compose --profile mailpit up -d mailpit
+  # Письма видны на http://localhost:8025 и через сайт — https://timing.myftp.org/mailpit/
+  # (nginx, за basic-auth: логин timing, пароль — MAILPIT_PANEL_PASSWORD).
+  # SMTP — localhost:1025.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: timing_mailpit
+    restart: unless-stopped
+    profiles: ["mailpit"]
+    command: ["--webroot=/mailpit/"]
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
     networks:
       - timing_net
 

@@ -159,6 +159,10 @@ async def initiate_link(
 
     ``token`` больше не принимается из query: клиент мог подставить чужой
     JWT, и привязка уходила не тому пользователю.
+
+    Возвращает JSON с URL, как ``/login-url``: фронт ходит сюда fetch-ом с
+    ``Authorization`` и сам делает ``location.assign(url)``. Прямой редирект
+    из браузера сюда не доходит, потому что навигация не отправляет заголовок.
     """
     _require_config()
     url = (
@@ -167,7 +171,7 @@ async def initiate_link(
         f"&redirect_uri={config.YANDEX_LINK_CALLBACK}"
         f"&state={create_link_state(current_user.id)}"
     )
-    return RedirectResponse(url)
+    return {"url": url}
 
 
 @router.get("/confirm-link")
@@ -205,14 +209,14 @@ async def confirm_link(
     existing = db.query(User).filter(User.yandex_id == yandex_id).first()
     if existing:
         if existing.id == current_user.id:
-            return RedirectResponse(url="/settings?event=yandex_already_linked")
+            return RedirectResponse(url="/#/settings")
         return HTMLResponse(
             "<script>"
             "alert('Этот Яндекс уже привязан к другому аккаунту!');"
-            "window.location.href='/settings';"
+            "window.location.href='/#/settings';"
             "</script>"
         )
 
     current_user.yandex_id = yandex_id
     db.commit()
-    return RedirectResponse(url="/settings?event=yandex_linked")
+    return RedirectResponse(url="/#/settings")

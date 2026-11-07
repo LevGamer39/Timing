@@ -1,4 +1,5 @@
 import { fragment } from './templates.js';
+import * as api from './api.js';
 import * as store from './store.js';
 import { ACCENTS } from './theme.js';
 import { esc, icon, toast, AVATARS, avatarSvg } from './ui.js';
@@ -25,6 +26,7 @@ function settingsView({ go, rerender }) {
   const left = fragment("settings", "card", [!av, esc(acc.initials), AVATARS.map((a) => ("<button type=\"button\" class=\"av-opt\" data-av=\"" + (a.id) + "\" aria-pressed=\"" + (av === a.id) + "\" aria-label=\"Аватарка " + (a.id) + "\">" + (avatarSvg(a.id, 48)) + "</button>")).join(''), role === 'parent' ? fragment("settings", "card-2", [store.children().map((c) => fragment("settings", "list-row", [c.id, esc(c.initials), esc(c.first), esc(c.cls), c.id === store.student().id ? ("<span class=\"pill\">Выбран</span>") : ("<span class=\"muted small\" style=\"font-weight: 700\">Выбрать</span>")])).join('')]) : '']);
 
   const right = fragment("settings", "access", [esc(login), icon('logout', 18)])
+    + (server ? fragment("settings", "yandex", [acc.yandexLinked ? 'Яндекс привязан: можно входить по кнопке на странице входа.' : 'После привязки можно входить через Яндекс ID.', acc.yandexLinked ? '' : '<button class="btn sm" type="button" id="yandex-link" style="align-self: flex-start">Привязать Яндекс</button>']) : '')
     + (server ? fragment("settings", "profile", [esc(acc.first || ''), esc(acc.last || '')]) + fragment("settings", "password", []) : '')
     + (server ? fragment("settings", "email", [esc(acc.email || 'не задан')]) : '')
     + (server ? fragment("settings", "notify", [acc.notifyEmail ? 'checked' : '', acc.notifyBrowser ? 'checked' : '', esc(acc.digestTime || '19:00'), acc.notifyMax ? 'checked' : '']) : '')
@@ -46,6 +48,11 @@ function settingsView({ go, rerender }) {
       root.querySelectorAll('[data-av]').forEach((b) => b.addEventListener('click', () => { if (!store.setAvatar(b.dataset.av)) return toast(store.SAVE_ERROR); rerender(); toast('Аватарка сохранена'); }));
       root.querySelectorAll('[data-child]').forEach((b) => b.addEventListener('click', () => { if (!store.setChild(b.dataset.child)) return toast(store.SAVE_ERROR); rerender(); toast('Показываю дневник: ' + store.student().first); }));
       root.querySelector('#out').addEventListener('click', () => { store.logout(); go('login'); });
+
+      root.querySelector('#yandex-link')?.addEventListener('click', async () => {
+        try { const { url } = await api.yandexLinkUrl(); location.assign(url); }
+        catch (error) { toast(error.message); }
+      });
 
       const nameForm = root.querySelector('#name-f');
       if (nameForm) nameForm.addEventListener('submit', (e) => {

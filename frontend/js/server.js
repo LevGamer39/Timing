@@ -196,6 +196,7 @@ export function accountFor(profile, children) {
     subject: (profile.teacher_subjects || [])[0] || '',
     subjects: profile.teacher_subjects || [],
     email: profile.email || '',
+    yandexLinked: Boolean(profile.yandex_id),
     notifyEmail: profile.notify_email !== false,
     notifyBrowser: profile.notify_browser !== false,
     notifyMax: profile.notify_max !== false,
