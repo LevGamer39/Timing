@@ -17,9 +17,9 @@ python -m http.server 5173
 Откройте http://localhost:5173. На Windows: `Запустить.cmd`, остановка —
 `Остановить.cmd`.
 
-Вход — кнопки «Демо-доступ» (без сервера) или настоящий аккаунт: логин и
-пароль, код из MAX-бота, либо Яндекс ID. Демо-логины: `belov.artem`,
-`belova.anna`, `ivanova.maria`, `kuznetsova.elena`.
+Вход — настоящий аккаунт: логин и пароль, код из MAX-бота, либо Яндекс ID.
+Демо-аккаунты (пароль `demo2024`, создаются при первом запуске): `demo.admin`,
+`demo.teacher`, `demo.student`, `demo.parent` (см. [README](../README.md)).
 
 ## Структура
 

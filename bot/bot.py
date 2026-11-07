@@ -1,4 +1,4 @@
-"""Точка входа MAX-бота TimingVK."""
+"""Точка входа MAX-бота Timing."""
 
 from __future__ import annotations
 

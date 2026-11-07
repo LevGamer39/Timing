@@ -6,7 +6,7 @@
 ## Project Structure
 
 ```
-TimingVK/
+Timing/
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py

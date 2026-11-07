@@ -64,7 +64,7 @@
 ## Структура проекта
 
 ```
-TimingVK/
+Timing/
 ├── backend/            # FastAPI: app/ (config, main, database, models, routers/*) + tests/
 ├── bot/                # MAX-бот: bot.py, core/, services/, routers/, keyboards/, texts/
 ├── frontend/           # SPA без сборки: index.html, css/, js/, html/, schemas/

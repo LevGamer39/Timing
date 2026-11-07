@@ -1,4 +1,4 @@
-"""HTTP-клиент к бэкенду TimingVK."""
+"""HTTP-клиент к бэкенду Timing."""
 
 from __future__ import annotations
 
