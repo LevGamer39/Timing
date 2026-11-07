@@ -132,7 +132,7 @@ cd bot; pytest
 
 ## Деплой
 
-- Сервер: Yandex Compute Cloud Ubuntu 22.04, 4 vCPU, 8 GB RAM, 40 GB диск; DNS A-запись, статический IP.
+- Сервер: Yandex Compute Cloud Ubuntu 22.04, 4 vCPU, 12 GB RAM, 40 GB диск; DNS A-запись, статический IP.
 - Проброс портов `80`、`443` обязателен для Let's Encrypt.
 - Переменные домена — только в `.env` (`APP_DOMAIN`, `APP_URL`, `YANDEX_*_CALLBACK`), совпадают с консолью Яндекса.
 - Порядок первого деплоя: Docker → `git clone` + `cp .env.example .env` → SSL-сертификат standalone (пока nginx не запущен, порт 80 свободен) → `docker compose up -d ollama && docker exec timing_ollama ollama pull qwen2.5:7b` → `docker compose up -d --build`.
@@ -214,14 +214,4 @@ Python `smtplib` (stdlib). Транспорт по порту: `465` — `SMTP_S
 
 ## Известные проблемы
 
-| # | Проблема | Файл |
-|---|---|---|
-| 13 | MAX не доставляет боту голосовые: `message_created` приходит без `message` | `bot/services/voice.py` |
-
-Исправлены ранее и убраны из таблицы: №10 — `pydantic-settings`/`PyYAML` удалены из `backend/requirements.txt`; №11 — ограничения моделей догоняются идемпотентным DDL в `_apply_schema_updates()` (полноценных миграций по-прежнему нет); №12 — планировщик выбирает один процесс-лидер через PostgreSQL advisory-лок (`SCHEDULER_LOCK_KEY` в `notifications.py`), при рестарте лидера остальные воркеры джобы не подхватывают — нужен рестарт.
-
-Про 13: ограничение на стороне MAX ([maxapi#191](https://github.com/love-apples/maxapi/issues/191), не исправлено). Воспроизводится и в long polling, и в webhook. Обработка готова (см. «MAX-бот и голосовые» выше) — ждать только, пока MAX начнёт отдавать аудио.
-
-## Лицензия
-
-См. `LICENSE`.
+Ограничение на стороне MAX ([maxapi#191](https://github.com/love-apples/maxapi/issues/191), не исправлено). Воспроизводится и в long polling, и в webhook. Обработка готова (см. «MAX-бот и голосовые» выше) — ждать только, пока MAX начнёт отдавать аудио.
