@@ -10,11 +10,16 @@ permissions:
   contents: read
   packages: write
 
+# GHCR требует lowercase в имени репозитория, а GitHub хранит его как есть
+# (LevGamer39/Timing) — приводим owner/repo к нижнему регистру в шаге lower.
+
 jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: lower
+        run: echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -26,8 +31,8 @@ jobs:
           context: ./backend
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/backend:latest
-            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+            ghcr.io/${{ steps.lower.outputs.repo }}/backend:latest
+            ghcr.io/${{ steps.lower.outputs.repo }}/backend:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -35,6 +40,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: lower
+        run: echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -51,8 +58,8 @@ jobs:
           build-args: |
             PRELOAD_WHISPER=false
           tags: |
-            ghcr.io/${{ github.repository }}/bot:latest
-            ghcr.io/${{ github.repository }}/bot:${{ github.sha }}
+            ghcr.io/${{ steps.lower.outputs.repo }}/bot:latest
+            ghcr.io/${{ steps.lower.outputs.repo }}/bot:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -60,6 +67,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: lower
+        run: echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -71,7 +80,7 @@ jobs:
           context: ./nginx
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/nginx:latest
-            ghcr.io/${{ github.repository }}/nginx:${{ github.sha }}
+            ghcr.io/${{ steps.lower.outputs.repo }}/nginx:latest
+            ghcr.io/${{ steps.lower.outputs.repo }}/nginx:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

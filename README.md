@@ -28,9 +28,9 @@ docker exec timing_ollama ollama pull qwen2.5:7b   # модель ИИ, ~4.7 Г�
 
 Образы публикуются автоматически GitHub Actions (`.github/workflows/docker.yml`) при каждом push в `main`:
 
-- `ghcr.io/levgamer39/vectorvk/backend:latest`
-- `ghcr.io/levgamer39/vectorvk/bot:latest`
-- `ghcr.io/levgamer39/vectorvk/nginx:latest`
+- `ghcr.io/levgamer39/timing/backend:latest`
+- `ghcr.io/levgamer39/timing/bot:latest`
+- `ghcr.io/levgamer39/timing/nginx:latest`
 
 Имена образов зашиты в `docker-compose.yml` (поля `image:`), поэтому `docker compose up -d` без `--build` подтянет готовый образ. Если форкнули репозиторий — поменяйте owner в `image:` и в workflow (там он берётся из `github.repository` сам).
 
