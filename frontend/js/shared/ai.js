@@ -8,10 +8,14 @@ let chats = [];
 
 let chatId = null;
 
-store.onContextChange(() => { chat = []; topic = null; chats = []; chatId = null; });
-export { chat, topic, chats, chatId };
+let chatsLoaded = false;
+
+store.onContextChange(() => { chat = []; topic = null; chats = []; chatId = null; chatsLoaded = false; });
+export { chat, topic, chats, chatId, chatsLoaded };
 
 export const setChat = (value) => { chat = value; };
 export const setTopic = (value) => { topic = value; };
-export const setChats = (value) => { chats = value; };
+// Пустой ответ тоже считается загруженным: иначе mount() запрашивает список
+// и перерисовывает экран без остановки.
+export const setChats = (value) => { chats = value; chatsLoaded = true; };
 export const setChatId = (value) => { chatId = value; };

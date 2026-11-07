@@ -2,7 +2,7 @@ import { fragment } from './templates.js';
 import * as store from './store.js';
 import { score } from './grading.js';
 import { esc, icon, fmt, mark, goalText, plural, dayMonth, iso, DAYS, weekday, toast } from './ui.js';
-import { chat, topic, chats, chatId, setChat, setTopic, setChats, setChatId } from "./shared/ai.js";
+import { chat, topic, chats, chatId, chatsLoaded, setChat, setTopic, setChats, setChatId } from "./shared/ai.js";
 
 // Какой чат уже запрошен: при пустой истории повторный запрос после rerender
 // зациклил бы экран.
@@ -135,7 +135,7 @@ function aiView({ rerender }) {
       });
 
       if (isAi) {
-        if (!chats.length) {
+        if (!chatsLoaded) {
           store.aiChats().then((list) => {
             setChats(list);
             if (list.length && !chatId) { openChat(list[0].id); return; }
