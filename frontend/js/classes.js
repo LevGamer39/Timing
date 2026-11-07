@@ -82,7 +82,7 @@ function classesView({ params, go, rerender }) {
     : '';
 
   const controls = admin
-    ? fragment("classes", "add-class", [icon('plus', 18), esc(c.name), teachers.map((t) => ("<option value=\"" + (t.id) + "\" " + (t.id === c.teacher ? 'selected' : '') + ">" + (esc(t.name)) + "</option>")).join('')]) + (server ? '<button class="btn ghost sm" id="del-class" type="button" style="color: var(--danger); align-self: flex-start">Удалить класс</button>' : '')
+    ? fragment("classes", "add-class", [icon('plus', 18), esc(c.name), teachers.map((t) => ("<option value=\"" + (t.id) + "\" " + (t.id === c.teacher ? 'selected' : '') + ">" + (esc(t.name)) + "</option>")).join('')]) + (server ? '<button class="btn ghost sm" id="del-class" type="button" style="color: var(--danger)">Удалить класс</button>' : '')
     : '';
 
   return {
