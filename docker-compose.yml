@@ -26,7 +26,12 @@ services:
       - timing_net
 
   ollama:
-    image: ollama/ollama:latest
+    # По умолчанию — запечённый образ с GHCR (модель уже внутри, ~9 ГБ).
+    # Лёгкий вариант без модели: OLLAMA_IMAGE=ollama/ollama:latest,
+    # тогда модель качает ollama-init при OLLAMA_AUTO_PULL=true.
+    # При переходе на запечённый образ один раз удали volume (пустой volume
+    # прячет модель из образа): docker volume rm timing_ollama_data
+    image: ${OLLAMA_IMAGE:-ghcr.io/levgamer39/timing/ollama:latest}
     container_name: timing_ollama
     restart: unless-stopped
     environment:
@@ -39,21 +44,17 @@ services:
     networks:
       - timing_net
 
-  # Одноразовая задача: тянет модель при первом запуске, чтобы не искать её
-  # руками. Выключается флагом OLLAMA_AUTO_PULL - по умолчанию модель не
-  # качается, потому что это ~4.7 ГБ и лишний минуты ожидания при каждом
-  # `docker compose up` на чистой машине. С выключенным флагом задача
-  # завершается мгновенно и ни на что не влияет.
+  # Одноразовая задача: тянет модель при OLLAMA_AUTO_PULL=true.
+  # С запечённым образом (OLLAMA_IMAGE с GHCR) ollama list сразу находит
+  # модель и выходит мгновенно; со стоковым — качает с реестра Ollama.
   ollama-init:
-    image: ollama/ollama:latest
+    image: ${OLLAMA_IMAGE:-ghcr.io/levgamer39/timing/ollama:latest}
     container_name: timing_ollama_init
     restart: "no"
     environment:
       OLLAMA_HOST: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
       OLLAMA_AUTO_PULL: ${OLLAMA_AUTO_PULL:-false}
-    volumes:
-      - ollama_data:/root/.ollama
     entrypoint: >
       sh -c '
         if [ "$$OLLAMA_AUTO_PULL" != "true" ]; then

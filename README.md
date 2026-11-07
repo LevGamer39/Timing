@@ -31,6 +31,7 @@ docker exec timing_ollama ollama pull qwen2.5:7b   # модель ИИ, ~4.7 Г�
 - `ghcr.io/levgamer39/timing/backend:latest`
 - `ghcr.io/levgamer39/timing/bot:latest`
 - `ghcr.io/levgamer39/timing/nginx:latest`
+- `ghcr.io/levgamer39/timing/ollama:latest` (модель `qwen2.5:7b` уже внутри — качать не нужно)
 
 Имена образов зашиты в `docker-compose.yml` (поля `image:`), поэтому `docker compose up -d` без `--build` подтянет готовый образ. Если форкнули репозиторий — поменяйте owner в `image:` и в workflow (там он берётся из `github.repository` сам).
 
