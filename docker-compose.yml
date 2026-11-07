@@ -29,6 +29,9 @@ services:
     image: ollama/ollama:latest
     container_name: timing_ollama
     restart: unless-stopped
+    environment:
+      # -1 — загруженная модель не выгружается из памяти: ответы без ожидания загрузки.
+      OLLAMA_KEEP_ALIVE: "-1"
     volumes:
       - ollama_data:/root/.ollama
     expose:

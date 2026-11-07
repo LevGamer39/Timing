@@ -23,9 +23,7 @@ TZ = ZoneInfo("Europe/Moscow")
 NOW = datetime.now(timezone.utc)
 
 
-# ---------------------------------------------------------------------------
 # Хелперы
-# ---------------------------------------------------------------------------
 
 
 def make_chat(db, user, title="Чат") -> AIChat:
@@ -62,9 +60,7 @@ def tool_call(name, arguments) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
 # Чаты
-# ---------------------------------------------------------------------------
 
 
 def test_resolve_chat_creates_chat_titled_from_message(db, student):
@@ -139,9 +135,7 @@ def test_clear_history_does_not_touch_other_users(db, student, student2):
     assert db.query(AIChat).filter(AIChat.user_id == student2.id).count() == 1
 
 
-# ---------------------------------------------------------------------------
 # История и сжатие
-# ---------------------------------------------------------------------------
 
 
 def test_store_ai_exchange_keeps_user_then_assistant(db, student):
@@ -217,9 +211,7 @@ def test_compact_chat_failure_keeps_chat_working(db, student, monkeypatch):
     assert ai._prompt_history(chat)
 
 
-# ---------------------------------------------------------------------------
 # Инструменты
-# ---------------------------------------------------------------------------
 
 
 def test_insert_tasks_dedupes_same_title_and_day(db, student):
@@ -347,9 +339,7 @@ def test_update_tool_rejects_teacher_assignment(db, student, make_task,
     assert "нельзя" in response.reply
 
 
-# ---------------------------------------------------------------------------
 # Подтверждённые действия
-# ---------------------------------------------------------------------------
 
 
 def test_apply_action_deletes_only_own_personal_tasks(db, student, student2,
@@ -394,9 +384,7 @@ def test_apply_action_records_confirmation_in_chat(db, student):
     assert [row.role for row in rows] == ["user", "assistant"]
 
 
-# ---------------------------------------------------------------------------
 # Эндпоинт /chat
-# ---------------------------------------------------------------------------
 
 
 def test_chat_stores_exchange_and_returns_chat_id(db, student, monkeypatch):
@@ -478,9 +466,7 @@ def test_build_context_lists_grades_tasks_and_schedule(db, student, teacher,
     assert "Загруженность" in context
 
 
-# ---------------------------------------------------------------------------
 # Фантомные действия
-# ---------------------------------------------------------------------------
 
 
 def test_chat_retries_when_model_claims_action_without_tool(db, student,
@@ -529,9 +515,7 @@ def test_chat_does_not_retry_plain_answers(db, student, monkeypatch):
     assert len(calls) == 1
 
 
-# ---------------------------------------------------------------------------
 # Расписание считается без модели
-# ---------------------------------------------------------------------------
 
 
 def test_plan_request_skips_model(db, student, make_task, monkeypatch):

@@ -11,9 +11,7 @@ from app.routers.tasks import TaskCreate, TaskUpdate
 from .conftest import NOW
 
 
-# ---------------------------------------------------------------------------
 # Создание
-# ---------------------------------------------------------------------------
 
 
 def test_create_personal_task_trims_title(db, student):
@@ -50,9 +48,7 @@ def test_create_task_blanks_empty_subject():
     assert TaskCreate(title="x", subject="   ").subject is None
 
 
-# ---------------------------------------------------------------------------
 # Принадлежность
-# ---------------------------------------------------------------------------
 
 
 def test_other_student_cannot_read_task(db, student, student2, make_task):
@@ -111,9 +107,7 @@ def test_list_tasks_filters_by_status(db, student, make_task):
     assert [t.title for t in listed] == ["B"]
 
 
-# ---------------------------------------------------------------------------
 # Правила изменения
-# ---------------------------------------------------------------------------
 
 
 def test_student_cannot_edit_teacher_assignment(db, student, make_assignment, make_task):
@@ -178,9 +172,7 @@ def test_update_title_is_applied(db, student, make_task):
     assert updated.title == "Renamed"
 
 
-# ---------------------------------------------------------------------------
 # Завершение и каскадное удаление
-# ---------------------------------------------------------------------------
 
 
 def test_complete_task_cascades_to_subtasks(db, student, make_task):

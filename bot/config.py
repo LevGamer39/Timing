@@ -56,6 +56,8 @@ class Settings:
 
     # MAX Bot API
     max_bot_token: str
+    # Публичное имя бота для OpenAppButton (мини-приложение на сайте).
+    max_bot_username: str
 
     # Внутренний бэкенд Timing
     backend_url: str
@@ -124,6 +126,7 @@ def load_settings() -> Settings:
 
     return Settings(
         max_bot_token=_str("MAX_BOT_TOKEN"),
+        max_bot_username=_str("MAX_BOT_USERNAME"),
         backend_url=_str("MAX_BOT_URL", "http://backend:8000").rstrip("/"),
         backend_timeout=_float("BOT_BACKEND_TIMEOUT", 30.0),
         update_mode=update_mode,

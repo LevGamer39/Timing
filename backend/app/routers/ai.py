@@ -306,9 +306,7 @@ TOOLS = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Схемы
-# ---------------------------------------------------------------------------
 
 
 class ChatRequest(BaseModel):
@@ -362,9 +360,7 @@ class ActionRequest(BaseModel):
     timezone: str | None = None
 
 
-# ---------------------------------------------------------------------------
 # Хелперы для БД
-# ---------------------------------------------------------------------------
 
 
 def _base_tasks_query(student_id: int):
@@ -524,9 +520,7 @@ def _build_context(user: User, db: Session, tz) -> str:
     return "\n".join(parts)
 
 
-# ---------------------------------------------------------------------------
 # Чаты
-# ---------------------------------------------------------------------------
 
 
 def _find_chat(user: User, db: Session, chat_id: int) -> AIChat:
@@ -668,9 +662,7 @@ async def _ensure_history_budget(chat: AIChat, db: Session) -> None:
     await _compact_chat(chat, db)
 
 
-# ---------------------------------------------------------------------------
 # Ollama
-# ---------------------------------------------------------------------------
 
 
 async def _call_ollama(
@@ -688,11 +680,16 @@ async def _call_ollama(
         "num_predict": config.AI_NUM_PREDICT,
     }
     merged_options.update(options or {})
+    # Ollama принимает keep_alive числом (-1 — не выгружать); строкой
+    # длительности ("30m") тоже, но голый "-1" строкой отвергает.
+    keep_alive = config.AI_KEEP_ALIVE
+    if str(keep_alive).lstrip("-").isdigit():
+        keep_alive = int(keep_alive)  # type: ignore[assignment]
     payload = {
         "model": config.OLLAMA_MODEL,
         "messages": messages,
         "stream": False,
-        "keep_alive": config.AI_KEEP_ALIVE,
+        "keep_alive": keep_alive,
         "options": merged_options,
     }
     if tools:
@@ -722,9 +719,7 @@ async def _call_ollama(
         raise HTTPException(502, "AI service error") from exc
 
 
-# ---------------------------------------------------------------------------
 # Обработчики инструментов
-# ---------------------------------------------------------------------------
 
 
 def _build_create_payloads(
@@ -1181,9 +1176,7 @@ def _run_tool(
     return None
 
 
-# ---------------------------------------------------------------------------
 # Роуты
-# ---------------------------------------------------------------------------
 
 
 @router.get("/quick-prompts")

@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
@@ -28,10 +29,36 @@ from app.routers import (
 from app.routers.notifications import start_scheduler, stop_scheduler
 
 
+async def _warmup_ai() -> None:
+    """Греет модель Ollama сразу при старте, чтобы первый вопрос не ждал
+    загрузку (~20 секунд). Ошибки молча пропускаются: модели может ещё не
+    быть, первый чат загрузит её сам."""
+    import httpx
+
+    if not config.OLLAMA_URL or not config.OLLAMA_MODEL:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=180) as client:
+            await client.post(
+                f"{config.OLLAMA_URL}/api/generate",
+                json={
+                    "model": config.OLLAMA_MODEL,
+                    "prompt": "warmup",
+                    "stream": False,
+                    "keep_alive": -1,
+                    "options": {"num_predict": 1, "num_ctx": config.AI_NUM_CTX},
+                },
+            )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_tables()
     start_scheduler()
+    # Прогрев в фоне: старт API не ждёт загрузки модели.
+    asyncio.create_task(_warmup_ai())
     try:
         yield
     finally:

@@ -26,9 +26,7 @@ def member(db, klass, student, student2):
     return klass
 
 
-# ---------------------------------------------------------------------------
 # Создание
-# ---------------------------------------------------------------------------
 
 
 def test_create_fans_out_one_task_per_class_member(
@@ -152,9 +150,7 @@ def test_create_accepts_any_of_teacher_subjects(db, teacher, member):
     assert created.subject == "Literature"
 
 
-# ---------------------------------------------------------------------------
 # Вычисляемые поля
-# ---------------------------------------------------------------------------
 
 
 def test_counts_exclude_ai_subtasks(
@@ -222,9 +218,7 @@ def test_foreign_teacher_cannot_delete(db, make_assignment, other_teacher):
     assert exc.value.status_code == 404
 
 
-# ---------------------------------------------------------------------------
 # Каскадное удаление
-# ---------------------------------------------------------------------------
 
 
 def test_delete_cascades_to_tasks(
@@ -279,9 +273,7 @@ def test_delete_cascades_to_grades(
     ).count() == 0
 
 
-# ---------------------------------------------------------------------------
 # Прогресс
-# ---------------------------------------------------------------------------
 
 
 def test_progress_classifies_every_member(
@@ -342,9 +334,7 @@ def test_progress_includes_grade_when_present(
     assert graded.grade == 4.0
 
 
-# ---------------------------------------------------------------------------
 # Приём работ
-# ---------------------------------------------------------------------------
 
 
 def test_accept_closes_done_and_counts_it(
@@ -419,9 +409,7 @@ def test_accept_ignores_other_teachers(
     assert error.value.status_code == 404
 
 
-# ---------------------------------------------------------------------------
 # Нагрузка класса
-# ---------------------------------------------------------------------------
 
 
 def test_workload_counts_day_and_flags_heavy(

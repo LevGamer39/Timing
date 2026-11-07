@@ -58,9 +58,7 @@ def test_teacher_can_send_to_unverified_student(db, teacher, make_user):
     assert message.recipient.id == pending.id
 
 
-# ---------------------------------------------------------------------------
 # Вложения: отмена добавления и уборка сирот
-# ---------------------------------------------------------------------------
 
 
 def _attachment(db, owner, tmp_path, token, created_at=None):

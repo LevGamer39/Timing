@@ -33,9 +33,7 @@ class FakeTask:
         self.subject = subject
 
 
-# ---------------------------------------------------------------------------
 # Текстовые хелперы
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -87,9 +85,7 @@ def test_extract_json_rejects_non_object():
         extract_json("[1, 2, 3]")
 
 
-# ---------------------------------------------------------------------------
 # Приоритет
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -118,9 +114,7 @@ def test_format_priority_covers_every_enum_member():
         assert isinstance(format_priority(priority), str)
 
 
-# ---------------------------------------------------------------------------
 # Дедлайны
-# ---------------------------------------------------------------------------
 
 
 def test_parse_deadline_hint_returns_none_for_empty():
@@ -180,9 +174,7 @@ def test_parse_deadline_hint_is_utc_aware():
     assert parse_deadline_hint("сегодня").tzinfo is timezone.utc
 
 
-# ---------------------------------------------------------------------------
 # Матчинг — часть, которая раньше падала
-# ---------------------------------------------------------------------------
 
 
 def test_match_tasks_returns_empty_when_no_tasks_exist():
@@ -246,9 +238,7 @@ def test_score_task_is_symmetric_enough_for_identical_text():
     assert score_task("математика", task) >= MATCH_THRESHOLD
 
 
-# ---------------------------------------------------------------------------
 # Форматирование и определение действия
-# ---------------------------------------------------------------------------
 
 
 def test_format_deadline_without_value():
@@ -274,9 +264,7 @@ def test_detect_action_requires_numbered_reply():
     assert detect_action("just prose", "разбей") == (None, None)
 
 
-# ---------------------------------------------------------------------------
 # Часовой пояс и наличие даты
-# ---------------------------------------------------------------------------
 
 
 def test_parse_deadline_hint_uses_local_timezone():
@@ -311,9 +299,7 @@ def test_resolve_timezone_never_raises():
     assert resolve_timezone(None, None) is not None
 
 
-# ---------------------------------------------------------------------------
 # Расписание на неделю
-# ---------------------------------------------------------------------------
 
 
 class FakeSchedule:

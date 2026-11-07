@@ -291,7 +291,29 @@ const applySchoolScale = () => {
   configureGrading(settings.scale || 100, boundsFor(settings, settings.scale || 100));
 };
 
+// initData мини-приложения MAX, если страница открыта внутри MAX.
+// Мост — window.WebApp (MAX Bridge, скрипт st.max.ru/js/max-web-app.js).
+export function maxWebAppInitData() {
+  try {
+    const w = globalThis;
+    const bridge = w.MaxWebApp || w.MAXWebApp || w.Telegram?.WebApp || w.WebApp;
+    const data = bridge?.initData || bridge?.init_data || bridge?.initdata;
+    return typeof data === 'string' && data ? data : '';
+  } catch { return ''; }
+}
+
 export async function bootstrap() {
+  // Открыто из MAX через Web App: меняем initData на JWT и входим сразу.
+  const initData = maxWebAppInitData();
+  if (initData && !api.hasToken()) {
+    try {
+      const result = await api.loginMaxWebApp(initData);
+      const { profile } = await server.load();
+      adopt(profile.login ? profile : { ...profile, login: result.login });
+      applySchoolScale();
+      return true;
+    } catch { /* не привязан или подпись не сошлась — обычный вход */ }
+  }
   if (!api.hasToken()) return false;
   try {
     const { profile } = await server.load();

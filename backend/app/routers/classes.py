@@ -27,9 +27,7 @@ from app.models import (
 router = APIRouter(prefix="/api/classes", tags=["classes"])
 
 
-# ---------------------------------------------------------------------------
 # Схемы
-# ---------------------------------------------------------------------------
 
 
 class ClassResponse(BaseModel):
@@ -124,9 +122,7 @@ class TeacherDashboardResponse(BaseModel):
     pagination: DashboardPagination
 
 
-# ---------------------------------------------------------------------------
 # Вспомогательные функции
-# ---------------------------------------------------------------------------
 
 
 def _class_for_teacher(class_id: int, teacher_id: int, db: Session) -> Class:
@@ -225,9 +221,7 @@ def _class_counts(class_ids: list[int], db: Session) -> dict[int, int]:
     return {class_id: int(count) for class_id, count in rows}
 
 
-# ---------------------------------------------------------------------------
 # Роутеры
-# ---------------------------------------------------------------------------
 
 
 @router.get("", response_model=list[ClassResponse])

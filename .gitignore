@@ -183,14 +183,7 @@ cython_debug/
 *.db
 pg_data
 .vs
-TEST.ps1
-dashboard1.html
 *.ps1
-backend/data/app.db-shm
-*.db-shm
-backend/data/app.db-wal
-backend/data/app.db-wal
-backend/data/app.db-shm
 
 graphify-out
 .opencode

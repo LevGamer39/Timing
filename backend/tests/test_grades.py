@@ -22,9 +22,7 @@ def graded_assignment(db, teacher, enrolled, student):
     return None
 
 
-# ---------------------------------------------------------------------------
 # Одиночная оценка
-# ---------------------------------------------------------------------------
 
 
 def test_teacher_can_grade_own_student(db, teacher, enrolled, student):
@@ -76,9 +74,7 @@ def test_regrading_updates_in_place(
     assert rows[0].value == 2.0
 
 
-# ---------------------------------------------------------------------------
 # Массовая выставка
-# ---------------------------------------------------------------------------
 
 
 def test_bulk_returns_only_touched_rows(
@@ -179,9 +175,7 @@ def test_bulk_foreign_assignment_is_404(
     assert exc.value.status_code == 404
 
 
-# ---------------------------------------------------------------------------
 # Сводки
-# ---------------------------------------------------------------------------
 
 
 def test_averages_are_grouped(db, teacher, enrolled, student):
@@ -238,9 +232,7 @@ def test_summary_ranks_student(db, teacher, enrolled, student, student2):
     assert summary.class_rank == 2
 
 
-# ---------------------------------------------------------------------------
 # Доступ
-# ---------------------------------------------------------------------------
 
 
 def test_parent_can_read_child_grades(

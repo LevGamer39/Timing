@@ -45,9 +45,7 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# ---------------------------------------------------------------------------
 # Ограничение попыток входа и регистрации (in-memory, один процесс uvicorn)
-# ---------------------------------------------------------------------------
 _RATE_LIMIT_WINDOW = 60
 _RATE_LIMIT_MAX_ATTEMPTS = 10
 _RATE_LIMIT_MAX_KEYS = 10_000
@@ -119,9 +117,7 @@ _HHMM_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
-# ---------------------------------------------------------------------------
 # Схемы
-# ---------------------------------------------------------------------------
 
 
 class RegisterRequest(BaseModel):
@@ -296,9 +292,7 @@ class PasswordResetConfirm(BaseModel):
         return value
 
 
-# ---------------------------------------------------------------------------
 # Вспомогательные функции авторизации
-# ---------------------------------------------------------------------------
 
 
 def hash_password(password: str) -> str:
@@ -425,9 +419,7 @@ def _build_email_change_html(confirm_link: str, new_email: str) -> str:
     return _base_template("Смена email — Timing", content)
 
 
-# ---------------------------------------------------------------------------
 # Роутеры
-# ---------------------------------------------------------------------------
 
 
 @router.post("/register", status_code=201)
@@ -1004,9 +996,7 @@ def get_children(
     ]
 
 
-# ---------------------------------------------------------------------------
 # MAX Bridge auth — привязка аккаунта MAX к внутреннему профилю
-# ---------------------------------------------------------------------------
 
 
 class MaxLinkRequest(BaseModel):
@@ -1411,9 +1401,104 @@ def max_code_login(
     )
 
 
-# ---------------------------------------------------------------------------
+# Автовход из мини-приложения MAX (Web App)
+
+_WEAK_SALTS = {"", "changeme", "timingvk-default-salt"}
+
+
+def _max_user_hash(raw_id: int | str) -> str:
+    """Тот же хеш MAX user_id, что считает бот (bot/core/security.py).
+
+    Соль и строка ``timingvk:user-id-salt:v1`` обязаны совпадать с ботом,
+    иначе привязки не найдутся. Это внутренняя строка, а не бренд.
+    """
+    raw_salt = config.BOT_USER_ID_SALT.strip()
+    if raw_salt not in _WEAK_SALTS and len(raw_salt) >= 16:
+        salt = raw_salt.encode()
+    else:
+        salt = hmac.new(
+            config.MAX_BOT_TOKEN.encode(),
+            b"timingvk:user-id-salt:v1",
+            hashlib.sha256,
+        ).digest()
+    normalized = str(int(str(raw_id).strip()))
+    return hmac.new(salt, f"max:{normalized}".encode(), hashlib.sha256).hexdigest()
+
+
+def _verify_webapp_init_data(init_data: str) -> int:
+    """Проверяет подпись initData мини-приложения MAX и достаёт user_id.
+
+    Схема как у Telegram Mini Apps: поля ``key=value`` через ``&``, строка
+    для проверки — ключи по алфавиту без ``hash``, секрет — HMAC от токена
+    бота с ключом ``WebAppData``. Сверить с документацией MAX при
+    расхождении: меняется только эта функция.
+    """
+    import json
+    from urllib.parse import parse_qsl, unquote
+
+    secret = config.MAX_BOT_TOKEN
+    if not secret:
+        raise HTTPException(503, "MAX bot integration is not configured")
+    raw_pairs = parse_qsl(init_data, keep_blank_values=True)
+    if len({k for k, _ in raw_pairs}) != len(raw_pairs):
+        raise HTTPException(401, "Duplicate initData parameter")
+    pairs = dict(raw_pairs)
+    received_hash = pairs.pop("hash", None)
+    if not received_hash:
+        raise HTTPException(401, "Invalid initData")
+    data_check = "\n".join(f"{k}={pairs[k]}" for k in sorted(pairs))
+    signing_key = hmac.new(
+        b"WebAppData", secret.encode(), hashlib.sha256
+    ).digest()
+    expected = hmac.new(
+        signing_key, data_check.encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected, received_hash):
+        raise HTTPException(401, "Invalid initData signature")
+    auth_date = pairs.get("auth_date")
+    if auth_date and auth_date.isdigit():
+        if time.time() - int(auth_date) > 24 * 3600:
+            raise HTTPException(401, "initData expired")
+    user_raw = pairs.get("user") or pairs.get("user_id") or pairs.get("id")
+    if not user_raw:
+        raise HTTPException(401, "No user in initData")
+    try:
+        return int(json.loads(unquote(user_raw))["id"])
+    except (ValueError, KeyError, TypeError):
+        try:
+            return int(user_raw.strip())
+        except ValueError:
+            raise HTTPException(401, "No user id in initData") from None
+
+
+class MaxWebAppRequest(BaseModel):
+    init_data: str
+
+
+@router.post("/auth/max-webapp", response_model=MaxLinkResponse)
+def max_webapp_login(body: MaxWebAppRequest, db: Session = Depends(get_db)):
+    """Автовход из мини-приложения MAX: initData → JWT без кода и пароля."""
+    max_id = _verify_webapp_init_data(body.init_data)
+    hashed = _max_user_hash(max_id)
+    user = db.query(User).filter(User.max_user_id == hashed).first()
+    if not user:
+        raise HTTPException(
+            404, "MAX user not linked. Register in the bot first."
+        )
+    if not user.is_active:
+        raise HTTPException(403, "Account is not active")
+    _normalize_profile_defaults(user, db)
+    return MaxLinkResponse(
+        access_token=create_access_token(user.id),
+        id=user.id,
+        login=user.login,
+        role=user.role,
+        first_name=user.first_name,
+        last_name=user.last_name,
+    )
+
+
 # Сброс пароля
-# ---------------------------------------------------------------------------
 _RESET_MESSAGE = "Если такой email зарегистрирован, письмо отправлено."
 
 

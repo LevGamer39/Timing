@@ -16,9 +16,7 @@ def enrolled(db, klass, student, student2):
     return klass
 
 
-# ---------------------------------------------------------------------------
 # Представления классов учителя
-# ---------------------------------------------------------------------------
 
 
 def test_list_classes_counts_members(db, teacher, enrolled):
@@ -84,9 +82,7 @@ def test_remove_student(db, teacher, enrolled, student):
     ).count() == 0
 
 
-# ---------------------------------------------------------------------------
 # Дашборд учителя
-# ---------------------------------------------------------------------------
 
 
 def test_dashboard_classifies_students(
@@ -127,9 +123,7 @@ def test_dashboard_requires_ownership(db, klass, other_teacher):
     assert exc.value.status_code == 404
 
 
-# ---------------------------------------------------------------------------
 # Вступление в класс по инвайт-коду
-# ---------------------------------------------------------------------------
 
 
 def test_join_rejects_unknown_code(db, student):
@@ -184,9 +178,7 @@ def test_joining_second_class_keeps_one_membership(
     assert rows[0].class_id == second.id
 
 
-# ---------------------------------------------------------------------------
 # Админ
-# ---------------------------------------------------------------------------
 
 
 def test_admin_generates_16_char_invite(db, admin):

@@ -2,7 +2,10 @@
 
 from maxapi.types.attachments.buttons import CallbackButton
 from maxapi.types.attachments.buttons.attachment_button import AttachmentButton
+from maxapi.types.attachments.buttons.open_app_button import OpenAppButton
 from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
+
+from config import settings
 
 
 def _button(text: str, payload: str) -> CallbackButton:
@@ -32,6 +35,15 @@ def main_menu(role: str | None) -> AttachmentButton:
         builder.row(_button("📊 Мои классы", "menu:classes"))
 
     builder.row(_button("❓ Помощь", "menu:help"))
+    # Мини-приложение: сайт открывается внутри MAX и входит сам по initData.
+    # Без username бота кнопку не показываем — остаётся кодовый вход.
+    if settings.max_bot_username:
+        builder.row(
+            OpenAppButton(
+                text="🌐 Открыть сайт",
+                web_app=settings.max_bot_username,
+            )
+        )
     builder.row(_button("🌐 Вход на сайт", "menu:code"))
     return builder.as_markup()
 

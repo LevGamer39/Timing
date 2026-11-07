@@ -131,7 +131,8 @@ AI_NUM_CTX = _int("AI_NUM_CTX", 8192)
 AI_TIMEOUT = _int("AI_TIMEOUT", 90)
 AI_TEMPERATURE = _float("AI_TEMPERATURE", 0.3)
 AI_NUM_PREDICT = _int("AI_NUM_PREDICT", 700)
-AI_KEEP_ALIVE = _str("AI_KEEP_ALIVE", "30m")
+# -1 — модель никогда не выгружается из памяти Ollama: ответы без ожидания загрузки.
+AI_KEEP_ALIVE = _str("AI_KEEP_ALIVE", "-1")
 
 # Сколько данных попадает в базовый контекст. Всё, что за пределами, модель
 # может добрать инструментами (все оценки по предмету, все задачи).
@@ -166,6 +167,10 @@ DEBUG = _bool("DEBUG", False)
 # Токен нужен только для проверки подписи запросов от бота к /auth/max-link.
 # Это тот же MAX_BOT_TOKEN, который использует сервис bot/.
 MAX_BOT_TOKEN = _str("MAX_BOT_TOKEN", "")
+# Общая с ботом соль хеширования MAX user_id (бот считает хеш, бэкенд
+# пересчитывает его же из initData мини-приложения). Пусто — соль
+# выводится из MAX_BOT_TOKEN, как у бота (bot/core/security.py).
+BOT_USER_ID_SALT = _str("BOT_USER_ID_SALT", "")
 
 # Фоновые джобы: очередь писем и проверка просрочек. Выключаются в тестах и
 # при разовых командах управления. С несколькими воркерами uvicorn каждый

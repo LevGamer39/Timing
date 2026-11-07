@@ -90,6 +90,12 @@ export const requestEmailChange = (email) => request('/api/users/me/change-email
 export const confirmEmailChange = (token) => request('/api/users/me/change-email/confirm?token=' + encodeURIComponent(token), { method: 'POST', auth: false });
 export const joinClass = (code) => request('/api/classes/join?invite_code=' + encodeURIComponent(code), { method: 'POST' });
 
+export const loginMaxWebApp = async (initData) => {
+  const data = await request('/api/users/auth/max-webapp', { method: 'POST', body: { init_data: initData }, auth: false });
+  if (data?.access_token) setToken(data.access_token);
+  return data;
+};
+
 export const yandexLoginUrl = () => request('/api/auth/yandex/login-url', { auth: false });
 export const yandexLinkUrl = () => request('/api/auth/yandex/link');
 
