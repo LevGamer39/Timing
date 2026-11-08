@@ -8,11 +8,11 @@ from maxapi.types.updates.message_callback import MessageCallback
 from core.context import AppContext
 from core.filters import PayloadPrefix
 from core.security import hash_user_id
-from core.ui import event_user, require_token, respond, role_of
+from core.ui import error_text, event_user, require_token, respond, role_of
 from keyboards import home_keyboard, main_menu
 from services import registration, views
 from services.backend import BackendError
-from texts import HELP_TEXT
+from texts import help_text
 from texts.messages import REGISTER_LOGIN_TEXT
 
 
@@ -70,10 +70,11 @@ def build_router(ctx: AppContext) -> Router:
             )
             return
         if action == "help":
+            role = role_of(ctx, event)
             await respond(
                 event,
-                HELP_TEXT,
-                keyboard=main_menu(role_of(ctx, event)),
+                help_text(role),
+                keyboard=main_menu(role),
             )
             return
         if action == "code":
@@ -84,7 +85,9 @@ def build_router(ctx: AppContext) -> Router:
                     hash_user_id(user.user_id)
                 )
             except BackendError as exc:
-                await respond(event, f"Не удалось получить код: {exc.detail}")
+                await respond(
+                    event, error_text(exc, "Не удалось получить код")
+                )
                 return
             await respond(
                 event,

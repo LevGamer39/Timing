@@ -14,6 +14,7 @@ from maxapi.types.updates.message_edited import MessageEdited
 from core.context import AppContext
 from core.security import hash_user_id
 from core.ui import (
+    error_text,
     event_user,
     get_token,
     message_text,
@@ -24,7 +25,7 @@ from core.ui import (
 from keyboards import main_menu, register_keyboard
 from services.backend import BackendError
 from services import link
-from texts import HELP_TEXT, UNLINKED_TEXT, esc
+from texts import UNLINKED_TEXT, greeting, help_text
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -42,16 +43,14 @@ def build_router(ctx: AppContext) -> Router:
             username=event.user.username,
         )
         token = await ctx.sessions.token(user_id)
-        greeting = f"Привет, {esc(event.user.first_name)}! 👋"
-        text = greeting if token else f"{greeting}\n\n{UNLINKED_TEXT}"
+        role = ctx.sessions.role(user_id)
+        text = greeting(role, event.user.first_name)
+        if not token:
+            text = f"{text}\n\n{UNLINKED_TEXT}"
         await ctx.bot.send_message(
             chat_id=event.chat_id,
             text=text,
-            attachments=[
-                main_menu(ctx.sessions.role(user_id))
-                if token
-                else register_keyboard()
-            ],
+            attachments=[main_menu(role) if token else register_keyboard()],
             format=Format.HTML,
         )
         await ctx.store.save()
@@ -93,15 +92,14 @@ def build_router(ctx: AppContext) -> Router:
             ctx.registration.pop(sender.user_id, None)
             ctx.link.pop(sender.user_id, None)
         token = await get_token(ctx, event)
+        role = role_of(ctx, event)
         text = UNLINKED_TEXT
         if token:
-            text = f"Привет, {esc(sender.first_name)}! 👋\nЯ помогу не забыть про домашку."
+            text = greeting(role, sender.first_name)
         await respond(
             event,
             text,
-            keyboard=(
-                main_menu(role_of(ctx, event)) if token else register_keyboard()
-            ),
+            keyboard=main_menu(role) if token else register_keyboard(),
         )
         await ctx.store.save()
 
@@ -133,7 +131,7 @@ def build_router(ctx: AppContext) -> Router:
                 hash_user_id(user.user_id)
             )
         except BackendError as exc:
-            await respond(event, f"Не удалось получить код: {exc.detail}")
+            await respond(event, error_text(exc, "Не удалось получить код"))
             return
         await respond(
             event,
@@ -166,7 +164,7 @@ def build_router(ctx: AppContext) -> Router:
                     token, {"notify_max": target}
                 )
         except BackendError as exc:
-            await respond(event, f"Не получилось: {esc(exc.detail)}")
+            await respond(event, error_text(exc, "Не получилось"))
             return
 
         state = "включены" if target else "выключены"
@@ -178,7 +176,8 @@ def build_router(ctx: AppContext) -> Router:
 
     @router.message_created(Command("help"))
     async def help_command(event: MessageCreated) -> None:
-        await respond(event, HELP_TEXT, keyboard=main_menu(role_of(ctx, event)))
+        role = role_of(ctx, event)
+        await respond(event, help_text(role), keyboard=main_menu(role))
 
     @router.message_created(Command("cancel"))
     async def cancel(event: MessageCreated) -> None:

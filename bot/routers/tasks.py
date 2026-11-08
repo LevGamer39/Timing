@@ -9,12 +9,12 @@ from maxapi.types.updates.message_created import MessageCreated
 
 from core.context import AppContext
 from core.filters import PayloadPrefix
-from core.ui import event_user, require_token, respond, role_of
+from core.ui import error_text, event_user, require_token, respond, role_of
 from keyboards import home_keyboard, main_menu, tasks_keyboard
 from services import views
 from services.backend import BackendError
 from services.tasks import create_from_text
-from texts import PROCESSING_TEXT, esc, task_line, tasks_block
+from texts import PROCESSING_TEXT, task_line, tasks_block
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -56,7 +56,7 @@ def build_router(ctx: AppContext) -> Router:
         try:
             tasks = await ctx.backend.list_tasks(token)
         except BackendError as exc:
-            await respond(event, f"Бэкенд недоступен: {esc(exc.detail)}")
+            await respond(event, error_text(exc, "Бэкенд недоступен"))
             return
         active = [task for task in tasks if task.get("status") != "done"]
         if not active:
@@ -83,7 +83,7 @@ def build_router(ctx: AppContext) -> Router:
             try:
                 task = await ctx.backend.complete_task(token, task_id)
             except BackendError as exc:
-                await respond(event, f"Не получилось: {esc(exc.detail)}")
+                await respond(event, error_text(exc, "Не получилось"))
                 return
             await respond(
                 event,
@@ -94,7 +94,7 @@ def build_router(ctx: AppContext) -> Router:
         try:
             await ctx.backend.delete_task(token, task_id)
         except BackendError as exc:
-            await respond(event, f"Не получилось: {esc(exc.detail)}")
+            await respond(event, error_text(exc, "Не получилось"))
             return
         await respond(
             event,

@@ -63,6 +63,9 @@ class Settings:
     backend_url: str
     backend_timeout: float
 
+    # Публичный домен сайта (тот же APP_DOMAIN, что у nginx)
+    app_domain: str
+
     # Режим получения обновлений
     update_mode: str
     webhook_url: str
@@ -129,6 +132,7 @@ def load_settings() -> Settings:
         max_bot_username=_str("MAX_BOT_USERNAME"),
         backend_url=_str("MAX_BOT_URL", "http://backend:8000").rstrip("/"),
         backend_timeout=_float("BOT_BACKEND_TIMEOUT", 30.0),
+        app_domain=_str("APP_DOMAIN"),
         update_mode=update_mode,
         webhook_url=_str("WEBHOOK_URL"),
         webhook_secret=_str("WEBHOOK_SECRET"),

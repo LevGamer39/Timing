@@ -6,10 +6,9 @@ from typing import Any
 
 from core.context import AppContext
 from core.security import hash_user_id
-from core.ui import event_user, respond
+from core.ui import error_text, event_user, respond
 from keyboards import main_menu
 from services.backend import BackendError
-from texts import esc
 
 LOGIN = "login"
 PASSWORD = "password"
@@ -42,7 +41,7 @@ async def handle_text(
         )
     except BackendError as exc:
         ctx.link.pop(user.user_id, None)
-        await respond(event, "Не удалось привязать: " + esc(exc.detail))
+        await respond(event, error_text(exc, "Не удалось привязать"))
         return True
 
     ctx.link.pop(user.user_id, None)

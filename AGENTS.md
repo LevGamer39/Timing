@@ -523,6 +523,7 @@ AI_SUMMARY_CHARS=2000
 AI_CHAT_TITLE_CHARS=60
 AI_PROMPT_EXTRA=
 
+APP_DOMAIN=timing.myftp.org
 APP_URL=https://timing.myftp.org
 DEBUG=false
 

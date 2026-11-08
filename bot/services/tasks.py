@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.context import AppContext
-from core.ui import is_dialog, respond
+from core.ui import error_text, is_dialog, respond
 from keyboards import home_keyboard, task_actions
 from services import ai
 from services.backend import BackendError
@@ -41,7 +41,7 @@ async def create_from_text(
     try:
         task = await ctx.backend.create_task(token, task_payload(parsed, text))
     except BackendError as exc:
-        await respond(event, f"Не получилось создать задание: {esc(exc.detail)}")
+        await respond(event, error_text(exc, "Не получилось создать задание"))
         return
 
     details = [
@@ -74,7 +74,7 @@ async def add_homework(
     try:
         task = await ctx.backend.create_task(token, payload)
     except BackendError as exc:
-        await respond(event, f"Не получилось: {esc(exc.detail)}")
+        await respond(event, error_text(exc, "Не получилось"))
         return
     await respond(
         event,

@@ -87,11 +87,10 @@ async def safe_view(
     event: Any, coro: Any
 ) -> tuple[str, Any | None] | None:
     """Выполняет представление и показывает ошибку бэкенда пользователю."""
-    from core.ui import respond
-    from texts import esc
+    from core.ui import error_text, respond
 
     try:
         return await coro
     except BackendError as exc:
-        await respond(event, f"Бэкенд недоступен: {esc(exc.detail)}")
+        await respond(event, error_text(exc, "Бэкенд недоступен"))
         return None

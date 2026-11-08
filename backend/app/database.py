@@ -380,6 +380,11 @@ def _ensure_demo_data() -> None:
                 db.add(TeacherSubject(user_id=t.id, subject=subj))
         
         # Классы: 8А, 8Б, 4Б
+        def _new_class_code() -> str:
+            # Ввод всегда сравнивается в верхнем регистре (join/invite-code),
+            # поэтому код обязан быть в верхнем регистре.
+            return secrets.token_hex(6).upper()
+
         def _ensure_class(name, teacher_obj, subject):
             cls = db.query(Class).filter(Class.name == name).first()
             if not cls and teacher_obj:
@@ -387,9 +392,17 @@ def _ensure_demo_data() -> None:
                     name=name,
                     teacher_id=teacher_obj.id,
                     subject=subject,
-                    invite_code=secrets.token_urlsafe(9)[:12],
+                    invite_code=_new_class_code(),
                 )
                 db.add(cls)
+                db.flush()
+            elif cls and (
+                cls.invite_code != cls.invite_code.upper()
+                or not cls.invite_code.isalnum()
+            ):
+                # token_urlsafe из старого сида давал строчные буквы, "-" и "_":
+                # такие коды не находятся после .upper(). Чиним на старте.
+                cls.invite_code = _new_class_code()
                 db.flush()
             return cls
 
@@ -457,20 +470,11 @@ def _ensure_demo_data() -> None:
         # Инвайт-коды для не вошедших учителей (их выдаёт админ)
         admin = users.get("demo.admin")
         if admin:
-            for key in ("demo.teacher2", "demo.teacher3"):
-                t = users.get(key)
-                if t and not db.query(InviteCode).filter(
-                    InviteCode.created_by_id == admin.id,
-                    InviteCode.is_used.is_(False),
-                ).filter(
-                    # грубая идемпотентность: хотя бы один свободный код на админа
-                    InviteCode.code.like("DEMO%"),
+            for code in ("DEMO-TEACHER-2", "DEMO-TEACHER-3"):
+                if not db.query(InviteCode).filter(
+                    InviteCode.code == code
                 ).first():
-                    pass
-            # Создаём два кода, если их ещё нет
-            if db.query(InviteCode).filter(InviteCode.code.in_(["DEMO-TEACHER-2", "DEMO-TEACHER-3"])).count() == 0:
-                db.add(InviteCode(code="DEMO-TEACHER-2", created_by_id=admin.id))
-                db.add(InviteCode(code="DEMO-TEACHER-3", created_by_id=admin.id))
+                    db.add(InviteCode(code=code, created_by_id=admin.id))
         
         db.flush()
         now = datetime.now(timezone.utc)

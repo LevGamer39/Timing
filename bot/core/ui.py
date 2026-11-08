@@ -9,7 +9,9 @@ from maxapi.enums.parse_mode import Format
 from maxapi.types.updates.message_callback import MessageCallback
 from maxapi.types.updates.message_created import MessageCreated
 
+from services.backend import BackendError
 from services.voice import body_text
+from texts.formatters import esc
 from texts.messages import UNLINKED_TEXT
 
 if TYPE_CHECKING:
@@ -62,6 +64,16 @@ async def respond(event: Any, text: str, keyboard: Any | None = None) -> None:
         attachments=attachments,
         format=Format.HTML,
     )
+
+
+FORBIDDEN_TEXT = "Этот запрос вам не доступен"
+
+
+def error_text(exc: BackendError, prefix: str) -> str:
+    """Текст ошибки для чата: 403 — это не сбой бэкенда, а чужая роль."""
+    if exc.status == 403:
+        return FORBIDDEN_TEXT
+    return f"{prefix}: {esc(exc.detail)}"
 
 
 def remember(ctx: AppContext, event: Any) -> Any | None:

@@ -19,10 +19,12 @@ from keyboards import (
     task_actions,
     tasks_keyboard,
 )
+from routers import common as common_router
 from routers import homework as homework_router
 from routers import menu as menu_router
 from routers import tasks as tasks_router
 from services import views
+from texts import messages
 
 USER = SimpleNamespace(user_id=7, first_name="Иван", username="u")
 
@@ -41,15 +43,21 @@ class FakeBackend:
 
 
 class FakeSessions:
+    def __init__(self, role: str = "student") -> None:
+        self._role = role
+
     async def token(self, user_id: int) -> str:
         return "jwt"
 
     def role(self, user_id: int) -> str | None:
-        return "student"
+        return self._role
 
 
 class FakeStore:
     def upsert_user(self, *args, **kwargs) -> None:
+        pass
+
+    async def save(self) -> None:
         pass
 
 
@@ -79,12 +87,12 @@ class Callback:
 answers: list[tuple] = []
 
 
-def _ctx() -> AppContext:
+def _ctx(role: str = "student") -> AppContext:
     return AppContext(
         bot=None,
         backend=FakeBackend(),
         store=FakeStore(),
-        sessions=FakeSessions(),
+        sessions=FakeSessions(role),
         parser=SimpleNamespace(
             feed=None,
             remember=lambda *a: None,
@@ -158,3 +166,34 @@ def test_skip_homework_home_button_only_in_dialog():
     assert dialog_text == chat_text == "Ок, пропустил."
     assert "menu:home" in payloads(_keyboard(dialog_attachments))
     assert chat_attachments is None
+
+
+def test_help_button_shows_help_of_role(monkeypatch):
+    monkeypatch.setattr(
+        messages, "settings", SimpleNamespace(app_domain="example.org")
+    )
+    for role, expected in (
+        ("student", messages.HELP_TEXT),
+        ("teacher", messages.TEACHER_HELP_TEXT),
+        ("admin", messages.ADMIN_HELP_TEXT),
+    ):
+        answers.clear()
+        handler = menu_router.build_router(_ctx(role)).event_handlers[0]
+        asyncio.run(handler.func_event(Callback("menu:help")))
+        text = answers[-1][0]
+        assert text.startswith(expected)
+        assert text.endswith(
+            "Больше функций доступно онлайн https://example.org"
+        )
+
+
+def test_start_greets_by_role():
+    roles = ("student", "parent", "teacher", "admin")
+    assert len({messages.greeting(role, "Иван") for role in roles}) == 4
+
+    for role in roles:
+        answers.clear()
+        handler = common_router.build_router(_ctx(role)).event_handlers[4]
+        event = SimpleNamespace(message=Message("/start", ChatType.DIALOG))
+        asyncio.run(handler.func_event(event))
+        assert answers[-1][0] == messages.greeting(role, USER.first_name)

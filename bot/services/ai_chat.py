@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.context import AppContext
-from core.ui import respond, role_of
+from core.ui import error_text, respond, role_of
 from keyboards import main_menu
 from services import ai
 from services.backend import BackendError
@@ -23,9 +23,12 @@ async def answer(ctx: AppContext, event: Any, token: str | None, text: str) -> N
                 keyboard=keyboard,
             )
             return
-        except BackendError:
-            pass
+        except BackendError as exc:
+            if exc.status == 403:
+                await respond(event, error_text(exc, "Бэкенд недоступен"))
+                return
 
+    # Бэкенд недоступен (сеть, 5xx): отвечает локальная модель без его данных.
     context = ""
     if token:
         try:

@@ -1243,7 +1243,9 @@ def get_history(
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     body: ChatRequest,
-    current_user: User = Depends(require_role(UserRole.student)),
+    current_user: User = Depends(
+        require_role(UserRole.student, UserRole.parent)
+    ),
     db: Session = Depends(get_db),
 ):
     tz = resolve_timezone(body.timezone, config.TIMEZONE)

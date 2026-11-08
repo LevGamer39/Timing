@@ -1,5 +1,6 @@
 """Тесты ИИ-роутера: чаты, история, сжатие, инструменты, подтверждения."""
 import asyncio
+import inspect
 import json
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -16,6 +17,7 @@ from app.models import (
     Task,
     TaskPriority,
     TaskStatus,
+    UserRole,
 )
 from app.routers import ai
 
@@ -562,3 +564,16 @@ def test_plan_request_detects_load_question(db, student):
     assert ai._plan_request_days("Где у меня перегруз?") is not None
     assert ai._plan_request_days("Какая нагрузка на неделе?") is not None
     assert ai._plan_request_days("Сколько задач я сделал?") is None
+
+
+def test_chat_is_closed_for_teachers():
+    """Чат — инструмент ученика и родителя, остальным бэкенд отвечает 403."""
+    params = inspect.signature(ai.chat).parameters
+    guard = params["current_user"].default.dependency
+    for role in (UserRole.student, UserRole.parent):
+        user = type("U", (), {"role": role})()
+        assert guard(user) is user
+    teacher = type("U", (), {"role": UserRole.teacher})()
+    with pytest.raises(HTTPException) as error:
+        guard(teacher)
+    assert error.value.status_code == 403

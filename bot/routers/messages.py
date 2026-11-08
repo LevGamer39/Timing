@@ -19,7 +19,7 @@ from services import registration, link
 from services.ai_chat import answer as ai_answer
 from services.tasks import create_from_text
 from services.voice import audio_url
-from texts import HELP_TEXT, PROCESSING_TEXT
+from texts import PROCESSING_TEXT, help_text
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -53,10 +53,11 @@ def build_router(ctx: AppContext) -> Router:
         ctx.parser.remember(getattr(event.message.body, "mid", None), text)
 
         if text.lstrip().startswith("/"):
+            role = role_of(ctx, event)
             await respond(
                 event,
-                "Неизвестная команда.\n\n" + HELP_TEXT,
-                keyboard=main_menu(role_of(ctx, event)),
+                "Неизвестная команда.\n\n" + help_text(role),
+                keyboard=main_menu(role),
             )
             return
 

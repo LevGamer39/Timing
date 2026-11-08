@@ -11,12 +11,24 @@ from texts.formatters import (
     task_line,
     tasks_block,
 )
-from texts.messages import HELP_TEXT, PROCESSING_TEXT, UNLINKED_TEXT
+from texts.messages import (
+    ADMIN_HELP_TEXT,
+    HELP_TEXT,
+    PROCESSING_TEXT,
+    TEACHER_HELP_TEXT,
+    UNLINKED_TEXT,
+    greeting,
+    help_text,
+)
 
 __all__ = [
+    "ADMIN_HELP_TEXT",
     "HELP_TEXT",
     "PROCESSING_TEXT",
+    "TEACHER_HELP_TEXT",
     "UNLINKED_TEXT",
+    "greeting",
+    "help_text",
     "averages_block",
     "children_block",
     "esc",
