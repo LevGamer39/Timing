@@ -57,8 +57,9 @@ frontend/
 
 ## Как устроено
 
-- Один документ `index.html`; навигация — по хешу (`#/home`, `#/diary`,
-  `#/journal/...`). Серверу не нужны отдельные маршруты.
+- Один документ `index.html`; навигация — по чистым URL (`/home`, `/diary`,
+  `/journal/...`) через history API. Сервер отдаёт оболочку по любому
+  экранному пути (SPA-fallback в `main.py`), API — JSON.
 - `main.js` выбирает экран по адресу и роли, вставляет HTML и вызывает
   `mount(root)` для обработчиков.
 - Каждый экран — функция `xxxView({ params, path, go, rerender })`, которая
@@ -123,7 +124,7 @@ frontend/
   кодом из админки; подтверждение почты `POST /api/users/verify-email`;
 - восстановление пароля — `/api/users/password-reset/request` и `/confirm`;
 - смена email — `/api/users/me/change-email` и `/confirm` (ссылка из письма
-  ведёт на `#/confirm-email/<token>`, пароль — на `#/reset/<token>`);
+  ведёт на `/confirm-email/<token>`, пароль — на `/reset/<token>`);
 - вступление в класс по коду — `POST /api/classes/join`.
 
 Что уже читается с сервера:
@@ -155,7 +156,7 @@ frontend/
 - подсказка нагрузки — `GET /api/assignments/workload/{class_id}?date=`;
 - статистика — `/api/stats/daily|weekly|dynamics|insight/{my|child/{id}}`;
 - перенос учеников — `GET`/`POST /api/admin/migration/students` (кнопки в
-  `#/classes`).
+  `/classes`).
 
 Отметка «сделано» у домашнего задания вызывает `POST /api/tasks/{id}/complete`.
 Принятая работа приходит со `status: accepted`, чекбокс у ученика заблокирован;

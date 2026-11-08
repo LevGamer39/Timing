@@ -20,14 +20,14 @@ function teacherHomeView() {
     const past = toMin(l.end) <= nowMin;
     const next = i === nextIdx;
     const inMin = toMin(l.start) - nowMin;
-    return fragment("teacher-home", "tl", [next ? ' now' : '', past ? ' past' : '', esc(l.time), past ? ("<span class=\"pill\">прошёл</span>") : '', next ? ("<span class=\"pill accent\">через " + (inMin) + " мин</span>") : '', esc(l.cls), esc(l.subj), esc(l.room), next ? '' : 'ghost ', '#/journal/' + l.key + '/' + iso(now)]);
+    return fragment("teacher-home", "tl", [next ? ' now' : '', past ? ' past' : '', esc(l.time), past ? ("<span class=\"pill\">прошёл</span>") : '', next ? ("<span class=\"pill accent\">через " + (inMin) + " мин</span>") : '', esc(l.cls), esc(l.subj), esc(l.room), next ? '' : 'ghost ', '/journal/' + l.key + '/' + iso(now)]);
   };
 
   return {
-    html: fragment("teacher-home", "stack", [header(), DAYS[weekday(now)], dayMonth(now), esc(acc.first), store.todayLessons().length, plural(store.todayLessons().length, 'урок', 'урока', 'уроков'), store.todayLessons().map(lessonRow).join('') || '<div class="empty-day empty-state"><p>Сегодня уроков нет</p><a class="text-action" href="#/journal">Открыть журнал</a></div>', unread.length ? ("<span class=\"pill accent\">" + (unread.length) + "</span>") : '', unread.length ? unread.map((m) => {
+    html: fragment("teacher-home", "stack", [header(), DAYS[weekday(now)], dayMonth(now), esc(acc.first), store.todayLessons().length, plural(store.todayLessons().length, 'урок', 'урока', 'уроков'), store.todayLessons().map(lessonRow).join('') || '<div class="empty-day empty-state"><p>Сегодня уроков нет</p><a class="text-action" href="/journal">Открыть журнал</a></div>', unread.length ? ("<span class=\"pill accent\">" + (unread.length) + "</span>") : '', unread.length ? unread.map((m) => {
           const p = store.person(m.from);
           return fragment("teacher-home", "list-row", [m.id, esc(p.name), esc(p.role), esc(m.subject), esc(mailDate(m.date, now))]);
-        }).join('') : ("<div class=\"empty-day empty-state\"><p>Новых писем нет</p><a class=\"text-action\" href=\"#/mail\">Открыть почту</a></div>"), store.periodWord('gen'), daysLeft, plural(daysLeft, 'день', 'дня', 'дней'), dayMonth(parse(periodEnd())), noFinals.length ? 'Итоговые не выставлены: ' + noFinals.map((k) => k.cls + ' ' + k.subj.toLowerCase()).join(', ') : 'Все итоговые выставлены', noFinals.length ? ("<a class=\"btn ghost sm\" style=\"align-self: flex-start; margin-top: 8px\" href=\"#/journal/" + (noFinals[0].key) + "\">К итоговым оценкам " + (icon('next', 18)) + "</a>") : ''])
+        }).join('') : ("<div class=\"empty-day empty-state\"><p>Новых писем нет</p><a class=\"text-action\" href=\"/mail\">Открыть почту</a></div>"), store.periodWord('gen'), daysLeft, plural(daysLeft, 'день', 'дня', 'дней'), dayMonth(parse(periodEnd())), noFinals.length ? 'Итоговые не выставлены: ' + noFinals.map((k) => k.cls + ' ' + k.subj.toLowerCase()).join(', ') : 'Все итоговые выставлены', noFinals.length ? ("<a class=\"btn ghost sm\" style=\"align-self: flex-start; margin-top: 8px\" href=\"/journal/" + (noFinals[0].key) + "\">К итоговым оценкам " + (icon('next', 18)) + "</a>") : ''])
   };
 }
 export { teacherHomeView };

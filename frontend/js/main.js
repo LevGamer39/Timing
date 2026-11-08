@@ -28,13 +28,13 @@ import { attendanceView } from './attendance.js';
 
 const app = document.getElementById('app');
 // Письма из бэкенда ведут на /reset-password-new и /settings/change-email/confirm
-// с токеном в query; SPA живёт на хеше, поэтому переводим адрес сразу.
+// с токеном в query; SPA живёт на чистом URL, поэтому переводим адрес сразу.
 (() => {
   const legacy = location.pathname.match(/^\/(reset-password-new|settings\/change-email\/confirm)$/);
   if (!legacy) return;
   const token = new URL(location.href).searchParams.get('token') || '';
-  const hash = legacy[1].startsWith('reset') ? '#/reset/' + token : '#/confirm-email/' + token;
-  history.replaceState({}, '', '/#/' + hash.slice(2));
+  const path = legacy[1].startsWith('reset') ? '/reset/' + token : '/confirm-email/' + token;
+  history.replaceState({}, '', path);
 })();
 let mountedScreen, screenData, screenRights;
 bindCopy(document);
@@ -81,7 +81,21 @@ const MENU = {
 };
 MENU.parent = MENU.student;
 
-export const go = (path) => { location.hash = '#/' + path; };
+export const go = (path) => {
+  const target = '/' + String(path).replace(/^\/+/, '');
+  if (location.pathname !== target) history.pushState({}, '', target);
+  render();
+};
+
+// Внутренние ссылки вида /diary — без перезагрузки страницы.
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('a[href^="/"]');
+  if (!link || link.target || event.metaKey || event.ctrlKey) return;
+  event.preventDefault();
+  go(link.getAttribute('href'));
+});
+
+const currentPath = () => location.pathname.replace(/^\//, '') || 'home';
 
 function applyTheme() {
   document.documentElement.dataset.theme = store.resolvedTheme();
@@ -94,7 +108,7 @@ const menuItems = (active, desk) => {
   return MENU[store.role()].map(([key, label, ic, short]) => {
     const badge = key === 'mail' && unread ? '<span class="badge" aria-label="' + unread + ' непрочитанных">' + unread + '</span>' : '';
     // Короткая подпись для нижнего меню: 6 пунктов не помещаются.
-    return '<a href="#/' + key + '"' + (active === key ? ' class="on" aria-current="page"' : '') + (!desk && short ? ' aria-label="' + label + '"' : '') + '>' + (desk ? '' : icon(ic)) + (!desk && short ? short : label) + badge + '</a>';
+    return '<a href="/' + key + '"' + (active === key ? ' class="on" aria-current="page"' : '') + (!desk && short ? ' aria-label="' + label + '"' : '') + '>' + (desk ? '' : icon(ic)) + (!desk && short ? short : label) + badge + '</a>';
   }).join('');
 };
 
@@ -105,24 +119,24 @@ function topbar(active) {
   const learner = LEARNER.includes(store.role());
   return `
 <header class="topbar">
-  <a class="brand" href="#/home" aria-label="Тайминг, на главную">${logo(30)}<span>Тайминг</span></a>
+  <a class="brand" href="/home" aria-label="Тайминг, на главную">${logo(30)}<span>Тайминг</span></a>
   <nav class="tabs" aria-label="Разделы"><div class="tabs-in">${menuItems(active, true)}</div></nav>
   <div class="top-act">
-    ${learner ? `<a class="btn ai-secondary sm" href="#/ai">${icon('spark', 18)}Спросить ИИ</a>` : ''}
+    ${learner ? `<a class="btn ai-secondary sm" href="/ai">${icon('spark', 18)}Спросить ИИ</a>` : ''}
     ${notificationButton()}
-    <a class="icon-btn gear" href="#/settings" aria-label="Настройки"${active === 'settings' ? ' aria-current="page"' : ''}>${icon('gear', 20)}</a>
-    <a class="avatar" href="#/settings" aria-label="${store.avatarOf() ? '' : esc(acc.initials) + ' — '}Профиль и настройки"${store.avatarOf() ? ' style="background: none"' : ''}>${store.avatarOf() ? avatarSvg(store.avatarOf(), 44) : esc(acc.initials)}</a>
+    <a class="icon-btn gear" href="/settings" aria-label="Настройки"${active === 'settings' ? ' aria-current="page"' : ''}>${icon('gear', 20)}</a>
+    <a class="avatar" href="/settings" aria-label="${store.avatarOf() ? '' : esc(acc.initials) + ' — '}Профиль и настройки"${store.avatarOf() ? ' style="background: none"' : ''}>${store.avatarOf() ? avatarSvg(store.avatarOf(), 44) : esc(acc.initials)}</a>
   </div>
 </header>`;
 }
 
 function rights() {
-  const key = location.hash.match(/^#\/journal\/([\w-]+)(?:\/[\d-]+)?$/)?.[1];
+  const key = location.pathname.match(/^\/journal\/([\w-]+)(?:\/[\d-]+)?$/)?.[1];
   return JSON.stringify([store.get().session, store.account(), store.role() === 'teacher' ? (key ? store.journalKeys().some((j) => j.key === key) : store.journalKeys()) : null]);
 }
 
 function dataForScreen() {
-  const path = location.hash.replace(/^#\/?/, ''), s = store.get();
+  const path = currentPath(), s = store.get();
   if (/^journal(?:\/|$)/.test(path) && store.role() === 'teacher') {
     const key = path.split('/')[1] || store.journalKeys()[0]?.key;
     return JSON.stringify([key && store.journalKeys().some((j) => j.key === key) ? store.journal(key, true) : null, store.workTypes(), store.school(), s.schedules, s.schedTeachers]);
@@ -142,7 +156,7 @@ function render(external = false) {
   applyTheme();
   const sc = store.school();
   setBounds(store.boundsFor(sc, sc.scale).map((v) => v * 100 / sc.scale));
-  let path = location.hash.replace(/^#\/?/, '') || 'home';
+  let path = currentPath();
   if (path === 'profile') return go('settings');
   const s = store.get();
   const acc = store.account();
@@ -199,9 +213,9 @@ try {
     });
   });
   let navigationTicket = 0;
-  window.addEventListener('hashchange', async () => {
-    const p = location.hash;
-    const path = p.replace(/^#\/?/, '') || 'home';
+  window.addEventListener('popstate', async () => {
+    const p = location.pathname;
+    const path = currentPath();
     const ticket = ++navigationTicket;
     if (store.isServer()) await store.refreshData(path);
     // Пока грузились данные, пользователь мог уйти на другой раздел.
@@ -211,7 +225,7 @@ try {
     lastPath = p;
   });
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
-  lastPath = location.hash;
+  lastPath = location.pathname;
   render();
 }
 catch (error) { console.error(error); app.innerHTML = '<main class="auth card pad"><h1>Не удалось открыть Тайминг</h1><p>Проверьте подключение и обновите страницу.</p><button class="btn" id="retry" type="button">Повторить</button></main>'; document.getElementById('retry').addEventListener('click', () => location.reload()); }

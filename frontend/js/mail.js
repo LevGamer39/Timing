@@ -40,7 +40,7 @@ function mailView({ params, path, rerender }) {
 
   const empty = (text) => '<div class="card pad empty-state"><p>' + text + '</p>' + (q
     ? '<button class="text-action" type="button" data-clear-search>Сбросить поиск</button>'
-    : '<a class="text-action" href="#/mail/new">Написать</a>') + '</div>';
+    : '<a class="text-action" href="/mail/new">Написать</a>') + '</div>';
   let body;
   if (tab === 'in') {
     const all = store.inbox().filter((m) => match(m, store.person(m.from)));
@@ -55,16 +55,16 @@ function mailView({ params, path, rerender }) {
   if (letter) {
     const who = store.person(inMsg ? letter.from : letter.to);
     const d = new Date(letter.date);
-    read = fragment("mail", "del", [inMsg ? '' : '/sent', icon('back'), inMsg ? 'Входящие' : 'Отправленные', esc(letter.subject), kind(inMsg ? letter.from : letter.to), esc(initials(who.name)), inMsg ? '' : 'Кому: ', esc(who.name), esc(who.role), dayMonth(d), d.toTimeString().slice(0, 5), esc(letter.body), attachmentsOf(letter).map((file) => fragment("mail", "row", [icon('clip'), esc(file.name), esc(file.token || '')])).join(''), inMsg ? ("<a class=\"btn\" href=\"#/mail/new/" + (letter.id) + "\">" + (icon('reply', 20)) + "Ответить</a>") : '', icon('trash', 20)]);
+    read = fragment("mail", "del", [inMsg ? '' : '/sent', icon('back'), inMsg ? 'Входящие' : 'Отправленные', esc(letter.subject), kind(inMsg ? letter.from : letter.to), esc(initials(who.name)), inMsg ? '' : 'Кому: ', esc(who.name), esc(who.role), dayMonth(d), d.toTimeString().slice(0, 5), esc(letter.body), attachmentsOf(letter).map((file) => fragment("mail", "row", [icon('clip'), esc(file.name), esc(file.token || '')])).join(''), inMsg ? ("<a class=\"btn\" href=\"/mail/new/" + (letter.id) + "\">" + (icon('reply', 20)) + "Ответить</a>") : '', icon('trash', 20)]);
   } else {
     read = ("<div class=\"card read-empty\"><div>" + (icon('mail', 40)) + "<p style=\"margin: 12px 0 0; font-weight: 600\">Выберите письмо слева</p></div></div>");
   }
 
   return {
-    html: fragment("mail", "q", [letter ? ' has-letter' : '', desk ? ' data-keep-scroll' : '', header(), icon('pen', 18), esc(query), tab === 'in', store.unreadCount() ? ' · ' + store.unreadCount() : '', tab === 'sent', body, read, letter ? '' : ("<a class=\"btn fab\" href=\"#/mail/new\">" + (icon('pen', 20)) + "Написать</a>")]),
+    html: fragment("mail", "q", [letter ? ' has-letter' : '', desk ? ' data-keep-scroll' : '', header(), icon('pen', 18), esc(query), tab === 'in', store.unreadCount() ? ' · ' + store.unreadCount() : '', tab === 'sent', body, read, letter ? '' : ("<a class=\"btn fab\" href=\"/mail/new\">" + (icon('pen', 20)) + "Написать</a>")]),
     mount(root) {
       if (readError) toast(store.SAVE_ERROR);
-      root.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { location.hash = '#/' + b.dataset.tab; }));
+      root.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { history.pushState({}, '', '/' + b.dataset.tab); window.dispatchEvent(new PopStateEvent('popstate')); }));
       const qi = root.querySelector('#q');
       root.querySelector('[data-clear-search]')?.addEventListener('click', () => { setQuery(''); rerender(); document.getElementById('q')?.focus(); });
       qi.addEventListener('input', () => {
@@ -83,7 +83,7 @@ function mailView({ params, path, rerender }) {
       const del = root.querySelector('#del');
       if (del) del.addEventListener('click', () => confirmSheet('Удалить письмо?', 'Письмо «' + letter.subject + '» пропадёт из почты.', 'Удалить', () => {
         if (!store.deleteMail(letter.id)) return toast(store.SAVE_ERROR);
-        toast('Письмо удалено'); location.hash = inMsg ? '#/mail' : '#/mail/sent';
+        toast('Письмо удалено'); history.pushState({}, '', inMsg ? '/mail' : '/mail/sent'); window.dispatchEvent(new PopStateEvent('popstate'));
       }, true));
     }
   };

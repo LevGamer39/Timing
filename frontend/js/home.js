@@ -46,7 +46,7 @@ function homeView({ rerender }) {
 
   const gradesBlock = fragment('home', 'section-h-3', [fresh.length ? '<span class="pill">' + fresh.length + '</span>' : '',
     fresh.length ? fragment('home', 'seen', [fresh.slice(0, 4).map((g) => fragment('home', 'list-row-2', [g.subj, esc(store.SUBJECTS[g.subj].name), esc(g.type), ddmm(g.date), gradePill(g)])).join('')])
-      : '<div class="empty-day">Новых оценок нет</div><div class="home-card-footer"><a class="home-text-action" href="#/grades">Открыть оценки</a></div>', icon('grades', 20)]);
+      : '<div class="empty-day">Новых оценок нет</div><div class="home-card-footer"><a class="home-text-action" href="/grades">Открыть оценки</a></div>', icon('grades', 20)]);
 
   return {
     html: fragment("home", "stack", [header(), DAYS[weekday(now)], dayMonth(now), isParent ? 'Здравствуйте, ' + esc(acc.first) : 'Привет, ' + esc(s.first), childSwitch(), todayBlock, hwBlock, gradesBlock, holBlock]),

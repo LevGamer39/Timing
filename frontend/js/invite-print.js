@@ -7,7 +7,7 @@ export const MAX_BOT_URL = '';
 export function invitationBotUrl() {
   if (MAX_BOT_URL) return MAX_BOT_URL;
   const url = new URL(location.href);
-  url.search = '?demo-bot=1'; url.hash = '#/login';
+  url.search = '?demo-bot=1'; url.pathname = '/login'; url.hash = '';
   return url.href;
 }
 export function qrSvg(url) {

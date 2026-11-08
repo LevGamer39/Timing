@@ -279,6 +279,14 @@ async def change_password_page():
 def health():
     return {"status": "ok"}
 
+# SPA fallback: чистые URL экранов (/diary, /grades/...) отдают оболочку,
+# а не 404. API и статика обрабатываются раньше (роутеры и Mount ниже).
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str, request: Request):
+    if full_path.startswith(("api/", "static/", "js/", "css/", "html/")):
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+    return serve("index.html")
+
 @app.exception_handler(404)
 async def page_not_found(request: Request, exc: Exception):
     # API всегда отвечает JSON: бот и SPA не умеют разбирать HTML-страницу

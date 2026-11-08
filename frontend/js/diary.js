@@ -26,7 +26,7 @@ function diaryView({ params, rerender }) {
   const daySection = (d) => fragment("diary", "day-h", [DAYS[weekday(d.d)], d.date === today ? ' id="today"' : '', DAYS[weekday(d.d)], d.date === today ? ("<span class=\"pill accent\">сегодня</span>") : '', dayMonthShort(d.d), d.off ? ("<div class=\"empty-day\">" + (esc(d.off)) + "</div>") : d.lessons.map((l) => lessonRow(l, d)).join('')]);
 
   return {
-    html: fragment("diary", "stack", [header(), holiday ? 'каникулы' : 'неделя ' + weekNo, esc(weekTitle(mon, days.length)), offset - 1, icon('back'), offset + 1, icon('next'), offset !== 0 ? ("<a class=\"btn ghost sm\" href=\"#/diary/0\">К этой неделе</a>") : ("<span class=\"pill\">" + (lessonsCount) + " " + (plural(lessonsCount, 'урок', 'урока', 'уроков')) + " · " + (hwCount) + " ДЗ</span>"), childSwitch(), days.map(daySection).join('')]),
+    html: fragment("diary", "stack", [header(), holiday ? 'каникулы' : 'неделя ' + weekNo, esc(weekTitle(mon, days.length)), offset - 1, icon('back'), offset + 1, icon('next'), offset !== 0 ? ("<a class=\"btn ghost sm\" href=\"/diary/0\">К этой неделе</a>") : ("<span class=\"pill\">" + (lessonsCount) + " " + (plural(lessonsCount, 'урок', 'урока', 'уроков')) + " · " + (hwCount) + " ДЗ</span>"), childSwitch(), days.map(daySection).join('')]),
     mount(root) {
       bindChildSwitch(root, rerender);
       root.querySelectorAll('[data-hw]').forEach((cb) => cb.addEventListener('change', () => {

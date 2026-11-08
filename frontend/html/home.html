@@ -1,5 +1,5 @@
 <!-- fragment:card -->
-<a class="stack-sm home-next" href="#/diary">
+<a class="stack-sm home-next" href="/diary">
   <div class="row"><span class="grow small home-lesson-label">{{0}} урок · {{1}}</span><span class="pill accent">{{2}}</span></div>
   <div class="title-l">{{3}}</div>
   <div class="muted ls-tm">{{4}} · {{5}}{{6}}</div>
@@ -9,7 +9,7 @@
 
 <!-- fragment:only-desk -->
 <section class="o-lesson home-section home-today">
-  <div class="home-column-head"><h2 class="h2"><span class="home-ico">{{1}}</span>Сегодня</h2><a class="small home-text-action" href="#/diary">Весь дневник</a></div>
+  <div class="home-column-head"><h2 class="h2"><span class="home-ico">{{1}}</span>Сегодня</h2><a class="small home-text-action" href="/diary">Весь дневник</a></div>
   <div class="card lessons home-day">{{0}}</div>
 </section>
 <!-- /fragment:only-desk -->
@@ -43,13 +43,13 @@
 <!-- fragment:seen -->
 {{0}}
 <div class="home-card-footer home-grade-actions">
-  <a class="home-text-action" href="#/grades">Все оценки</a>
+  <a class="home-text-action" href="/grades">Все оценки</a>
   <button class="home-text-action" id="seen" type="button">Отметить просмотренными</button>
 </div>
 <!-- /fragment:seen -->
 
 <!-- fragment:list-row-2 -->
-<a class="list-row" href="#/grades/{{0}}">
+<a class="list-row" href="/grades/{{0}}">
   <span class="dot-new" aria-label="новая"></span>
   <span class="grow"><b>{{1}}</b><br><span class="muted small">{{2}} · {{3}}</span></span>
   {{4}}

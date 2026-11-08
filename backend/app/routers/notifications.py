@@ -178,7 +178,7 @@ def _overdue_task_html(task_title: str, deadline_str: str) -> str:
         <div style="color:rgba(255,196,64,0.85);font-size:13px;">Срок был: {_escape(deadline_str)}</div>
       </div>
       <div style="text-align:center;">
-        <a href="{_escape(config.APP_URL)}/#/tasks" style="display:inline-block;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:14px;text-decoration:none;padding:12px 28px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);">
+        <a href="{_escape(config.APP_URL)}/tasks" style="display:inline-block;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);font-size:14px;text-decoration:none;padding:12px 28px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);">
           Открыть задачи
         </a>
       </div>
@@ -191,7 +191,7 @@ def _notification_html(title: str, body: str) -> str:
       <h1 style="margin:0 0 8px;color:#fff;font-size:22px;font-weight:700;">{_escape(title)}</h1>
       <p style="margin:0 0 24px;color:rgba(255,255,255,0.6);font-size:15px;line-height:1.7;white-space:pre-line;">{_escape(body)}</p>
       <div style="text-align:center;">
-        <a href="{_escape(config.APP_URL)}/#/stats" style="display:inline-block;background:linear-gradient(135deg,#8B79FF,#6b5ce7);color:#fff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:10px;">
+        <a href="{_escape(config.APP_URL)}/stats" style="display:inline-block;background:linear-gradient(135deg,#8B79FF,#6b5ce7);color:#fff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:10px;">
           Открыть статистику
         </a>
       </div>

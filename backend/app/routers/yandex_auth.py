@@ -124,7 +124,7 @@ def auth_success_script(token: str, user: User) -> HTMLResponse:
         f"(() => {{ const d = {payload};"
         " localStorage.setItem('timing-token', d.token);"
         " localStorage.setItem('user', JSON.stringify(d.user));"
-        " window.location.replace('/#/home'); })();"
+        " window.location.replace('/home'); })();"
         "</script>"
     )
 
@@ -209,14 +209,14 @@ async def confirm_link(
     existing = db.query(User).filter(User.yandex_id == yandex_id).first()
     if existing:
         if existing.id == current_user.id:
-            return RedirectResponse(url="/#/settings")
+            return RedirectResponse(url="/settings")
         return HTMLResponse(
             "<script>"
             "alert('Этот Яндекс уже привязан к другому аккаунту!');"
-            "window.location.href='/#/settings';"
+            "window.location.href='/settings';"
             "</script>"
         )
 
     current_user.yandex_id = yandex_id
     db.commit()
-    return RedirectResponse(url="/#/settings")
+    return RedirectResponse(url="/settings")

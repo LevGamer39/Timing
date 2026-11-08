@@ -11,7 +11,7 @@ let schedDay = null;
 
 function scheduleView({ params, go, rerender }) {
   const cls = store.classes();
-  if (!Object.keys(cls).length) return { html: header() + '<h1 class="title-l">Расписание</h1><div class="card pad empty-state"><p>Классов пока нет</p><a class="text-action" href="#/classes">Открыть классы</a></div>' };
+  if (!Object.keys(cls).length) return { html: header() + '<h1 class="title-l">Расписание</h1><div class="card pad empty-state"><p>Классов пока нет</p><a class="text-action" href="/classes">Открыть классы</a></div>' };
   const key = params[0] && cls[params[0]] ? params[0] : Object.keys(cls)[0];
   const plan = store.scheduleOf(key);
   const nDays = 7;

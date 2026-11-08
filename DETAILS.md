@@ -78,10 +78,10 @@ Timing/
 
 | Роль | Интерфейс |
 |---|---|
-| **Ученик** | `#/home`, `#/diary`, `#/grades`, `#/stats`, `#/tasks`, `#/mail`, `#/ai` (задачи, дневник, оценки, почта, ИИ) |
-| **Учитель** | `#/journal`, `#/myclass`, `#/mail` (журнал, задания, приём работ) |
+| **Ученик** | `/home`, `/diary`, `/grades`, `/stats`, `/tasks`, `/mail`, `/ai` (задачи, дневник, оценки, почта, ИИ) |
+| **Учитель** | `/journal`, `/myclass`, `/mail` (журнал, задания, приём работ) |
 | **Родитель** | Те же экраны, что у ученика + переключатель ребёнка (только чтение + привязка по коду) |
-| **Админ** | `#/classes`, `#/teachers`, `#/schedule`, `#/attendance`, `#/mail` |
+| **Админ** | `/classes`, `/teachers`, `/schedule`, `/attendance`, `/mail` |
 
 Вход общий: пароль, код из MAX-бота или Яндекс ID. Учитель — только по инвайту. Ученик вступает в класс по 12-символьному коду. Родительские эндпоинты: `/api/grades/child/{id}`, `/api/tasks/child/{id}`, `/api/schedule/child/{id}`, `/api/stats/*/child/{id}`, `/api/users/me/children`.
 
@@ -171,7 +171,7 @@ Qwen2.5:7b через Ollama, системный промпт запрещает
 
 ## Статистика и приём работ
 
-`#/stats` и `/api/stats/*`: срез дня (задания + «ждёт закрытия»), неделя (в срок/позже/открыто/принято), динамика 8 недель (div-полосы). «Позже срока» = `completed_at > deadline`. Учитель: `/api/assignments/workload/{class_id}` — подсказка нагрузки, приём работ `done → accepted` (+`accepted_at`), отказ → `in_progress`/`overdue`.
+`/stats` и `/api/stats/*`: срез дня (задания + «ждёт закрытия»), неделя (в срок/позже/открыто/принято), динамика 8 недель (div-полосы). «Позже срока» = `completed_at > deadline`. Учитель: `/api/assignments/workload/{class_id}` — подсказка нагрузки, приём работ `done → accepted` (+`accepted_at`), отказ → `in_progress`/`overdue`.
 
 ## Перенос учеников между школами
 

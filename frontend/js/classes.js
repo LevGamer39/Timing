@@ -86,7 +86,7 @@ function classesView({ params, go, rerender }) {
     : '';
 
   return {
-    html: fragment("classes", "add", [header(), admin ? 'Классы и ученики' : 'Ученики и приглашения', icon('plus', 18), esc(c.name), allowed.map((x) => ("<a href=\"#/classes/" + (x.key) + "\"" + (x.key === key ? ' aria-current="true"' : '') + ">" + (esc(x.name)) + "</a>")).join(''), controls, esc(c.name), c.students.length, plural(c.students.length, 'ученик', 'ученика', 'учеников'), c.students.map(personHtml).join('') || '<div class="empty-day">Учеников пока нет</div>', inviteCard, admin && server ? fragment("classes", "mig-actions") : '']),
+    html: fragment("classes", "add", [header(), admin ? 'Классы и ученики' : 'Ученики и приглашения', icon('plus', 18), esc(c.name), allowed.map((x) => ("<a href=\"/classes/" + (x.key) + "\"" + (x.key === key ? ' aria-current="true"' : '') + ">" + (esc(x.name)) + "</a>")).join(''), controls, esc(c.name), c.students.length, plural(c.students.length, 'ученик', 'ученика', 'учеников'), c.students.map(personHtml).join('') || '<div class="empty-day">Учеников пока нет</div>', inviteCard, admin && server ? fragment("classes", "mig-actions") : '']),
     mount(root) {
       const save = () => { all[key] = c; const ok = store.saveClasses(all); if (!ok) toast(store.SAVE_ERROR); return ok; };
       if (!server) bindInvites(root, rerender);

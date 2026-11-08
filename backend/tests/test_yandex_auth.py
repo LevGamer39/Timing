@@ -63,7 +63,7 @@ def test_confirm_link_binds_yandex_id(db, student, monkeypatch, yandex_config):
 
     db.refresh(student)
     assert student.yandex_id == "12345"
-    assert response.headers["location"] == "/#/settings"
+    assert response.headers["location"] == "/settings"
 
 
 def test_confirm_link_rejects_yandex_of_another_account(

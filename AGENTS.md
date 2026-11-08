@@ -269,8 +269,9 @@ nginx через `envsubst` в `nginx/docker-entrypoint.sh` и в backend чер
 ## Frontend Guidelines
 
 Фронтенд — статический SPA без сборки: `frontend/index.html` и три каталога
-`css/`, `js/`, `html/`. Навигация по хешу (`#/home`, `#/diary`,
-`#/journal/...`); сервер отдаёт одну оболочку, а страницы — функции экранов.
+`css/`, `js/`, `html/`. Навигация по чистым URL (`/home`, `/diary`,
+`/journal/...` через history API); сервер отдаёт одну оболочку по любому
+экранному пути (SPA-fallback в `main.py`), а страницы — функции экранов.
 
 ### 1. Загрузка ресурсов
 

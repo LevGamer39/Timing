@@ -22,7 +22,7 @@ function analysisView({ params, go, rerender }) {
   const vals = j.names.map((n, r) => ({ n, v: j.grades[r + '|' + cell] }));
   const nums = vals.filter((x) => typeof x.v === 'number');
   if (!nums.length) return {
-    html: '<header class="top"><a class="icon-btn" href="#/journal/' + key + '" aria-label="Назад в журнал">' + icon('back') + '</a><h1>Анализ работы</h1></header><div class="card pad empty-state"><p>Оценок по работе пока нет</p><a class="text-action" href="#/journal/' + key + '">Открыть журнал</a></div>'
+    html: '<header class="top"><a class="icon-btn" href="/journal/' + key + '" aria-label="Назад в журнал">' + icon('back') + '</a><h1>Анализ работы</h1></header><div class="card pad empty-state"><p>Оценок по работе пока нет</p><a class="text-action" href="/journal/' + key + '">Открыть журнал</a></div>'
   };
   const avg = nums.length ? nums.reduce((a, x) => a + x.v, 0) / nums.length : 0;
 
