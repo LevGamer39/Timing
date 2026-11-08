@@ -19,7 +19,7 @@ docker exec timing_ollama ollama pull qwen2.5:7b   # модель ИИ, ~4.7 Г�
 
 | Что | Адрес |
 |---|---|
-| **Сайт на сервере (прод)** | **https://timing.myftp.org** — основной адрес проекта; домен задаётся в `.env` (`APP_DOMAIN`), nginx на нём только проксирует на backend |
+| **Сайт на сервере (прод)** | **https://timing.website/** — основной адрес проекта; домен задаётся в `.env` (`APP_DOMAIN`), nginx на нём только проксирует на backend |
 | Сайт (локально) | http://127.0.0.1:8000 |
 | Документация API | http://localhost:8000/docs |
 | Панелька Mailpit (письма) | http://localhost:8025 или https://timing.myftp.org/mailpit/ (логин `timing`, пароль — `MAILPIT_PANEL_PASSWORD`, по умолчанию `demo2024`) |
