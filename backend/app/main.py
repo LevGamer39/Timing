@@ -284,6 +284,10 @@ def health():
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str, request: Request):
     if full_path.startswith(("api/", "static/", "js/", "css/", "html/")):
+        # Статика до Mount не доходит (Mount ниже по порядку) — отдаём файл сами.
+        target = os.path.join(frontend_path, full_path)
+        if os.path.isfile(target):
+            return FileResponse(target)
         return JSONResponse(status_code=404, content={"detail": "Not found"})
     return serve("index.html")
 

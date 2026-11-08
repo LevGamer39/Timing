@@ -9,13 +9,32 @@
 - В Docker это один контейнер `timing_bot` — не запускайте второй `bot.py` локально на той же машине и не поднимайте бот на двух серверах с одним `MAX_BOT_TOKEN`.
 - То же для backend: планировщик писем/сводок запускается только в одном процессе (PostgreSQL advisory-лок), но второй backend всё равно лишний.
 
-## Быстрый старт (Docker)
+## Запуск (Docker)
+
+### 1. Минимальный `.env` (без этого не стартует)
 
 ```bash
-cp .env.example .env   # заполнить значения из раздела «.env» ниже
-docker compose up -d --build
-docker exec timing_ollama ollama pull qwen2.5:7b   # модель ИИ, ~4.7 ГБ, один раз
+cp .env.example .env
 ```
+
+В `.env` обязательно смени **четыре значения** (остальное для демки сойдёт по умолчанию):
+
+| Переменная | Пример |
+|---|---|
+| `APP_DOMAIN` | `timing.website` — твой домен |
+| `DB_PASS` | пароль PostgreSQL (без него compose падает) |
+| `SECRET_KEY` | случайная строка ≥32 символов |
+| `ADMIN_PASSWORD` | пароль первого администратора |
+
+Для бота дополнительно: `MAX_BOT_TOKEN` и `MAX_BOT_USERNAME` (username бота, напр. `ideya_fiks_10_bot`).
+
+### 2. Поднять всё одной командой
+
+```bash
+docker compose up -d --build
+```
+
+Модель ИИ (`qwen2.5:7b`) уже запечена в образ Ollama (`ghcr.io/levgamer39/timing/ollama:latest`) — **качать её вручную не нужно**. После старта бэкенд сам греет модель в фоне; ИИ отвечает без ожидания загрузки. Для Mailpit добавь `--profile mailpit`: `docker compose --profile mailpit up -d --build`.
 
 | Что | Адрес |
 |---|---|
@@ -71,7 +90,7 @@ docker exec timing_ollama ollama pull qwen2.5:7b   # модель ИИ, ~4.7 Г�
 
 ## Если что-то не работает
 
-- **ИИ отвечает «Сервис ИИ недоступен»** — модель не скачана (`docker exec timing_ollama ollama pull qwen2.5:7b`) или Docker Desktop/серверу не хватает RAM: `qwen2.5:7b` нужно ~6 ГБ, на Docker Desktop поднимите Settings → Resources → Memory до 8 ГБ. На сервере для всего стека нужно **12–16 ГБ RAM** (8 ГБ — впритык, лучше модель `qwen2.5:3b`).
+- **ИИ отвечает «Сервис ИИ недоступен»** — Docker Desktop/серверу не хватает RAM: модель уже в образе, но ей нужно ~6 ГБ, на Docker Desktop поднимите Settings → Resources → Memory до 8 ГБ. Модель в образе: проверяй `docker exec timing_ollama ollama list`. На сервере для всего стека нужно **12–16 ГБ RAM** (8 ГБ — впритык, лучше модель `qwen2.5:3b`).
 - **Вход через Яндекс не работает** — это нормально без `YANDEX_CLIENT_ID/SECRET` в `.env` (кнопка вернёт 503). Сам OAuth реализован полностью: вход (`/api/auth/yandex/login-url` → `/callback`) и привязка в настройках (`/link` → `/confirm-link`, кнопка «Привязать Яндекс»). Блок `YANDEX_*_CALLBACK` должен совпадать с адресами в консоли Яндекса, иначе Яндекс не вернёт управление.
 - **Письма не приходят** — проверьте `SMTP_*`. Для Яндекса нужен **пароль приложения** (https://id.yandex.ru/security/apppasswords), не пароль от аккаунта, и `EMAIL_FROM` = `SMTP_USER`. Для демки без внешней почты — Mailpit: `SMTP_HOST=mailpit`, `SMTP_PORT=1025`, пустые `SMTP_USER/PASSWORD`, `SMTP_STARTTLS=false`, запуск `docker compose --profile mailpit up -d mailpit`, письма смотрятся в панельке (см. таблицу адресов). Свой SMTP на домене `no-ip.com` не взлетит: нельзя прописать SPF/DKIM/PTR, письма уйдут в спам.
 - **Бот отвечает дважды** — запущено два экземпляра бота. Оставьте один (см. «Критично» выше), второй остановите.
