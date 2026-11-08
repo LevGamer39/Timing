@@ -1,7 +1,7 @@
 import { fragment } from './templates.js';
 import * as store from './store.js';
 import { esc, icon, toast, sheet } from './ui.js';
-import { header } from './common.js';
+import { header, childSwitch, bindChildSwitch } from './common.js';
 import { fileChip, bindFilePreviews } from './shared/file-preview.js';
 
 const PRIORITY = { high: 'Высокая', medium: 'Обычная', low: 'Низкая' };
@@ -16,10 +16,10 @@ const dateLabel = (value) => {
 const overdue = (t) => t.deadline && t.status !== 'done' && t.status !== 'accepted' && new Date(t.deadline).getTime() < Date.now();
 const closed = (t) => t.status === 'done' || t.status === 'accepted';
 
-function taskCard(t, i) {
+function taskCard(t, i, readOnly = false) {
   return '<article class="card pad task-card' + (closed(t) ? ' done' : '') + '" data-task="' + i + '">'
     + '<label class="row" style="gap: 10px; align-items: flex-start; min-height: 28px">'
-    + '<input type="checkbox" data-done="' + i + '" ' + (closed(t) ? 'checked' : '') + (t.status === 'accepted' ? ' disabled' : '') + ' aria-label="Готово">'
+    + '<input type="checkbox" data-done="' + i + '" ' + (closed(t) ? 'checked' : '') + (readOnly || t.status === 'accepted' ? ' disabled' : '') + ' aria-label="Готово">'
     + '<span class="grow"><b class="task-title">' + esc(t.title) + '</b>'
     + (t.subject ? '<br><span class="muted small">' + esc(t.subject) + '</span>' : '')
     + (t.status === 'accepted' ? '<br><span class="muted small">Принято учителем</span>' : '')
@@ -29,11 +29,11 @@ function taskCard(t, i) {
     + '<p class="hint task-date' + (overdue(t) ? ' late' : '') + '">' + (overdue(t) ? 'Ждёт закрытия: ' : 'Срок: ') + dateLabel(t.deadline) + '</p>'
     + (t.description ? '<p class="task-desc">' + esc(t.description) + '</p>' : '')
     + ((t.files && t.files.length) ? '<div class="file-row">' + t.files.map(fileChip).join('') + '</div>' : '')
-    + '<div class="row" style="gap: 6px; justify-content: flex-end">'
+    + (readOnly ? '' : '<div class="row" style="gap: 6px; justify-content: flex-end">'
     + '<button class="text-action" type="button" data-sub="' + i + '">Подзадачи</button>'
     + '<button class="text-action" type="button" data-ai="' + i + '">ИИ-план</button>'
     + '<button class="icon-btn" type="button" data-del="' + i + '" aria-label="Удалить задачу">' + icon('trash', 18) + '</button>'
-    + '</div>'
+    + '</div>')
     + '</article>';
 }
 
@@ -102,6 +102,7 @@ function tasksView({ rerender }) {
   let items = [];
   let loaded = false;
   const isServer = store.isServer();
+  const isParent = store.role() === 'parent';
 
   const mount = (root) => {
     const box = root.querySelector('#task-list');
@@ -110,10 +111,12 @@ function tasksView({ rerender }) {
         box.innerHTML = '<div class="card pad"><p class="muted" style="margin: 0">Личные задачи доступны после входа в аккаунт. В демо-режиме задания смотрите в дневнике.</p></div>';
         return;
       }
-      const open = items.filter((t) => !closed(t));
-      const done = items.filter((t) => closed(t));
-      box.innerHTML = (open.length ? open.map(taskCard).join('') : '<div class="card pad"><p class="muted" style="margin: 0">Активных задач нет. Добавьте первую — она появится здесь и в дневнике.</p></div>')
-        + (done.length ? '<h2 class="h2" style="font-size: 18px; margin: 8px 0 0">Выполнено</h2>' + done.map(taskCard).join('') : '');
+      const open = items.map((t, i) => ({ t, i })).filter(({ t }) => !closed(t));
+      const done = items.map((t, i) => ({ t, i })).filter(({ t }) => closed(t));
+      const empty = isParent ? 'Активных задач нет.' : 'Активных задач нет. Добавьте первую — она появится здесь и в дневнике.';
+      box.innerHTML = (open.length ? open.map(({ t, i }) => taskCard(t, i, isParent)).join('') : '<div class="card pad"><p class="muted" style="margin: 0">' + empty + '</p></div>')
+        + (done.length ? '<h2 class="h2" style="font-size: 18px; margin: 8px 0 0">Выполнено</h2>' + done.map(({ t, i }) => taskCard(t, i, isParent)).join('') : '');
+      if (isParent) { bindFilePreviews(box); return; }
       box.querySelectorAll('[data-done]').forEach((cb) => cb.addEventListener('change', () => {
         const task = items[Number(cb.dataset.done)];
         const run = cb.checked ? store.taskComplete(task.id) : store.taskUpdate(task.id, { status: 'pending' });
@@ -150,11 +153,18 @@ function tasksView({ rerender }) {
       if (!isServer) return toast('Добавление задач доступно после входа.');
       formSheet(null, reload);
     });
+    bindChildSwitch(root, rerender);
     reload();
   };
 
   return {
-    html: fragment('tasks', 'screen', [header(), icon('plus', 18)]),
+    html: fragment('tasks', 'screen', [
+      header(),
+      isParent ? 'Задачи ребёнка' : 'Мои задачи',
+      isParent ? '' : '<button class="btn sm" type="button" id="task-add">' + icon('plus', 18) + 'Задача</button>',
+      isParent ? 'Просмотр задач ребёнка. Изменять их может только ученик.' : 'Личные задачи и задания учителя. Отметка «готово» сразу видна в дневнике.',
+      isParent ? childSwitch() : ''
+    ]),
     mount
   };
 }

@@ -104,9 +104,9 @@ function teachersView({ rerender }) {
             codesBox.innerHTML = items.length ? items.map((c) => (
               '<div class="list-row" style="padding: 8px 0">'
               + '<span class="grow"><b class="mono code-blur" data-code-blur title="Нажми, чтобы показать">' + esc(c.code) + '</b><br><span class="muted small">' + (c.is_used ? 'Использован' : 'Свободен') + '</span></span>'
-              + (c.is_used ? '' : copyCode(c.code, 'код учителя') + '<button class="icon-btn" type="button" data-del-code="' + c.id + '" aria-label="Удалить код">' + icon('trash', 18) + '</button>')
+              + (c.is_used ? '' : copyCode(c.code, 'код учителя')) + '<button class="icon-btn" type="button" data-del-code="' + c.id + '" aria-label="Удалить код">' + icon('trash', 18) + '</button>'
               + '</div>'
-            )).join('') : '<p class="muted">Свободных кодов нет. Нажмите «Добавить учителя», чтобы выдать код.</p>';
+            )).join('') : '<p class="muted">Кодов нет. Нажмите «Добавить учителя», чтобы выдать код.</p>';
             codesBox.querySelectorAll('[data-del-code]').forEach((b) => b.addEventListener('click', () => {
               store.apiDeleteInvite(b.dataset.delCode).then((result) => {
                 if (typeof result === 'string') return toast(result);

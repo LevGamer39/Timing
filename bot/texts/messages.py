@@ -51,6 +51,27 @@ ADMIN_HELP_TEXT = (
     "/cancel — выйти из режима"
 )
 
+PARENT_HELP_TEXT = (
+    "<b>Что я умею для родителя</b>\n"
+    "• «На сегодня» — задания каждого из ваших детей\n"
+    "• «Оценки» и «Сводка» — успеваемость детей\n"
+    "• «Расписание» — уроки детей на сегодня\n"
+    "• «ИИ-чат» — вопрос помощнику об учёбе детей\n\n"
+    "<b>Команды</b>\n"
+    "/today /grades /summary /schedule /ai /done\n"
+    "/children — список привязанных детей\n"
+    "/cancel — выйти из режима ИИ-чата\n"
+    "/notify — включить или выключить уведомления\n"
+    "/link — привязать аккаунт, созданный на сайте\n"
+    "/code — код для входа на сайт\n\n"
+    "Добавлять, менять и удалять задачи может только сам ученик."
+)
+
+PARENT_CANNOT_ADD_TEXT = (
+    "Родители не могут добавлять задачи детям — это делает сам ученик.\n"
+    "Спросите у помощника: /ai"
+)
+
 UNLINKED_TEXT = (
     "Аккаунт MAX ещё не привязан к Timing.\n"
     "Чтобы зарегистрироваться нажмите кнопку ниже"
@@ -142,6 +163,8 @@ def help_text(role: str | None) -> str:
         base = TEACHER_HELP_TEXT
     elif role == "admin":
         base = ADMIN_HELP_TEXT
+    elif role == "parent":
+        base = PARENT_HELP_TEXT
     else:
         base = HELP_TEXT
     return base + _online_hint()

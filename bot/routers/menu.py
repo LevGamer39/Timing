@@ -12,7 +12,7 @@ from core.ui import error_text, event_user, require_token, respond, role_of
 from keyboards import home_keyboard, main_menu
 from services import registration, views
 from services.backend import BackendError
-from texts import help_text
+from texts import PARENT_CANNOT_ADD_TEXT, help_text
 from texts.messages import REGISTER_LOGIN_TEXT
 
 
@@ -103,17 +103,22 @@ def build_router(ctx: AppContext) -> Router:
         if token is None:
             return
 
+        role = role_of(ctx, event)
         if action == "today":
-            result = await views.safe_view(event, views.today(ctx.backend, token))
+            result = await views.safe_view(
+                event, views.today(ctx.backend, token, role)
+            )
         elif action == "grades":
-            result = await views.safe_view(event, views.grades(ctx.backend, token))
+            result = await views.safe_view(
+                event, views.grades(ctx.backend, token, role)
+            )
         elif action == "summary":
             result = await views.safe_view(
-                event, views.summary(ctx.backend, token, role_of(ctx, event))
+                event, views.summary(ctx.backend, token, role)
             )
         elif action == "schedule":
             result = await views.safe_view(
-                event, views.schedule(ctx.backend, token)
+                event, views.schedule(ctx.backend, token, role)
             )
         elif action == "children":
             result = await views.safe_view(
@@ -123,11 +128,21 @@ def build_router(ctx: AppContext) -> Router:
             result = await views.safe_view(
                 event, views.classes(ctx.backend, token)
             )
+        elif action == "add":
+            if role == "parent":
+                await respond(
+                    event,
+                    PARENT_CANNOT_ADD_TEXT,
+                    keyboard=main_menu(role),
+                )
+                return
+            await respond(event, "Пришлите текст задания или голосовое.")
+            return
         else:
             await respond(event, "Неизвестная кнопка.")
             return
 
         if result is not None:
-            await respond(event, result[0], result[1])
+            await respond(event, result[0], result[1] or main_menu(role))
 
     return router

@@ -20,7 +20,9 @@ def build_router(ctx: AppContext) -> Router:
         token = await require_token(ctx, event)
         if token is None:
             return
-        result = await views.safe_view(event, views.grades(ctx.backend, token))
+        result = await views.safe_view(
+            event, views.grades(ctx.backend, token, role_of(ctx, event))
+        )
         if result is not None:
             await respond(
                 event,

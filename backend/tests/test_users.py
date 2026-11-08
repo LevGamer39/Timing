@@ -4,11 +4,19 @@
 жизненный цикл запроса — включая lifespan, который вызывает ``create_tables()``,
 и отправку письма с OTP.
 """
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from fastapi import HTTPException
 
 from app.dependencies import get_current_user, require_role
-from app.models import ClassMembership, User, UserRole
+from app.models import (
+    ClassMembership,
+    ParentLinkToken,
+    ParentStudent,
+    User,
+    UserRole,
+)
 from app.routers.users import (
     MaxRegisterRequest,
     ProfileUpdateRequest,
@@ -218,6 +226,60 @@ def test_max_register_teacher_consumes_invite(db, invite_code):
     db.refresh(invite_code)
     assert invite_code.is_used is True
     assert invite_code.used_by_id == user.id
+
+
+def _parent_link_token(db, student, code="12345678", ttl=timedelta(hours=1)):
+    token = ParentLinkToken(
+        student_id=student.id,
+        code=code,
+        expires_at=datetime.now(timezone.utc) + ttl,
+    )
+    db.add(token)
+    db.commit()
+    db.refresh(token)
+    return token
+
+
+def test_invite_code_knows_parent_role(db, student):
+    """Код родителя открывает регистрацию роли parent."""
+    _parent_link_token(db, student)
+
+    info = invite_code_info("12345678", db)
+    assert info.valid is True
+    assert info.role == UserRole.parent
+    assert info.class_name is None
+
+
+def test_max_register_parent_links_student(db, student):
+    token = _parent_link_token(db, student)
+    body = _max_body(invite_code="12345678", login="parent-max")
+    response = max_register(body, _bot_signature(HASH), db)
+
+    user = db.query(User).filter(User.login == "parent-max").first()
+    assert user is not None
+    assert user.role == UserRole.parent
+    assert response.role == UserRole.parent
+
+    link = (
+        db.query(ParentStudent)
+        .filter(
+            ParentStudent.parent_id == user.id,
+            ParentStudent.student_id == student.id,
+        )
+        .first()
+    )
+    assert link is not None
+    db.refresh(token)
+    assert token.is_used is True
+
+
+def test_max_register_rejects_expired_parent_code(db, student):
+    _parent_link_token(db, student, ttl=timedelta(minutes=-1))
+    body = _max_body(invite_code="12345678", login="parent-max")
+
+    with pytest.raises(HTTPException) as exc:
+        max_register(body, _bot_signature(HASH), db)
+    assert exc.value.status_code == 400
 
 
 def test_max_register_is_idempotent(db, klass):

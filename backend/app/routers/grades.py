@@ -320,12 +320,8 @@ def my_averages(
     ]
 
 
-@router.get("/my/summary", response_model=GradeSummary)
-def my_grade_summary(
-    current_user: User = Depends(require_role(UserRole.student)),
-    db: Session = Depends(get_db),
-):
-    grades = db.query(Grade).filter(Grade.student_id == current_user.id).all()
+def _grade_summary(student_id: int, db: Session) -> GradeSummary:
+    grades = db.query(Grade).filter(Grade.student_id == student_id).all()
     subject_averages = _averages_by_subject(grades)
     subject_averages.sort(key=lambda item: (-item.average, item.subject.lower()))
 
@@ -340,7 +336,7 @@ def my_grade_summary(
 
     membership = (
         db.query(ClassMembership)
-        .filter(ClassMembership.student_id == current_user.id)
+        .filter(ClassMembership.student_id == student_id)
         .order_by(ClassMembership.joined_at.desc())
         .first()
     )
@@ -368,8 +364,8 @@ def my_grade_summary(
         # Место считается по единой шкале для всех; при равенстве
         # лучшее место достаётся тому, кто раньше по id.
         scored.sort(key=lambda item: (-item[1], item[0]))
-        for index, (student_id, _) in enumerate(scored, start=1):
-            if student_id == current_user.id:
+        for index, (peer_id, _) in enumerate(scored, start=1):
+            if peer_id == student_id:
                 class_rank = index
                 break
 
@@ -382,6 +378,49 @@ def my_grade_summary(
             subject_averages, key=lambda item: (item.average, item.subject.lower())
         )[:3],
     )
+
+
+@router.get("/my/summary", response_model=GradeSummary)
+def my_grade_summary(
+    current_user: User = Depends(require_role(UserRole.student)),
+    db: Session = Depends(get_db),
+):
+    return _grade_summary(current_user.id, db)
+
+
+@router.get(
+    "/child/{student_id}/averages", response_model=list[SubjectAverage]
+)
+def child_averages(
+    student_id: int,
+    current_user: User = Depends(require_role(UserRole.parent)),
+    db: Session = Depends(get_db),
+):
+    assert_parent_of(current_user.id, student_id, db)
+    rows = (
+        db.query(Grade.subject, func.avg(Grade.value), func.count(Grade.id))
+        .filter(Grade.student_id == student_id)
+        .group_by(Grade.subject)
+        .all()
+    )
+    return [
+        SubjectAverage(
+            subject=subject,
+            average=round(float(average), 2),
+            count=int(count),
+        )
+        for subject, average, count in rows
+    ]
+
+
+@router.get("/child/{student_id}/summary", response_model=GradeSummary)
+def child_grade_summary(
+    student_id: int,
+    current_user: User = Depends(require_role(UserRole.parent)),
+    db: Session = Depends(get_db),
+):
+    assert_parent_of(current_user.id, student_id, db)
+    return _grade_summary(student_id, db)
 
 
 @router.get("/assignment/{assignment_id}", response_model=list[GradeResponse])

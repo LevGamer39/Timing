@@ -71,7 +71,7 @@ function settingsView({ go, rerender }) {
         err.hidden = true;
         store.parentLinkCode().then((result) => {
           if (result.error) { err.textContent = result.error; err.hidden = false; return; }
-          root.querySelector('#pl-slot').innerHTML = '<p class="mono" style="font-size: 22px; font-weight: 800; letter-spacing: 2px; margin: 8px 0">' + esc(result.code) + '</p>' + copyCode(result.code, 'код родителя');
+          root.querySelector('#pl-slot').innerHTML = '<p class="mono code-blur" data-code-blur title="Нажми, чтобы показать" style="font-size: 22px; font-weight: 800; letter-spacing: 2px; margin: 8px 0">' + esc(result.code) + '</p>' + copyCode(result.code, 'код родителя');
         });
       });
       const linkForm = root.querySelector('#pl-form');

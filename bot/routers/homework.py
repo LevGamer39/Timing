@@ -16,9 +16,11 @@ from core.ui import (
     is_dialog,
     require_token,
     respond,
+    role_of,
 )
-from keyboards import home_keyboard
+from keyboards import home_keyboard, main_menu
 from services.tasks import add_homework
+from texts import PARENT_CANNOT_ADD_TEXT
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -81,6 +83,13 @@ def build_router(ctx: AppContext) -> Router:
         item = ctx.parser.pop_pending(uid)
         if item is None:
             await respond(event, "Карточка устарела. Отметьте задание заново.")
+            return
+        if role_of(ctx, event) == "parent":
+            await respond(
+                event,
+                PARENT_CANNOT_ADD_TEXT,
+                keyboard=main_menu("parent") if is_dialog(event) else None,
+            )
             return
         token = await require_token(ctx, event)
         if token is not None:

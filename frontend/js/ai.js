@@ -20,6 +20,43 @@ function summary() {
     'Ниже всего: ' + low.map((s) => s.name.toLowerCase() + ' — ' + fmt(s.avg)).join(', ') + '.';
 }
 
+function childName(child) {
+  return [child.first, child.last].filter(Boolean).join(' ') || child.name || 'Ребёнок';
+}
+
+function childSummary(child) {
+  const grades = store.gradesOf(child.id);
+  if (!grades.length) return childName(child) + ': оценок пока нет.';
+  const average = grades.reduce((sum, grade) => sum + grade.value, 0) / grades.length;
+  const subjects = {};
+  grades.forEach((grade) => (subjects[grade.subj] ||= []).push(grade));
+  const averages = Object.entries(subjects).map(([key, list]) => ({
+    name: store.SUBJECTS[key]?.name || key,
+    avg: list.reduce((sum, grade) => sum + grade.value, 0) / list.length,
+  }));
+  const low = averages.sort((a, b) => a.avg - b.avg).slice(0, 2);
+  return childName(child) + ':\n' +
+    'Средний балл — ' + fmt(average) + '.\n' +
+    'Ниже всего: ' + low.map((subject) => subject.name.toLowerCase() + ' — ' + fmt(subject.avg)).join(', ') + '.';
+}
+
+function childrenSummary() {
+  const children = store.children();
+  return children.length ? children.map(childSummary).join('\n\n') : 'Дети не привязаны к аккаунту.';
+}
+
+function childWeekReport(child) {
+  const grades = store.gradesOf(child.id);
+  if (!grades.length) return childName(child) + ': на этой неделе оценок пока нет.';
+  const average = grades.reduce((sum, grade) => sum + grade.value, 0) / grades.length;
+  return childName(child) + ': ' + grades.length + ' ' + plural(grades.length, 'оценка', 'оценки', 'оценок') + ', средняя ' + fmt(average) + '.';
+}
+
+function childrenWeekReport() {
+  const children = store.children();
+  return children.length ? children.map(childWeekReport).join('\n\n') : 'Дети не привязаны к аккаунту.';
+}
+
 function weekReport() {
   const w = store.week(0);
   const grades = w.days.flatMap((d) => (d.lessons || []).flatMap((l) => l.grades));
@@ -65,12 +102,15 @@ const HELP = {
 
 function topics() {
   const subs = store.subjects().filter((s) => s.avg != null).sort((a, b) => a.avg - b.avg).slice(0, 4);
-  return {
-    grades: { title: 'Мои оценки', desc: 'Средний и где проседаю', ask: 'Что посмотреть?', subs: { 'Общая сводка': summary, 'Что за эту неделю': weekReport } },
+  const parent = store.role() === 'parent';
+  const result = {
+    grades: { title: parent ? 'Оценки моих детей' : 'Мои оценки', desc: parent ? 'Статистика отдельно по каждому ребёнку' : 'Средний и где проседаю', ask: parent ? 'Чьи оценки посмотреть?' : 'Что посмотреть?', subs: { 'Общая сводка': parent ? childrenSummary : summary, 'Что за эту неделю': parent ? childrenWeekReport : weekReport } },
     school: { title: 'Каникулы и четверть', desc: 'Когда отдых и конец четверти', ask: 'Что подсказать?', subs: { 'Когда каникулы': holidays, 'Когда конец четверти': periodEnd } },
     goal: { title: 'Цель по предмету', desc: 'Сколько нужно до 4 или 5', ask: 'По какому предмету? Показываю те, где средний ниже всего.', subs: Object.fromEntries(subs.map((s) => [s.name, () => goalText(s.list, Math.min(mark(s.avg) + 1, 5))])) },
     help: { title: 'Как пользоваться', desc: 'Где что находится', ask: 'Что подсказать?', subs: Object.fromEntries(Object.entries(HELP).map(([k, v]) => [k, () => v])) }
   };
+  if (parent) delete result.goal;
+  return result;
 }
 
 function scheduleReport(q) {
@@ -117,11 +157,11 @@ function chatStrip(isAi) {
 function aiView({ rerender }) {
   const T = topics();
   const isParent = store.role() === 'parent';
-  const isAi = store.isServer() && store.role() === 'student';
+  const isAi = store.isServer() && ['student', 'parent'].includes(store.role());
   const s = store.student();
 
   const hello = isParent
-    ? 'Здравствуйте! Подскажу по оценкам ' + genitive(s.first) + ' и по самому Таймингу. С чего начнём?'
+    ? 'Здравствуйте! Покажу оценки и статистику отдельно по каждому ребёнку. С чего начнём?'
     : 'Привет, ' + s.first + '! Помогаю разобраться с оценками и с Таймингом. Домашку за тебя не решаю. С чего начнём?';
 
   return {

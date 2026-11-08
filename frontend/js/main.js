@@ -198,8 +198,14 @@ try {
       if (!changedRights && draft) mountedScreen?.restoreDraft?.(draft);
     });
   });
-  window.addEventListener('hashchange', () => {
+  let navigationTicket = 0;
+  window.addEventListener('hashchange', async () => {
     const p = location.hash;
+    const path = p.replace(/^#\/?/, '') || 'home';
+    const ticket = ++navigationTicket;
+    if (store.isServer()) await store.refreshData(path);
+    // Пока грузились данные, пользователь мог уйти на другой раздел.
+    if (ticket !== navigationTicket) return;
     render();
     if (p !== lastPath && !app.querySelector('[data-keep-scroll]')) window.scrollTo(0, 0);
     lastPath = p;

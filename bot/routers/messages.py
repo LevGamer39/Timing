@@ -19,7 +19,7 @@ from services import registration, link
 from services.ai_chat import answer as ai_answer
 from services.tasks import create_from_text
 from services.voice import audio_url
-from texts import PROCESSING_TEXT, help_text
+from texts import PARENT_CANNOT_ADD_TEXT, PROCESSING_TEXT, help_text
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -72,6 +72,16 @@ def build_router(ctx: AppContext) -> Router:
         ):
             return
 
+        role = role_of(ctx, event) if hasattr(ctx.sessions, "role") else None
+        in_ai_mode = user is not None and user.user_id in ctx.ai_mode
+        if role == "parent" and not in_ai_mode:
+            await respond(
+                event,
+                PARENT_CANNOT_ADD_TEXT,
+                keyboard=main_menu(role),
+            )
+            return
+
         token = await require_token(ctx, event)
         if token is None:
             return
@@ -79,7 +89,7 @@ def build_router(ctx: AppContext) -> Router:
         if not announced:
             await respond(event, PROCESSING_TEXT)
 
-        if user is not None and user.user_id in ctx.ai_mode:
+        if in_ai_mode:
             await ai_answer(ctx, event, token, text)
             return
         await create_from_text(ctx, event, token, text)

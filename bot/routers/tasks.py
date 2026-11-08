@@ -10,11 +10,15 @@ from maxapi.types.updates.message_created import MessageCreated
 from core.context import AppContext
 from core.filters import PayloadPrefix
 from core.ui import error_text, event_user, require_token, respond, role_of
-from keyboards import home_keyboard, main_menu, tasks_keyboard
+from keyboards import home_keyboard, main_menu
 from services import views
 from services.backend import BackendError
 from services.tasks import create_from_text
-from texts import PROCESSING_TEXT, task_line, tasks_block
+from texts import PARENT_CANNOT_ADD_TEXT, PROCESSING_TEXT, task_line
+
+PARENT_CANNOT_EDIT_TEXT = (
+    "Родители не могут менять задачи детей — это делает сам ученик."
+)
 
 
 def build_router(ctx: AppContext) -> Router:
@@ -25,15 +29,26 @@ def build_router(ctx: AppContext) -> Router:
         token = await require_token(ctx, event)
         if token is None:
             return
-        result = await views.safe_view(event, views.today(ctx.backend, token))
+        role = role_of(ctx, event)
+        result = await views.safe_view(
+            event, views.today(ctx.backend, token, role)
+        )
         if result is not None:
-            await respond(event, result[0], result[1])
+            await respond(event, result[0], result[1] or main_menu(role))
 
     @router.message_created(Command("add"))
     async def add(event: MessageCreated, args: list[str] | None = None) -> None:
         user = event_user(event)
         if user is not None:
             ctx.ai_mode.discard(user.user_id)
+        role = role_of(ctx, event)
+        if role == "parent":
+            await respond(
+                event,
+                PARENT_CANNOT_ADD_TEXT,
+                keyboard=main_menu(role),
+            )
+            return
         text = " ".join(args or []).strip()
         if not text:
             await respond(
@@ -53,24 +68,12 @@ def build_router(ctx: AppContext) -> Router:
         token = await require_token(ctx, event)
         if token is None:
             return
-        try:
-            tasks = await ctx.backend.list_tasks(token)
-        except BackendError as exc:
-            await respond(event, error_text(exc, "Бэкенд недоступен"))
-            return
-        active = [task for task in tasks if task.get("status") != "done"]
-        if not active:
-            await respond(
-                event,
-                "Активных заданий нет 🎉",
-                keyboard=main_menu(role_of(ctx, event)),
-            )
-            return
-        await respond(
-            event,
-            f"<b>Отметьте выполненное</b>\n{tasks_block(active)}",
-            keyboard=tasks_keyboard(active),
+        role = role_of(ctx, event)
+        result = await views.safe_view(
+            event, views.done(ctx.backend, token, role)
         )
+        if result is not None:
+            await respond(event, result[0], result[1] or main_menu(role))
 
     @router.message_callback(PayloadPrefix("task:"))
     async def task_callback(event: MessageCallback) -> None:
@@ -78,6 +81,12 @@ def build_router(ctx: AppContext) -> Router:
         task_id = int(payload.rsplit(":", 1)[1])
         token = await require_token(ctx, event)
         if token is None:
+            return
+        role = role_of(ctx, event)
+        if role == "parent":
+            await respond(
+                event, PARENT_CANNOT_EDIT_TEXT, keyboard=main_menu(role)
+            )
             return
         if payload.startswith("task:done:"):
             try:

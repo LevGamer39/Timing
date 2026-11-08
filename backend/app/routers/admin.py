@@ -304,8 +304,6 @@ def delete_invite_code(
     invite = db.query(InviteCode).filter(InviteCode.id == code_id).first()
     if not invite:
         raise HTTPException(404, "Invite code not found")
-    if invite.is_used:
-        raise HTTPException(400, "Cannot delete already used code")
     db.delete(invite)
     db.commit()
 

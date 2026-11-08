@@ -29,8 +29,16 @@ def main_menu(role: str | None) -> AttachmentButton:
         )
         builder.row(_button("📈 Сводка", "menu:summary"))
     elif role == "parent":
-        builder.row(_button("👶 Дети", "menu:children"))
-        builder.row(_button("📈 Сводка", "menu:summary"))
+        builder.row(_button("📅 На сегодня", "menu:today"))
+        builder.row(
+            _button("📊 Оценки", "menu:grades"),
+            _button("🗓 Расписание", "menu:schedule"),
+        )
+        builder.row(
+            _button("📈 Сводка", "menu:summary"),
+            _button("👶 Дети", "menu:children"),
+        )
+        builder.row(_button("🤖 ИИ-чат", "menu:ai"))
     elif role == "teacher":
         builder.row(_button("📊 Мои классы", "menu:classes"))
 

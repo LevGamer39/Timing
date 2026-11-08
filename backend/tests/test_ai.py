@@ -468,6 +468,27 @@ def test_build_context_lists_grades_tasks_and_schedule(db, student, teacher,
     assert "Загруженность" in context
 
 
+def test_parent_context_and_tools_are_read_only(
+    db, parent, student, link_parent_child, make_task
+):
+    link_parent_child()
+    make_task(student.id, title="Параграф", subject="Алгебра")
+    context = ai._build_context(parent, db, TZ)
+    assert student.first_name in context
+    response = ai._run_tool(
+        tool_call("get_all_tasks", {}), parent, db, TZ, "покажи задачи"
+    )
+    assert "Параграф" in response.reply
+    refused = ai._run_tool(
+        tool_call("create_tasks", {"tasks": [{"title": "Новая"}]}),
+        parent,
+        db,
+        TZ,
+        "добавь",
+    )
+    assert "не могут" in refused.reply
+
+
 # Фантомные действия
 
 

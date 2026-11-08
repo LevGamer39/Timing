@@ -208,6 +208,25 @@ export function accountFor(profile, children) {
   return account;
 }
 
+async function loadSchoolSettings() {
+  const settings = await api.schoolSettings().catch(() => null);
+  const payload = settings?.payload;
+  // Пустой ответ не должен стирать уже загруженные настройки школы.
+  if (payload && typeof payload === 'object' && Object.keys(payload).length) {
+    session.school = payload;
+  }
+}
+
+async function loadLearner(profile) {
+  let children = [];
+  if (profile.role === 'parent') children = await api.children().catch(() => []);
+  const kids = [];
+  if (profile.role === 'student') kids.push(await loadStudent(profile));
+  if (profile.role === 'parent') for (const child of children) kids.push(await loadChild(child));
+  session.children = kids;
+  return kids;
+}
+
 export async function load() {
   const profile = await api.me();
   session.profile = profile;
@@ -220,13 +239,7 @@ export async function load() {
   session.schedTeachers = {};
   session.teacherBySubject = {};
 
-  let children = [];
-  if (profile.role === 'parent') children = await api.children().catch(() => []);
-  const kids = [];
-  if (profile.role === 'student') kids.push(await loadStudent(profile));
-  if (profile.role === 'parent') for (const child of children) kids.push(await loadChild(child));
-
-  session.children = kids;
+  const kids = await loadLearner(profile);
   session.active = true;
   if (profile.role === 'teacher' || profile.role === 'admin') {
     const classes = await loadStaff(profile);
@@ -235,9 +248,45 @@ export async function load() {
     await loadAttendance(classes);
   }
   await loadMail();
-  const settings = await api.schoolSettings().catch(() => null);
-  session.school = settings?.payload && typeof settings.payload === 'object' ? settings.payload : {};
+  session.school = {};
+  await loadSchoolSettings();
   return { profile, children: kids };
+}
+
+// Обновление данных только текущего раздела плюс общее для всех страниц:
+// профиль, настройки школы и почта (бейдж непрочитанных).
+export async function refreshFor(path) {
+  const profile = await api.me();
+  session.profile = profile;
+  session.active = true;
+  const root = String(path || 'home').replace(/^#\/?/, '').split('/')[0] || 'home';
+  const role = profile.role;
+  const jobs = [loadMailbox(), loadSchoolSettings()];
+
+  if (role === 'student' || role === 'parent') {
+    if (['home', 'diary', 'grades', 'subject', 'ai', 'settings'].includes(root)) {
+      jobs.push(loadLearner(profile));
+    }
+  } else {
+    if (root === 'mail' || root === 'compose') jobs.push(loadMailPeople());
+    if (['home', 'classes', 'teachers', 'schedule', 'attendance', 'journal', 'myclass'].includes(root)) {
+      jobs.push((async () => {
+        const classes = await loadStaff(profile);
+        // Админке на главной и в классах расписание не нужно.
+        if (role === 'admin' && (root === 'home' || root === 'classes')) return;
+        if (['home', 'schedule', 'journal', 'myclass'].includes(root)) {
+          await loadClassSchedules(classes, profile);
+        }
+        if (['home', 'journal', 'myclass'].includes(root)) await loadJournals();
+        if (['home', 'attendance', 'myclass'].includes(root)) await loadAttendance(classes);
+      })());
+    } else if (root === 'analysis') {
+      jobs.push(loadJournals());
+    }
+  }
+
+  await Promise.all(jobs);
+  return { profile };
 }
 
 async function loadStaff(profile) {
@@ -247,6 +296,7 @@ async function loadStaff(profile) {
   // В серверной сессии демо-данные не подмешиваются: пустой ответ API значит
   // «классов/учителей нет», а не «покажи демо».
   Object.keys(CLASSES).forEach((key) => delete CLASSES[key]);
+  session.classKeys = {};
   classes.forEach((c) => {
     const key = String(c.id);
     CLASSES[key] = {
@@ -308,6 +358,9 @@ async function loadStaff(profile) {
 
 async function loadClassSchedules(classes, profile) {
   if (!Array.isArray(classes)) return;
+  Object.keys(SCHEDULES).forEach((key) => delete SCHEDULES[key]);
+  session.schedTeachers = {};
+  session.teacherBySubject = {};
   let times = null;
   for (const c of classes) {
     const key = String(c.id);
@@ -343,6 +396,10 @@ async function loadClassSchedules(classes, profile) {
 }
 
 async function loadJournals() {
+  session.journals = {};
+  session.journalKeys = [];
+  session.journalStudents = {};
+  session.workTypes = [];
   const list = await api.journalList().catch(() => []);
   if (!Array.isArray(list) || !list.length) return;
   const types = new Map();
@@ -412,6 +469,7 @@ async function loadJournals() {
 
 async function loadAttendance(classes) {
   if (!Array.isArray(classes)) return;
+  session.attendance = {};
   const from = isoDaysAgo(180);
   const to = isoToday();
   for (const c of classes) {
@@ -430,34 +488,38 @@ async function loadAttendance(classes) {
   }
 }
 
-async function loadMail() {
-  const [people, box] = await Promise.all([
-    api.messagePeople().catch(() => []),
-    api.mailbox().catch(() => null)
-  ]);
+const rawMail = (list) => (list || []).map((m) => ({
+  id: String(m.id),
+  from: personId(m.sender),
+  to: personId(m.recipient),
+  subject: m.subject,
+  body: m.body,
+  date: m.created_at,
+  unread: !m.is_read,
+  files: m.files || [],
+  senderName: m.sender.name,
+  recipientName: m.recipient.name
+}));
+
+async function loadMailbox() {
+  const box = await api.mailbox().catch(() => null);
+  if (!box) return;
+  session.mail = { inbox: rawMail(box.inbox), sent: rawMail(box.sent), unread: box.unread };
+}
+
+async function loadMailPeople() {
+  const people = await api.messagePeople().catch(() => []);
   session.people = (people || []).map((p) => ({
     id: personId(p),
     name: p.name,
     role: ROLE_LABEL[p.role] || p.role,
     rawRole: p.role
   }));
-  const byId = new Map(session.people.map((p) => [p.id, p]));
-  const raw = (list) => (list || []).map((m) => ({
-    id: String(m.id),
-    from: personId(m.sender),
-    to: personId(m.recipient),
-    subject: m.subject,
-    body: m.body,
-    date: m.created_at,
-    unread: !m.is_read,
-    files: m.files || [],
-    senderName: m.sender.name,
-    recipientName: m.recipient.name
-  }));
-  session.mail = box
-    ? { inbox: raw(box.inbox), sent: raw(box.sent), unread: box.unread }
-    : { inbox: [], sent: [], unread: 0 };
-  session.peopleById = byId;
+  session.peopleById = new Map(session.people.map((p) => [p.id, p]));
+}
+
+async function loadMail() {
+  await Promise.all([loadMailbox(), loadMailPeople()]);
 }
 
 export const person = (id) => session.people.find((p) => p.id === id)
@@ -704,7 +766,9 @@ export function changePassword(current, next) {
 
 // --- Задачи ---------------------------------------------------------------
 
-export const taskList = () => api.myTasks();
+export const taskList = (childId) => childId
+  ? api.childTasks(childId)
+  : api.myTasks();
 export const taskCreate = (body) => api.createTask(body);
 export const taskUpdate = (id, body) => api.updateTask(id, body);
 export const taskDelete = (id) => api.deleteTask(id);

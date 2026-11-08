@@ -259,6 +259,25 @@ def test_parent_cannot_read_foreign_grades(db, parent, student2):
     assert exc.value.status_code == 403
 
 
+def test_parent_can_read_child_grade_aggregates(
+    db, parent, student, link_parent_child, teacher, enrolled, make_assignment
+):
+    link_parent_child()
+    assignment = make_assignment()
+    grades_router.add_grade(
+        GradeCreate(
+            student_id=student.id, subject="Math", value=4.0,
+            assignment_id=assignment.id,
+        ),
+        current_user=teacher,
+        db=db,
+    )
+    averages = grades_router.child_averages(student.id, parent, db)
+    summary = grades_router.child_grade_summary(student.id, parent, db)
+    assert averages[0].subject == "Math"
+    assert summary.overall_average == 4.0
+
+
 def test_teacher_cannot_delete_colleague_grade(
     db, teacher, enrolled, student, make_assignment, other_teacher
 ):

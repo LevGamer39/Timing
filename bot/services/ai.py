@@ -269,15 +269,27 @@ async def parse_batch(texts: list[str]) -> list[dict[str, Any]]:
         ]
 
 
-async def chat_reply(text: str, context: str = "") -> str:
+async def chat_reply(
+    text: str, context: str = "", role: str | None = None
+) -> str:
     """Запасной ИИ-чат, если бэкенд недоступен."""
 
-    system = (
-        "Ты — дружелюбный помощник школьника Timing. Отвечай кратко, "
-        "по-русски, без выдуманных фактов."
-    )
+    if role == "parent":
+        system = (
+            "Ты — дружелюбный помощник родителя в школьном дневнике Timing. "
+            "Говори с родителем об учёбе его детей. Родитель не может "
+            "добавлять, менять или удалять задачи — это делает сам ученик. "
+            "Отвечай кратко, по-русски, без выдуманных фактов."
+        )
+        header = "Контекст родителя"
+    else:
+        system = (
+            "Ты — дружелюбный помощник школьника Timing. Отвечай кратко, "
+            "по-русски, без выдуманных фактов."
+        )
+        header = "Контекст ученика"
     if context:
-        system += f"\n\nКонтекст ученика:\n{context}"
+        system += f"\n\n{header}:\n{context}"
     try:
         return await _ollama(
             [

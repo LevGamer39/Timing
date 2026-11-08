@@ -511,7 +511,8 @@ def invite_code_info(code: str, db: Session = Depends(get_db)) -> InviteCodeInfo
 
     Бот спрашивает это до регистрации: код класса открывает регистрацию
     ученика (и сразу зачисляет его в класс), одноразовый код из
-    ``invite_codes`` — регистрацию учителя.
+    ``invite_codes`` — регистрацию учителя, код родителя из
+    ``parent_link_tokens`` — регистрацию родителя с привязкой к ученику.
     """
     normalized = code.strip().upper()
     if not normalized or len(normalized) > 16:
@@ -538,6 +539,18 @@ def invite_code_info(code: str, db: Session = Depends(get_db)) -> InviteCodeInfo
     )
     if invite is not None:
         return InviteCodeInfo(valid=True, role=UserRole.teacher)
+
+    parent_token = (
+        db.query(ParentLinkToken)
+        .filter(
+            ParentLinkToken.code == normalized,
+            ParentLinkToken.is_used.is_(False),
+            ParentLinkToken.expires_at > datetime.now(timezone.utc),
+        )
+        .first()
+    )
+    if parent_token is not None:
+        return InviteCodeInfo(valid=True, role=UserRole.parent)
 
     return InviteCodeInfo(valid=False)
 
@@ -1189,9 +1202,11 @@ def max_register(
 
     Email и пароль не запрашиваются (их у такого аккаунта нет). Роль
     определяет сам код: код класса зачисляет ученика в этот класс,
-    одноразовый код из ``invite_codes`` делает пользователя учителем и
-    гасится. MAX user_id сохраняется сразу, поэтому следующий
-    ``/auth/max-link`` отдаёт JWT без повторной регистрации.
+    одноразовый код из ``invite_codes`` делает пользователя учителем,
+    код родителя из ``parent_link_tokens`` — родителем с привязкой к
+    ученику, который его выдал. Использованный код гасится. MAX user_id
+    сохраняется сразу, поэтому следующий ``/auth/max-link`` отдаёт JWT
+    без повторной регистрации.
     """
     _verify_bot_signature(body.max_user_id_hashed, x_bot_signature)
 
@@ -1223,6 +1238,7 @@ def max_register(
     code = body.invite_code.upper()
     class_ = db.query(Class).filter(Class.invite_code == code).first()
     invite = None
+    parent_token = None
     if class_ is None:
         invite = (
             db.query(InviteCode)
@@ -1233,7 +1249,33 @@ def max_register(
             .first()
         )
     if class_ is None and invite is None:
+        parent_token = (
+            db.query(ParentLinkToken)
+            .filter(
+                ParentLinkToken.code == code,
+                ParentLinkToken.is_used.is_(False),
+                ParentLinkToken.expires_at > datetime.now(timezone.utc),
+            )
+            .first()
+        )
+    if class_ is None and invite is None and parent_token is None:
         raise HTTPException(400, "Invalid or already used invite code")
+
+    if parent_token is not None:
+        student = (
+            db.query(User)
+            .filter(User.id == parent_token.student_id)
+            .first()
+        )
+        if student is None or student.role != UserRole.student:
+            raise HTTPException(400, "Invalid or already used invite code")
+
+    if class_ is not None:
+        role = UserRole.student
+    elif parent_token is not None:
+        role = UserRole.parent
+    else:
+        role = UserRole.teacher
 
     user = User(
         login=body.login,
@@ -1241,7 +1283,7 @@ def max_register(
         password_hash=hash_password(body.password),
         first_name=body.first_name,
         last_name=body.last_name,
-        role=UserRole.student if class_ is not None else UserRole.teacher,
+        role=role,
         is_active=True,
         is_verified=True,
         max_user_id=body.max_user_id_hashed,
@@ -1265,6 +1307,13 @@ def max_register(
         db.flush()
         add_missing_assignment_tasks(user.id, class_.id, db)
         refresh_student_grade(user.id, db)
+    elif parent_token is not None:
+        db.add(
+            ParentStudent(
+                parent_id=user.id, student_id=parent_token.student_id
+            )
+        )
+        parent_token.is_used = True
     else:
         invite.is_used = True
         invite.used_by_id = user.id

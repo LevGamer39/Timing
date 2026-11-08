@@ -14,6 +14,8 @@ from texts.formatters import (
 from texts.messages import (
     ADMIN_HELP_TEXT,
     HELP_TEXT,
+    PARENT_CANNOT_ADD_TEXT,
+    PARENT_HELP_TEXT,
     PROCESSING_TEXT,
     TEACHER_HELP_TEXT,
     UNLINKED_TEXT,
@@ -24,6 +26,8 @@ from texts.messages import (
 __all__ = [
     "ADMIN_HELP_TEXT",
     "HELP_TEXT",
+    "PARENT_CANNOT_ADD_TEXT",
+    "PARENT_HELP_TEXT",
     "PROCESSING_TEXT",
     "TEACHER_HELP_TEXT",
     "UNLINKED_TEXT",

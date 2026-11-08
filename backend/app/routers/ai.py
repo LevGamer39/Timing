@@ -9,6 +9,7 @@
 фантомные действия и двойной запрос к модели (раньше это давало до 85 секунд
 и HTTP 500 по таймауту) больше не нужны.
 """
+import copy
 import json
 import re
 from datetime import datetime, timezone
@@ -44,6 +45,7 @@ from app.models import (
     AIMessage,
     Grade,
     NotificationChannel,
+    ParentStudent,
     Schedule,
     Task,
     TaskPriority,
@@ -79,6 +81,13 @@ QUICK_PROMPTS = [
     "Какие у меня оценки по алгебре?",
 ]
 
+PARENT_QUICK_PROMPTS = [
+    "Как дела у детей на этой неделе?",
+    "Какие оценки у ребёнка по алгебре?",
+    "Что задано на завтра?",
+    "Составь расписание ребёнка на неделю",
+]
+
 SYSTEM_PROMPT = """Ты — «Тайминг», помощник школьника по учёбе и планированию.
 
 В контексте уже есть данные ученика: оценки (средние и несколько последних),
@@ -107,6 +116,39 @@ SYSTEM_PROMPT = """Ты — «Тайминг», помощник школьни�
 - не решай домашние задания за ученика и не пиши готовые сочинения;
 - отвечай по-русски, обычным текстом, коротко и по делу, без HTML и
   markdown-таблиц."""
+
+PARENT_SYSTEM_PROMPT = """Ты — «Тайминг», помощник родителя школьника.
+
+В контексте уже есть данные детей: оценки (средние и несколько последних),
+открытые задачи, расписание уроков и загруженность ближайших дней.
+
+Ты общаешься с родителем и говоришь об учёбе его детей. Если детей несколько,
+уточняй, о ком речь, или отвечай по каждому.
+
+Инструменты:
+- build_plan — структурированное расписание ребёнка на несколько дней.
+  Уроки и задачи собираешь ты сам; в activity_task_ids бери только id задач
+  из контекста.
+- get_subject_grades — все оценки ребёнка по предмету.
+- get_all_tasks — все задачи ребёнка, включая выполненные и подзадачи.
+- У этих инструментов есть необязательный параметр child — имя ребёнка.
+  Если он не указан, инструмент вернёт данные по каждому ребёнку.
+
+Правила:
+- сначала попробуй ответить из контекста; если данных мало — вызови
+  инструмент, а не проси родителя прислать их;
+- родитель не может добавлять, менять, отмечать или удалять задачи за
+  ребёнка. Если он просит это сделать, объясни, что задачи меняет сам
+  ученик, и предложи подсказать ребёнку;
+- никогда не выдумывай задачи, оценки, даты и id;
+- не решай домашние задания за ребёнка и не пиши готовые сочинения;
+- отвечай по-русски, обычным текстом, коротко и по делу, без HTML и
+  markdown-таблиц."""
+
+PARENT_CANNOT_EDIT = (
+    "Родители не могут добавлять, менять или удалять задачи детей — "
+    "это делает сам ученик."
+)
 
 SUMMARY_PROMPT = """Сожми диалог ученика с планировщиком в короткое резюме.
 Сохрани: о чём спрашивал ученик, какие задачи были созданы или изменены
@@ -305,6 +347,17 @@ TOOLS = [
     },
 ]
 
+PARENT_TOOLS = copy.deepcopy(
+    [tool for tool in TOOLS if tool["function"]["name"] in {
+        "build_plan", "get_subject_grades", "get_all_tasks"
+    }]
+)
+for tool in PARENT_TOOLS:
+    tool["function"]["parameters"]["properties"]["child"] = {
+        "type": "string",
+        "description": "Имя или id ребёнка; без него — все дети.",
+    }
+
 
 # Схемы
 
@@ -425,18 +478,61 @@ def _priority_label(priority) -> str:
 
 
 def _build_context(user: User, db: Session, tz) -> str:
-    """Текущее состояние ученика: оценки, задачи, уроки, загруженность."""
+    """Контекст для промпта: ученику — его данные, родителю — данные детей."""
+    if user.role == UserRole.parent:
+        return _parent_context(user, db, tz)
+    now = datetime.now(tz)
+    header = (
+        f"Сегодня: {WEEKDAY_NAMES[now.weekday()]}, "
+        f"{now.strftime('%d.%m.%Y %H:%M')} ({tz})\n"
+        f"Ученик: {user.first_name} {user.last_name}, "
+        f"класс {user.grade or 'не указан'}"
+    )
+    return header + "\n" + _learner_block(user, db, tz, now)
+
+
+def _parent_context(parent: User, db: Session, tz) -> str:
     now = datetime.now(tz)
     parts = [
         f"Сегодня: {WEEKDAY_NAMES[now.weekday()]}, "
         f"{now.strftime('%d.%m.%Y %H:%M')} ({tz})",
-        f"Ученик: {user.first_name} {user.last_name}, "
-        f"класс {user.grade or 'не указан'}",
+        f"Родитель: {parent.first_name} {parent.last_name}",
     ]
+    children = _children_of(parent, db)
+    if not children:
+        parts.append("\nДети не привязаны к аккаунту.")
+        return "\n".join(parts)
+    parts.append("\nДети:")
+    for child in children:
+        parts.append(
+            f"- {child.first_name} {child.last_name}, "
+            f"класс {child.grade or 'не указан'}"
+        )
+    for child in children:
+        parts.append(
+            f"\n=== Ребёнок: {child.first_name} {child.last_name}, "
+            f"класс {child.grade or 'не указан'} ===\n"
+            + _learner_block(child, db, tz, now)
+        )
+    return "\n".join(parts)
+
+
+def _children_of(parent: User, db: Session) -> list[User]:
+    return (
+        db.query(User)
+        .join(ParentStudent, ParentStudent.student_id == User.id)
+        .filter(ParentStudent.parent_id == parent.id)
+        .order_by(User.last_name, User.first_name)
+        .all()
+    )
+
+
+def _learner_block(student: User, db: Session, tz, now) -> str:
+    parts: list[str] = []
 
     grades = (
         db.query(Grade)
-        .filter(Grade.student_id == user.id)
+        .filter(Grade.student_id == student.id)
         .order_by(Grade.graded_at.desc(), Grade.id.desc())
         .all()
     )
@@ -461,7 +557,7 @@ def _build_context(user: User, db: Session, tz) -> str:
     else:
         parts.append("\nОценок пока нет.")
 
-    tasks = _open_tasks(user.id, db, config.AI_CONTEXT_TASKS)
+    tasks = _open_tasks(student.id, db, config.AI_CONTEXT_TASKS)
     if tasks:
         parts.append(f"\nОткрытые задачи ({len(tasks)}):")
         for task in tasks:
@@ -484,7 +580,7 @@ def _build_context(user: User, db: Session, tz) -> str:
 
     schedule = (
         db.query(Schedule)
-        .filter(Schedule.student_id == user.id)
+        .filter(Schedule.student_id == student.id)
         .order_by(Schedule.weekday, Schedule.start_time)
         .all()
     )
@@ -1159,6 +1255,11 @@ def _run_tool(
     if not isinstance(arguments, dict):
         arguments = {}
 
+    if user.role == UserRole.parent:
+        if name in {"create_tasks", "update_tasks", "complete_tasks", "delete_tasks"}:
+            return ChatResponse(reply=PARENT_CANNOT_EDIT)
+        return _run_parent_tool(name, user, db, arguments, tz)
+
     if name == "build_plan":
         return _build_plan_response(user, db, arguments, tz)
     if name == "get_subject_grades":
@@ -1176,17 +1277,54 @@ def _run_tool(
     return None
 
 
+def _parent_targets(parent: User, child: object, db: Session) -> list[User]:
+    children = _children_of(parent, db)
+    if not child:
+        return children
+    needle = str(child).strip().lower()
+    return [
+        item for item in children
+        if needle == str(item.id)
+        or needle in f"{item.first_name} {item.last_name}".lower()
+    ]
+
+
+def _run_parent_tool(
+    name: str, parent: User, db: Session, args: dict, tz
+) -> ChatResponse:
+    children = _parent_targets(parent, args.get("child"), db)
+    if not children:
+        return ChatResponse(
+            reply="Не нашёл ребёнка. Проверьте имя или список привязанных детей."
+        )
+    replies = []
+    action = data = None
+    for child in children:
+        if name == "build_plan":
+            response = _build_plan_response(child, db, args, tz)
+        elif name == "get_subject_grades":
+            response = _get_subject_grades_response(child, db, args, tz)
+        else:
+            response = _get_all_tasks_response(child, db, args, tz)
+        label = f"{child.first_name} {child.last_name}".strip() or str(child.id)
+        replies.append(f"{label}:\n{response.reply}")
+        action = response.action or action
+        data = response.data or data
+    return ChatResponse(reply="\n\n".join(replies), action=action, data=data)
+
+
 # Роуты
 
 
 @router.get("/quick-prompts")
 def quick_prompts(current_user: User = Depends(get_current_user)):
-    return {"prompts": QUICK_PROMPTS}
+    prompts = PARENT_QUICK_PROMPTS if current_user.role == UserRole.parent else QUICK_PROMPTS
+    return {"prompts": prompts}
 
 
 @router.get("/chats", response_model=list[ChatInfo])
 def list_chats(
-    current_user: User = Depends(require_role(UserRole.student)),
+    current_user: User = Depends(require_role(UserRole.student, UserRole.parent)),
     db: Session = Depends(get_db),
 ):
     chats = (
@@ -1215,7 +1353,7 @@ def list_chats(
 @router.get("/history", response_model=list[MessageResponse])
 def get_history(
     chat_id: int | None = None,
-    current_user: User = Depends(require_role(UserRole.student)),
+    current_user: User = Depends(require_role(UserRole.student, UserRole.parent)),
     db: Session = Depends(get_db),
 ):
     """Сообщения чата в хронологическом порядке.
@@ -1256,9 +1394,14 @@ async def chat(
 
     plan_days = _plan_request_days(body.message)
     if plan_days:
-        plan_reply = _build_plan_response(
-            current_user, db, {"days": plan_days}, tz
-        )
+        if current_user.role == UserRole.parent:
+            plan_reply = _run_parent_tool(
+                "build_plan", current_user, db, {"days": plan_days}, tz
+            )
+        else:
+            plan_reply = _build_plan_response(
+                current_user, db, {"days": plan_days}, tz
+            )
         _store_ai_exchange(chat_row, body.message, plan_reply.reply, db)
         return ChatResponse(
             reply=plan_reply.reply,
@@ -1268,10 +1411,14 @@ async def chat(
             title=chat_row.title,
         )
 
-    system_parts = [SYSTEM_PROMPT]
+    parent = current_user.role == UserRole.parent
+    system_parts = [PARENT_SYSTEM_PROMPT if parent else SYSTEM_PROMPT]
     if config.AI_PROMPT_EXTRA:
         system_parts.append(config.AI_PROMPT_EXTRA)
-    system_parts.append(f"Контекст ученика:\n{_build_context(current_user, db, tz)}")
+    context_label = "Контекст родителя" if parent else "Контекст ученика"
+    system_parts.append(
+        f"{context_label}:\n{_build_context(current_user, db, tz)}"
+    )
     if chat_row.summary:
         system_parts.append(
             "Краткое содержание предыдущей части диалога:\n"
@@ -1284,7 +1431,8 @@ async def chat(
         + [{"role": "user", "content": body.message}]
     )
 
-    message = await _call_ollama(messages, tools=TOOLS)
+    active_tools = PARENT_TOOLS if parent else TOOLS
+    message = await _call_ollama(messages, tools=active_tools)
     retried_without_tool = False
     if (
         not (message.get("tool_calls") or [])
@@ -1297,7 +1445,7 @@ async def chat(
                 {"role": "assistant", "content": message.get("content") or ""},
                 {"role": "user", "content": ACTION_NUDGE},
             ],
-            tools=TOOLS,
+            tools=active_tools,
         )
         retried_without_tool = not (message.get("tool_calls") or [])
 
@@ -1322,6 +1470,9 @@ async def chat(
 
     if not reply:
         reply = "Не смог сформулировать ответ. Попробуй переформулировать вопрос."
+    elif parent and ACTION_CLAIM_RE.search(reply):
+        reply = PARENT_CANNOT_EDIT
+        action = data = None
     elif retried_without_tool and ACTION_CLAIM_RE.search(reply):
         reply += "\n\nИзменения не применились — попробуй попросить ещё раз."
 
@@ -1368,7 +1519,7 @@ def _sanitize_pending_task(item: dict) -> dict | None:
 @router.post("/actions")
 def apply_action(
     body: ActionRequest,
-    current_user: User = Depends(require_role(UserRole.student)),
+    current_user: User = Depends(require_role(UserRole.student, UserRole.parent)),
     db: Session = Depends(get_db),
 ):
     """Подтверждение действий, которые ИИ не выполняет без согласия."""
@@ -1432,7 +1583,7 @@ def apply_action(
 @router.delete("/chats/{chat_id}", status_code=204)
 def delete_chat(
     chat_id: int,
-    current_user: User = Depends(require_role(UserRole.student)),
+    current_user: User = Depends(require_role(UserRole.student, UserRole.parent)),
     db: Session = Depends(get_db),
 ):
     chat = _find_chat(current_user, db, chat_id)

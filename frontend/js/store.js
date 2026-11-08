@@ -331,12 +331,20 @@ export async function bootstrap() {
 }
 
 // Перечитать данные с сервера, не разлогинивая при сбое сети: нужен после
-// того, как ИИ создал или изменил задачи.
-export async function refreshData() {
+// того, как ИИ создал или изменил задачи, и при переходе между разделами.
+// С аргументом ``path`` грузится только срез текущего раздела плюс общее.
+export async function refreshData(path) {
   if (!serverSession) return false;
   try {
-    const { profile } = await server.load();
+    const previousChild = serverSession.role === 'parent' ? serverSession.childId : null;
+    const { profile } = path ? await server.refreshFor(path) : await server.load();
     adopt(profile);
+    // adopt сбрасывает ребёнка на первого — возвращаем выбранного.
+    if (previousChild && server.session.children.some((c) => String(c.id) === String(previousChild))) {
+      serverSession.childId = String(previousChild);
+      server.activate(previousChild);
+      state.session = Object.assign({}, state.session, { childId: serverSession.childId });
+    }
     applySchoolScale();
     return true;
   } catch {
@@ -797,7 +805,9 @@ export const saveTeachers = (t) => set({ teachers: t });
 // --- Задачи ---------------------------------------------------------------
 
 const taskGuard = (fn) => serverSession ? fn() : Promise.reject(new Error('Задачи доступны только на сервере.'));
-export const taskList = () => taskGuard(() => server.taskList());
+export const taskList = () => taskGuard(() => server.taskList(
+  role() === 'parent' ? serverSession?.childId : null
+));
 export const taskCreate = (body) => taskGuard(() => server.taskCreate(body));
 export const taskUpdate = (id, body) => taskGuard(() => server.taskUpdate(id, body));
 export const taskDelete = (id) => taskGuard(() => server.taskDelete(id));

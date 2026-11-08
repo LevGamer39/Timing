@@ -2,7 +2,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app.models import Assignment, ClassMembership, TaskStatus, UserRole
+from app.models import Assignment, ClassMembership, InviteCode, TaskStatus, UserRole
 from app.routers import admin as admin_router
 from app.routers import classes as classes_router
 from app.routers.admin import AdminClassCreate, AdminClassUpdate, AdminUserUpdate
@@ -312,11 +312,13 @@ def test_admin_updates_class_teacher(db, admin, klass, other_teacher):
     assert updated.teacher_id == other_teacher.id
 
 
-def test_used_invite_cannot_be_deleted(db, admin, invite_code, student):
+def test_used_invite_can_be_deleted(db, admin, invite_code, student):
+    """После использования код остаётся в списке и удаляется как обычный."""
     invite_code.is_used = True
+    invite_code.used_by_id = student.id
     db.commit()
-    with pytest.raises(HTTPException) as exc:
-        admin_router.delete_invite_code(
-            invite_code.id, current_user=admin, db=db
-        )
-    assert exc.value.status_code == 400
+
+    admin_router.delete_invite_code(
+        invite_code.id, current_user=admin, db=db
+    )
+    assert db.query(InviteCode).filter_by(id=invite_code.id).first() is None

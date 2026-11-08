@@ -238,6 +238,27 @@ class Backend:
             "GET", f"/api/grades/child/{student_id}", token=token
         )
 
+    async def child_averages(
+        self, token: str, student_id: int
+    ) -> list[dict[str, Any]]:
+        return await self._request(
+            "GET", f"/api/grades/child/{student_id}/averages", token=token
+        )
+
+    async def child_summary(
+        self, token: str, student_id: int
+    ) -> dict[str, Any]:
+        return await self._request(
+            "GET", f"/api/grades/child/{student_id}/summary", token=token
+        )
+
+    async def child_schedule(
+        self, token: str, student_id: int
+    ) -> list[dict[str, Any]]:
+        return await self._request(
+            "GET", f"/api/schedule/child/{student_id}", token=token
+        )
+
     async def my_schedule(self, token: str) -> list[dict[str, Any]]:
         return await self._request("GET", "/api/schedule/my", token=token)
 

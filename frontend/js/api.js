@@ -115,6 +115,8 @@ export const myGrades = () => request('/api/grades/my');
 export const myAverages = () => request('/api/grades/my/averages');
 export const mySummary = () => request('/api/grades/my/summary');
 export const childGrades = (id) => request('/api/grades/child/' + id);
+export const childAverages = (id) => request('/api/grades/child/' + id + '/averages');
+export const childSummary = (id) => request('/api/grades/child/' + id + '/summary');
 export const myTasks = () => request('/api/tasks');
 export const childTasks = (id) => request('/api/tasks/child/' + id);
 export const mySchedule = () => request('/api/schedule/my');
