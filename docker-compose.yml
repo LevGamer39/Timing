@@ -148,7 +148,6 @@ services:
     image: axllent/mailpit:latest
     container_name: timing_mailpit
     restart: unless-stopped
-    profiles: ["mailpit"]
     command: ["--webroot=/mailpit/"]
     ports:
       - "127.0.0.1:1025:1025"
