@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -346,7 +347,12 @@ def download_attachment(
     path = Path(row.path)
     if not path.is_file():
         raise HTTPException(404, "File not found")
-    return FileResponse(path, filename=row.name)
+    # Файл на диске без расширения (токен), поэтому media type берём по имени.
+    return FileResponse(
+        path,
+        filename=row.name,
+        media_type=mimetypes.guess_type(row.name)[0] or "application/octet-stream",
+    )
 
 
 @router.get("/attachments/{token}/render")

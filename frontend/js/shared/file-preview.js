@@ -53,7 +53,7 @@ export async function openFilePreview(token, name) {
     const blob = await api.downloadAttachment(token);
     const url = URL.createObjectURL(blob);
     const mime = blob.type || '';
-    if (mime.startsWith('image/')) {
+    if (mime.startsWith('image/') || kind === 'image') {
       showImageFullscreen(url, name);
       return;
     }
