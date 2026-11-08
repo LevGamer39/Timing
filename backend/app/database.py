@@ -131,6 +131,26 @@ def _add_enum_values() -> None:
             )
 
 
+def _cleanup_orphan_mail_files() -> None:
+    """Строки mail_files без файла на диске (репозиторий чинили, файлы снесли).
+
+    Иначе фронт пытается скачать вложение и получает 404 на каждое письмо
+    с битым токеном. Файлы при этом не создаются — только строки БД.
+    """
+    import pathlib
+
+    from app.models import MailFile
+
+    session = SessionLocal()
+    try:
+        for row in session.query(MailFile).all():
+            if not pathlib.Path(row.path).is_file():
+                session.delete(row)
+        session.commit()
+    finally:
+        session.close()
+
+
 def _apply_schema_updates() -> None:
     """Идемпотентно догоняет схему до текущих моделей.
 
@@ -142,6 +162,7 @@ def _apply_schema_updates() -> None:
     if engine.dialect.name != "postgresql":
         return
     _add_enum_values()
+    _cleanup_orphan_mail_files()
     statements = (
         # Приём задания учителем: статус accepted и время приёма.
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ",
