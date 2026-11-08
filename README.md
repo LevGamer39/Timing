@@ -11,7 +11,14 @@
 
 ## Запуск (Docker)
 
-### 1. Минимальный `.env` (без этого не стартует)
+### 1. Склонировать репозиторий
+
+```bash
+git clone https://github.com/LevGamer39/Timing.git
+cd Timing
+```
+
+### 2. Минимальный `.env` (без этого не стартует)
 
 ```bash
 cp .env.example .env
@@ -28,10 +35,10 @@ cp .env.example .env
 
 Для бота дополнительно: `MAX_BOT_TOKEN` и `MAX_BOT_USERNAME` (username бота, напр. `ideya_fiks_10_bot`).
 
-### 2. Поднять всё одной командой
+### 3. Поднять всё одной командой
 
 ```bash
-docker compose up -d --build
+docker compose up -d --pull always
 ```
 
 Модель ИИ (`qwen2.5:7b`) уже запечена в образ Ollama (`ghcr.io/levgamer39/timing/ollama:latest`) — **качать её вручную не нужно**. После старта бэкенд сам греет модель в фоне; ИИ отвечает без ожидания загрузки. Для Mailpit добавь `--profile mailpit`: `docker compose --profile mailpit up -d --build`.
