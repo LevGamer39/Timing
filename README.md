@@ -41,14 +41,14 @@ cp .env.example .env
 docker compose up -d --pull always
 ```
 
-Модель ИИ (`qwen2.5:7b`) уже запечена в образ Ollama (`ghcr.io/levgamer39/timing/ollama:latest`) — **качать её вручную не нужно**. После старта бэкенд сам греет модель в фоне; ИИ отвечает без ожидания загрузки. Для Mailpit добавь `--profile mailpit`: `docker compose --profile mailpit up -d --build`.
+Модель ИИ (`qwen2.5:7b`) уже запечена в образ Ollama (`ghcr.io/levgamer39/timing/ollama:latest`) — **качать её вручную не нужно**. После старта бэкенд сам греет модель в фоне; ИИ отвечает без ожидания загрузки. Mailpit поднимается вместе со всеми сервисами этой же командой (панелька — `https://timing.website/mailpit/`, логин `timing`, пароль — `MAILPIT_PANEL_PASSWORD` из `.env`, по умолчанию `demo2024`).
 
 | Что | Адрес |
 |---|---|
 | **Сайт на сервере (прод)** | **https://timing.website/** — основной адрес проекта; домен задаётся в `.env` (`APP_DOMAIN`), nginx на нём только проксирует на backend |
 | Сайт (локально) | http://127.0.0.1:8000 |
 | Документация API | http://localhost:8000/docs |
-| Панелька Mailpit (письма) | http://localhost:8025 или https://timing.myftp.org/mailpit/ (логин `timing`, пароль — `MAILPIT_PANEL_PASSWORD`, по умолчанию `demo2024`) |
+| Панелька Mailpit (письма) | http://localhost:8025 или https://timing.website/mailpit/ (доступы — в таблице «Демо-аккаунты» ниже) |
 
 ## Готовые Docker-образы (GHCR)
 
@@ -72,6 +72,7 @@ docker compose up -d --pull always
 | Ученик | `demo.student` | дневник, оценки, статистика, задачи, ИИ |
 | Родитель | `demo.parent` | то же, что у ученика, + привязка ребёнка |
 | Ученики | `demo.student2`, `demo.student3` | дополнительные профили ученика |
+| Mailpit (панелька писем) | `timing` / `demo2024` (пароль — `MAILPIT_PANEL_PASSWORD`) | все письма, ушедшие в локальный SMTP |
 
 Невошедшие (видны в ростере как «ожидают», пароля нет): `demo.wait1`/`wait2`, `demo.teacher2`/`teacher3` (инвайты учителей `DEMO-TEACHER-2/3`). Классы в демо: 8А, 8Б, 4Б. Данные: расписание 8А, задание «Контрольная работа по алгебре», оценки 3–5, пара писем.
 
@@ -99,7 +100,7 @@ docker compose up -d --pull always
 
 - **ИИ отвечает «Сервис ИИ недоступен»** — Docker Desktop/серверу не хватает RAM: модель уже в образе, но ей нужно ~6 ГБ, на Docker Desktop поднимите Settings → Resources → Memory до 8 ГБ. Модель в образе: проверяй `docker exec timing_ollama ollama list`. На сервере для всего стека нужно **12–16 ГБ RAM** (8 ГБ — впритык, лучше модель `qwen2.5:3b`).
 - **Вход через Яндекс не работает** — это нормально без `YANDEX_CLIENT_ID/SECRET` в `.env` (кнопка вернёт 503). Сам OAuth реализован полностью: вход (`/api/auth/yandex/login-url` → `/callback`) и привязка в настройках (`/link` → `/confirm-link`, кнопка «Привязать Яндекс»). Блок `YANDEX_*_CALLBACK` должен совпадать с адресами в консоли Яндекса, иначе Яндекс не вернёт управление.
-- **Письма не приходят** — проверьте `SMTP_*`. Для Яндекса нужен **пароль приложения** (https://id.yandex.ru/security/apppasswords), не пароль от аккаунта, и `EMAIL_FROM` = `SMTP_USER`. Для демки без внешней почты — Mailpit: `SMTP_HOST=mailpit`, `SMTP_PORT=1025`, пустые `SMTP_USER/PASSWORD`, `SMTP_STARTTLS=false`, запуск `docker compose --profile mailpit up -d mailpit`, письма смотрятся в панельке (см. таблицу адресов). Свой SMTP на домене `no-ip.com` не взлетит: нельзя прописать SPF/DKIM/PTR, письма уйдут в спам.
+- **Письма не приходят** — проверьте `SMTP_*`. По умолчанию почта идёт в локальный Mailpit (`SMTP_HOST=mailpit`, письма смотрятся в панельке — см. таблицу адресов). Для Яндекса нужен **пароль приложения** (https://id.yandex.ru/security/apppasswords), не пароль от аккаунта, и `EMAIL_FROM` = `SMTP_USER`. Свой SMTP на домене `no-ip.com` не взлетит: нельзя прописать SPF/DKIM/PTR, письма уйдут в спам.
 - **Бот отвечает дважды** — запущено два экземпляра бота. Оставьте один (см. «Критично» выше), второй остановите.
 - **Бот не видит аккаунт / «MAX user not linked»** — пользователь не привязан: регистрация в боте по инвайту или `/link` с логином и паролем с сайта.
 - **Голосовые в боте не работают** — ограничение на стороне MAX: голосовые боту не доставляются (известная проблема №13). Обработка в коде готова, заработает сама, когда MAX начнёт отдавать аудио.

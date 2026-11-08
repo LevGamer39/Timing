@@ -289,6 +289,10 @@ async def spa_fallback(full_path: str, request: Request):
         if os.path.isfile(target):
             return FileResponse(target)
         return JSONResponse(status_code=404, content={"detail": "Not found"})
+    # Файлы в корне frontend (favicon, manifest, robots) — тоже статика.
+    target = os.path.join(frontend_path, full_path)
+    if os.path.isfile(target):
+        return FileResponse(target)
     return serve("index.html")
 
 @app.exception_handler(404)

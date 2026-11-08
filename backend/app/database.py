@@ -331,9 +331,10 @@ def _ensure_demo_data() -> None:
     from app.models import (
         User, UserRole, Class, ClassMembership, Assignment, Task, Grade,
         Message, TaskStatus, TaskPriority, TeacherSubject, InviteCode,
-        ParentStudent, ClassSchedule
+        ParentStudent, ClassSchedule, MailFile
     )
     from app.routers.users import hash_password
+    import json
     import secrets
 
     demo_accounts = (
@@ -518,6 +519,60 @@ def _ensure_demo_data() -> None:
                 db.add(assignment)
                 db.flush()
             
+            # Демо-задание с вложениями: показывает работу файлов. Файлы лежат
+            # в backend-data/uploads/mail под токенами (см. репозиторий).
+            materials_files = [
+                {"token": "1fbf6b7dad4b10247bd54c44201b809a2274c1756a98be26",
+                 "name": "release-meme.jpg", "size": 236894},
+                {"token": "c5ed458cdbd4c628e23943eaf15f1e0f1e73254ed5b26d72",
+                 "name": "table-trig.png", "size": 45051},
+                {"token": "70a1202622dca16a5f777d9932edbff2647ce608d2ccf3bc",
+                 "name": "zadanie-algebra.pdf", "size": 1672},
+                {"token": "b3e7a6b9733baa98e259ef95f54039526374e18c274c9b7e",
+                 "name": "test.xlsx", "size": 4858},
+                {"token": "bbdec313a1965849da5e5fc007e888563655f64aadc7d8d0",
+                 "name": "test.docx", "size": 36625},
+            ]
+            # Строки вложений для файлов задания (сами файлы — в репозитории).
+            import pathlib
+            for f in materials_files:
+                p = pathlib.Path(__file__).resolve().parents[2] / "data" / "uploads" / "mail" / f["token"]
+                if p.is_file() and not db.query(MailFile).filter(MailFile.token == f["token"]).first():
+                    db.add(MailFile(token=f["token"], name=f["name"], path=str(p), size=f["size"], uploader_id=teacher.id))
+            materials = db.query(Assignment).filter(
+                Assignment.class_id == class_8a.id,
+                Assignment.title == "Тестовые материалы",
+            ).first()
+            if not materials:
+                materials = Assignment(
+                    title="Тестовые материалы",
+                    subject="Алгебра",
+                    description="Настоящие файлы: таблица, картинка, PDF, Excel, Word",
+                    deadline=now + timedelta(days=5),
+                    class_id=class_8a.id,
+                    teacher_id=teacher.id,
+                    priority=TaskPriority.medium,
+                    files=json.dumps(materials_files),
+                )
+                db.add(materials)
+                db.flush()
+            for login in ["demo.student", "demo.student2", "demo.student3"]:
+                student = users.get(login)
+                if student and not db.query(Task).filter(
+                    Task.student_id == student.id,
+                    Task.assignment_id == materials.id,
+                ).first():
+                    db.add(Task(
+                        student_id=student.id,
+                        assignment_id=materials.id,
+                        title=materials.title,
+                        description=materials.description,
+                        subject=materials.subject,
+                        deadline=materials.deadline,
+                        status=TaskStatus.pending,
+                        priority=materials.priority,
+                    ))
+
             # Задачи учеников по заданию
             for login in ["demo.student", "demo.student2", "demo.student3"]:
                 student = users.get(login)
